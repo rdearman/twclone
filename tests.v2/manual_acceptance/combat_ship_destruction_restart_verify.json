@@ -1,0 +1,43 @@
+{
+  "test_suite_name": "V3 Ship Destruction Restart and Retry Verification",
+  "tests": [
+    { "name": "Bootstrap disposable SysOp fixture session", "setup": "macro_bootstrap_admin" },
+    { "name": "Reauthenticate the ordinary combat attacker after restart", "command": "auth.login", "user": "destruction_attacker", "data": { "username": "destruction_attacker", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    { "name": "Reauthenticate the destroyed player after restart", "command": "auth.login", "user": "destruction_victim", "data": { "username": "destruction_victim", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    { "name": "Reauthenticate the Terra-sanctioned player after restart", "command": "auth.login", "user": "terra_sanction_victim", "data": { "username": "terra_sanction_victim", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    {
+      "name": "Ordinary player session restores the persisted escape pod",
+      "command": "ship.status", "user": "destruction_victim",
+      "expect": { "status": "ok", "type": "ship.status" }
+    },
+    {
+      "name": "Persisted ship loss has one event, cleared cargo and equipment, and preserved unrelated assets",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT destroyed AND hull=0 AND fighters=0 AND shields=0 AND installed_shields=0 AND has_transwarp=FALSE AND photons=0 AND ore=0 FROM ships WHERE ship_id=(SELECT (payload::jsonb->>'victim_ship_id')::int FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim') ORDER BY ts DESC LIMIT 1))::int,(SELECT COUNT(*)=0 FROM ship_cargo WHERE ship_id=(SELECT (payload::jsonb->>'victim_ship_id')::int FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim') ORDER BY ts DESC LIMIT 1))::int,(SELECT COUNT(*)=1 FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim'))::int,(SELECT st.name='Escape Pod' AND NOT pod.destroyed FROM players p JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id WHERE p.name='destruction_victim')::int,(SELECT COUNT(*)=1 FROM ship_ownership WHERE player_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND is_primary=TRUE)::int,(SELECT balance=50000 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND currency='CRD')::int,(SELECT COUNT(*)=1 FROM planets WHERE owner_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND population=321 AND ore_on_hand=123)::int,(SELECT balance=70000 FROM corp_accounts ca JOIN corporations c ON c.corporation_id=ca.corp_id WHERE c.tag='DQA1')::int,(SELECT COUNT(*)=2 AND MIN(quantity)=77 FROM sector_assets a JOIN corporations c ON c.corporation_id=a.corporation_id WHERE c.tag='DQA1')::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }, { "path": "data.rows.0.2", "op": "==", "value": 1 }, { "path": "data.rows.0.3", "op": "==", "value": 1 }, { "path": "data.rows.0.4", "op": "==", "value": 1 }, { "path": "data.rows.0.5", "op": "==", "value": 1 }, { "path": "data.rows.0.6", "op": "==", "value": 1 }, { "path": "data.rows.0.7", "op": "==", "value": 1 }, { "path": "data.rows.0.8", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Read old ship ID for a post-restart retry",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (payload::jsonb->>'victim_ship_id')::int FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim') ORDER BY ts DESC LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "destroyed_hull_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Retry attack after reconnect and restart",
+      "command": "combat.attack", "user": "destruction_attacker",
+      "data": { "target_ship_id": "@{destroyed_hull_id}" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Retry after restart cannot create another pod or destruction settlement",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT COUNT(*)=1 FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim'))::int,(SELECT COUNT(*)=1 FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE so.player_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND so.is_primary=TRUE AND st.name='Escape Pod')::int,(SELECT COUNT(*)=0 FROM ship_cargo WHERE ship_id=@{destroyed_hull_id})::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }, { "path": "data.rows.0.2", "op": "==", "value": 1 }]
+    }
+  ]
+}

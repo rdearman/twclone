@@ -305,6 +305,14 @@ int repo_ships_handle_destruction(db_t *db,
                                   1, &affected, &err))
       goto fail;
     if (affected != 1) { rc = ERR_DB_CONSTRAINT; goto fail; }
+    /* ship_cargo is the authoritative inventory table. Clearing only the
+     * legacy ships.* cargo columns would leave a destroyed hull's cargo
+     * attached to its historical ship record instead of losing it. Keep the
+     * removal inside the same destruction transaction as the hull and pod. */
+    const char *clear_cargo = "DELETE FROM ship_cargo WHERE ship_id={1}";
+    if (sql_build(db, clear_cargo, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)}, 1, &err))
+      goto fail;
     const char *delete_ownership = "DELETE FROM ship_ownership WHERE ship_id={1}";
     if (sql_build(db, delete_ownership, sql, sizeof sql) != 0
         || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)}, 1, &err))

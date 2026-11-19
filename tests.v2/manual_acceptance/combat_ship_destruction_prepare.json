@@ -1,0 +1,117 @@
+{
+  "test_suite_name": "V3 Player Ship Destruction and Terra Enforcement Acceptance",
+  "description": "Ordinary players destroy a no-escape-pod ship and receive a universal escape pod; cargo/equipment loss is atomic while unrelated personal, bank, planet, and corporate assets survive. Terra sanction uses the same destruction policy.",
+  "tests": [
+    { "name": "Bootstrap disposable SysOp fixture session", "setup": "macro_bootstrap_admin" },
+    { "name": "Setup ordinary combat attacker", "setup": "macro_auth_user", "username": "destruction_attacker", "password": "qa-password" },
+    { "name": "Setup ordinary combat victim", "setup": "macro_auth_user", "username": "destruction_victim", "password": "qa-password" },
+    { "name": "Setup ordinary Terra-sanction victim", "setup": "macro_auth_user", "username": "terra_sanction_victim", "password": "qa-password" },
+    {
+      "name": "Select a disposable combat sector outside FedSpace",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT MIN(s.sector_id) FROM sectors s WHERE s.sector_id>10 AND COALESCE(s.navhaz,0)=0 AND NOT EXISTS (SELECT 1 FROM sector_hazards h WHERE h.sector_id=s.sector_id) AND NOT EXISTS (SELECT 1 FROM sector_assets a WHERE a.sector_id=s.sector_id AND a.quantity>0) AND NOT EXISTS (SELECT 1 FROM planets p JOIN citadels c ON c.planet_id=p.planet_id WHERE p.sector_id=s.sector_id AND c.level>=3 AND (c.qCannonSector>0 OR c.militaryReactionLevel>0));" },
+      "expect": { "status": "ok" }, "save": { "destruction_battle_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Create corporation and membership fixtures for preserved corporate assets",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "WITH c AS (INSERT INTO corporations(name,owner_id,tag) VALUES ('V3 Destruction QA',(SELECT player_id FROM players WHERE name='destruction_victim'),'DQA1') RETURNING corporation_id), m AS (INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,p.player_id,CASE WHEN p.name='destruction_victim' THEN 'Leader' ELSE 'Officer' END FROM c CROSS JOIN players p WHERE p.name IN ('destruction_victim','terra_sanction_victim') RETURNING corporation_id) INSERT INTO corp_accounts(corp_id,balance) SELECT corporation_id,70000 FROM c;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create a direct disposable route from FedSpace to the combat sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES (1,@{destruction_battle_sector}) ON CONFLICT DO NOTHING;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Prepare combat victim's ship with no escape-pod equipment, cargo, and installed equipment",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE enabled=TRUE AND has_escape_pod=FALSE AND name<>'Escape Pod' ORDER BY shiptypes_id LIMIT 1),hull=10,shields=0,fighters=0,installed_shields=25,has_transwarp=TRUE,photons=3,ore=4,destroyed=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE name='destruction_victim');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Insert authoritative cargo row on the victim ship",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) VALUES ((SELECT ship_id FROM players WHERE name='destruction_victim'),'ORE',4);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Give combat victim a surviving non-active ship",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "WITH extra AS (INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,destroyed) SELECT 'Destruction reserve hull '||p.name,(SELECT shiptypes_id FROM shiptypes WHERE enabled=TRUE AND name<>'Escape Pod' ORDER BY shiptypes_id LIMIT 1),1,10,7,3,90,FALSE FROM players p WHERE p.name IN ('destruction_victim','terra_sanction_victim') RETURNING ship_id,name), role AS (SELECT role_id FROM ship_roles WHERE role='owner' ORDER BY role_id LIMIT 1) INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT extra.ship_id,p.player_id,role.role_id,FALSE FROM extra CROSS JOIN role JOIN players p ON extra.name='Destruction reserve hull '||p.name;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create player bank accounts and preserve exact balances",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO bank_accounts(owner_type,owner_id,currency,balance,is_active) SELECT 'player',player_id,'CRD',50000,TRUE FROM players WHERE name IN ('destruction_victim','terra_sanction_victim') ON CONFLICT (owner_type,owner_id,currency) DO UPDATE SET balance=EXCLUDED.balance,is_active=TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create independently owned planets that destruction must preserve",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets(sector_id,name,owner_id,owner_type,class,population,created_by,ore_on_hand,organics_on_hand,equipment_on_hand,colonists_unassigned) SELECT @{destruction_battle_sector},'Destruction survivor '||p.name,p.player_id,'player','M',321,p.player_id,123,234,345,321 FROM players p WHERE p.name IN ('destruction_victim','terra_sanction_victim');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed corporation-owned defense assets for both members",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting) SELECT 1,p.player_id,c.corporation_id,2,77,0 FROM players p CROSS JOIN corporations c WHERE p.name IN ('destruction_victim','terra_sanction_victim') AND c.tag='DQA1';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify the destroyed target ship type does not grant an escape pod",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (st.name<>'Escape Pod' AND st.has_escape_pod=FALSE)::int FROM players p JOIN ships s ON s.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE p.name='destruction_victim';" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    { "name": "Refresh attacker session after fixture positioning", "command": "auth.login", "user": "destruction_attacker", "data": { "username": "destruction_attacker", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    { "name": "Refresh combat victim session after fixture positioning", "command": "auth.login", "user": "destruction_victim", "data": { "username": "destruction_victim", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    { "name": "Refresh Terra victim session in sector one", "command": "auth.login", "user": "terra_sanction_victim", "data": { "username": "terra_sanction_victim", "passwd": "qa-password" }, "expect": { "status": "ok", "type": "auth.session" } },
+    { "name": "Ordinary attacker warps to the combat sector", "command": "move.warp", "user": "destruction_attacker", "data": { "to_sector_id": "@{destruction_battle_sector}" }, "expect": { "status": "ok", "type": "move.result" } },
+    { "name": "Ordinary victim warps to the combat sector", "command": "move.warp", "user": "destruction_victim", "data": { "to_sector_id": "@{destruction_battle_sector}" }, "expect": { "status": "ok", "type": "move.result" } },
+    {
+      "name": "Ordinary attacker destroys the other player's ship",
+      "command": "combat.attack", "user": "destruction_attacker",
+      "data": { "target_ship_id": "@{destruction_victim_active_ship_id}" },
+      "expect": { "status": "ok", "type": "combat.attack.result" }
+    },
+    {
+      "name": "Verify exact ship loss, universal pod, cargo/equipment loss, surviving hull, and preserved assets",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT destroyed AND hull=0 AND fighters=0 AND shields=0 AND installed_shields=0 AND has_transwarp=FALSE AND photons=0 AND ore=0 FROM ships WHERE ship_id=@{destruction_victim_active_ship_id})::int,(SELECT st.name='Escape Pod' AND NOT pod.destroyed AND pod.sector_id=1 FROM players p JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id WHERE p.name='destruction_victim')::int,(SELECT COUNT(*)=0 FROM ship_cargo WHERE ship_id=@{destruction_victim_active_ship_id})::int,(SELECT COUNT(*)=1 FROM ship_ownership WHERE player_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND is_primary=TRUE)::int,(SELECT COUNT(*)=1 FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id WHERE so.player_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND so.is_primary=FALSE AND s.name='Destruction reserve hull destruction_victim' AND NOT s.destroyed)::int,(SELECT balance=50000 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND currency='CRD')::int,(SELECT COUNT(*)=1 AND MIN(population)=321 AND MIN(ore_on_hand)=123 FROM planets WHERE owner_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND name='Destruction survivor destruction_victim')::int,(SELECT balance=70000 FROM corp_accounts ca JOIN corporations c ON c.corporation_id=ca.corp_id WHERE c.tag='DQA1')::int,(SELECT COUNT(*)=2 AND MIN(quantity)=77 FROM sector_assets a JOIN corporations c ON c.corporation_id=a.corporation_id WHERE c.tag='DQA1')::int,(SELECT COUNT(*)=1 FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim'))::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }, { "path": "data.rows.0.2", "op": "==", "value": 1 }, { "path": "data.rows.0.3", "op": "==", "value": 1 }, { "path": "data.rows.0.4", "op": "==", "value": 1 }, { "path": "data.rows.0.5", "op": "==", "value": 1 }, { "path": "data.rows.0.6", "op": "==", "value": 1 }, { "path": "data.rows.0.7", "op": "==", "value": 1 }, { "path": "data.rows.0.8", "op": "==", "value": 1 }, { "path": "data.rows.0.9", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Retry combat against already destroyed historical hull",
+      "command": "combat.attack", "user": "destruction_attacker",
+      "data": { "target_ship_id": "@{destruction_victim_active_ship_id}" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Retried combat created no second pod or destruction event",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT COUNT(*)=1 FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='destruction_victim'))::int,(SELECT COUNT(*)=1 FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE so.player_id=(SELECT player_id FROM players WHERE name='destruction_victim') AND so.is_primary=TRUE AND st.name='Escape Pod')::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Terra victim attacks Terra and receives the shared destruction consequence",
+      "command": "combat.attack_planet", "user": "terra_sanction_victim",
+      "data": { "planet_id": 1, "enslave_colonists": false },
+      "expect": { "status": "refused", "error_code": 402 }
+    },
+    {
+      "name": "Verify Terra enforcement preserves bank, planet, corporation, secondary hull, and pod state",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT st.name='Escape Pod' AND NOT pod.destroyed FROM players p JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id WHERE p.name='terra_sanction_victim')::int,(SELECT COUNT(*)=1 FROM engine_events WHERE type='ship.destroyed' AND actor_player_id=(SELECT player_id FROM players WHERE name='terra_sanction_victim'))::int,(SELECT balance=50000 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='terra_sanction_victim') AND currency='CRD')::int,(SELECT COUNT(*)=1 FROM planets WHERE owner_id=(SELECT player_id FROM players WHERE name='terra_sanction_victim') AND population=321 AND ore_on_hand=123)::int,(SELECT COUNT(*)=1 FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id WHERE so.player_id=(SELECT player_id FROM players WHERE name='terra_sanction_victim') AND so.is_primary=FALSE AND s.name='Destruction reserve hull terra_sanction_victim' AND NOT s.destroyed)::int,(SELECT balance=70000 FROM corp_accounts ca JOIN corporations c ON c.corporation_id=ca.corp_id WHERE c.tag='DQA1' AND ca.balance=70000)::int,(SELECT COUNT(*)=2 AND MIN(quantity)=77 FROM sector_assets a JOIN corporations c ON c.corporation_id=a.corporation_id WHERE c.tag='DQA1')::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }, { "path": "data.rows.0.2", "op": "==", "value": 1 }, { "path": "data.rows.0.3", "op": "==", "value": 1 }, { "path": "data.rows.0.4", "op": "==", "value": 1 }, { "path": "data.rows.0.5", "op": "==", "value": 1 }, { "path": "data.rows.0.6", "op": "==", "value": 1 }]
+    }
+  ]
+}
