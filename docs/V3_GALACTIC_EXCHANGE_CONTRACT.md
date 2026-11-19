@@ -2,7 +2,7 @@
 
 This is the authoritative inventory, ownership and settlement contract for
 the Galactic Exchange. It implements the approved EXC-01 through EXC-08
-decisions in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md), and
+decisions in [`V3_GAMEPLAY_SPEC.md`](V3_GAMEPLAY_SPEC.md), and
 supersedes contradictory descriptions in `GALACTIC_ECONOMY.md`. This contract
 does not assert that the current implementation already satisfies it.
 

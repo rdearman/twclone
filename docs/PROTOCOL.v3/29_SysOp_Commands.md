@@ -1,6 +1,6 @@
 # 29. SysOp Commands (v1)
 
-Canonical gameplay/configuration decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md).
+Canonical gameplay/configuration decisions: [`../V3_GAMEPLAY_SPEC.md`](../V3_GAMEPLAY_SPEC.md).
 
 ## Overview
 
@@ -22,21 +22,17 @@ Allows tuning of specific server parameters without a restart.
 *   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `illegal_min_experience`, `max_cloak_duration`, `limpet_ttl_days`
 *   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`, `planet_market.buy_order_expiry_seconds`
 *   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_sale_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
-*   **Planet population**: `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss`
+*   **Planet population**: `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss_percent`
 *   **Galactic Exchange**: `galactic_exchange_liquidity_credits` (nonnegative CRD target; default `0`; explicit system-created liquidity is recorded as `SYSTEM_LIQUIDITY`; zero disables injections)
 *   **Used ship resale**: `shipyard_used_resale_factor_bp` (integer 0–10000 basis points; default 8000; affects used-hull purchase price only)
 
 ### Planet slave unrest policy
 
-The engine policy fields are `planet.slave_unrest_interval_days` (days),
-`planet.slave_unrest_stoppage_cycles` (production cycles), and
-`planet.slave_unrest_population_loss` (fixed number of population units). Each
-accepts a nonnegative integer. `0` is an explicit unset/disabled sentinel, not
-a gameplay default. No active gameplay interval or loss value is selected.
-Unrest processing remains inactive unless all three are configured positive.
-Even with values present, production/loss activation remains blocked until the
-deterministic rule for allocating losses across unassigned and working
-population is approved. No scheduler currently consumes these settings.
+The approved defaults are one game-day, one production cycle and 1% of current
+slave population. The loss-percentage setting accepts integer values from 0
+through 100; zero disables population loss. Daily evaluation uses the existing
+persisted scheduler. Loss uses integer floor and deterministic largest-
+remainder allocation across population assignments.
 
 ### `sysop.config.list`
 List all allowed config keys and their current values.

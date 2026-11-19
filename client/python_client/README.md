@@ -5,7 +5,7 @@ server. Used as the reference implementation for validating the real
 client/server protocol.
 
 For current client architecture and implementation rules, see the concise
-[developer guide](../../docs/python-client-development-handover.md). The
+[developer guide](../../docs/DEVELOPMENT.md). The
 published request and response contracts live in
 [`docs/PROTOCOL.v3`](../../docs/PROTOCOL.v3/00_index.md).
 

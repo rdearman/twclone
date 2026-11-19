@@ -37,16 +37,14 @@ Only the following keys are exposed via `sysop.config.*` commands.
 *   `shipyard_require_shields_fit`
 *   `shipyard_require_hardware_compat`
 *   `shipyard_tax_bp`
-*   `planet.slave_unrest_interval_days` (days; 0 means unset/disabled)
-*   `planet.slave_unrest_stoppage_cycles` (production cycles; 0 means unset/disabled)
-*   `planet.slave_unrest_population_loss` (fixed population units; 0 means unset/disabled)
+*   `planet.slave_unrest_interval_days` (days; approved default 1)
+*   `planet.slave_unrest_stoppage_cycles` (production cycles; approved default 1)
+*   `planet.slave_unrest_population_loss_percent` (integer 0–100; approved default 1%)
 *   `galactic_exchange_liquidity_credits` (nonnegative CRD liquidity target; default 0; explicit engine injections are recorded as `SYSTEM_LIQUIDITY`; zero means no system liquidity injection)
 *   `shipyard_used_resale_factor_bp` (integer 0–10000 basis points; default 8000; used-hull purchase price only)
 
-Slave-unrest values default to zero (unset). A daily persisted evaluator is
-scheduled, but production stoppages and population loss remain inactive until
-the recurrence, duration and loss values are all configured. Losses use the
-approved deterministic proportional integer allocation across assignments.
+Slave-unrest settings default to the approved daily policy. Population loss
+uses integer floor and deterministic allocation across population assignments.
 
 ## 3. Command Allow-List
 

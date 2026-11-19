@@ -1,31 +1,25 @@
 # twclone
 
 twclone is a C implementation of a TradeWars-style multiplayer space game. The
-current V3 server uses PostgreSQL. Python and Godot clients are included.
+V3 server uses PostgreSQL and supports Python and Godot clients.
 
-## Project status
+## Project documentation
 
-The latest release-candidate audit records strong gameplay and client
-acceptance for the tested disposable PostgreSQL environment, but does **not**
-clear an external beta deployment. Deployment ownership, credential rotation,
-network exposure and designated QA authentication remain release blockers.
-See [the current status](docs/V3_STATUS.md) and
-[release-candidate audit](docs/testing/V3_RELEASE_CANDIDATE_AUDIT_20261115.md).
+Start at the [documentation index](docs/README.md). The main references are:
 
-## Documentation
-
-Start at the [documentation index](docs/README.md). The authoritative player
-and engine protocol is in [`docs/PROTOCOL.v3`](docs/PROTOCOL.v3/00_index.md);
-approved gameplay rules are in
-[`docs/V3_GAMEPLAY_DECISIONS.md`](docs/V3_GAMEPLAY_DECISIONS.md).
+- [Architecture](docs/ARCHITECTURE.md)
+- [V3 gameplay specification](docs/V3_GAMEPLAY_SPEC.md)
+- [V3 parity and acceptance ledger](docs/V3_PARITY.md)
+- [Development and testing](docs/DEVELOPMENT.md)
+- [Operations](docs/OPERATIONS.md)
+- [V3 protocol specifications](docs/PROTOCOL.v3/00_index.md)
 
 ## Development
 
-Use the repository's Makefile, Compose files and client-specific READMEs for
-build and local development commands. Use only disposable databases for test
-and acceptance work. Do not use local development instructions as deployment
-authorization; deployment requirements are in
-[`docs/V3_DEPLOYMENT_HARDENING_PLAN.md`](docs/V3_DEPLOYMENT_HARDENING_PLAN.md).
+Use the repository Makefile, Compose files, and client-specific READMEs for
+local development. Use only disposable databases for test and acceptance
+work. Local development instructions do not authorize deployment; see the
+[deployment hardening plan](docs/V3_DEPLOYMENT_HARDENING_PLAN.md).
 
 ## License
 

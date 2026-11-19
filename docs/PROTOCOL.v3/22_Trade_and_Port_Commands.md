@@ -1,6 +1,6 @@
 # 22. Trade & Port Commands
 
-Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Galactic Exchange lifecycle: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+Canonical product decisions: [`../V3_GAMEPLAY_SPEC.md`](../V3_GAMEPLAY_SPEC.md); Galactic Exchange lifecycle: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
 
 ## 1. Port Interaction
 

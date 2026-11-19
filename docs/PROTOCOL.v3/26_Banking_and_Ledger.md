@@ -1,6 +1,6 @@
 # 26. Banking & Ledger
 
-Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Exchange settlement: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+Canonical product decisions: [`../V3_GAMEPLAY_SPEC.md`](../V3_GAMEPLAY_SPEC.md); Exchange settlement: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
 
 ## 1. Personal Banking
 

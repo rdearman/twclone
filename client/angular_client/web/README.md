@@ -55,5 +55,5 @@ The current screen is deliberately functional and data-focused. The web build
 is the primary verification target; Android packaging does not change game
 logic or server authority.
 
-See [gateway architecture](../../../docs/V3_WEB_GATEWAY_ARCHITECTURE.md) and
+See [gateway architecture](../../../docs/ARCHITECTURE.md#v3-web-gateway-architecture) and
 [API contract](../../../docs/V3_WEB_GATEWAY_API.md).

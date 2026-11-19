@@ -159,7 +159,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -276,7 +276,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -706,7 +706,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -744,7 +744,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -788,7 +788,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -826,7 +826,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1028,7 +1028,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1066,7 +1066,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1267,7 +1267,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1594,7 +1594,7 @@
           }
         }
       },
-      "specification_reference": "Ferengi population is capped at the configured percentage of sectors (minimum three); roster definitions are capacity, not simultaneous active population. docs/V3_GAMEPLAY_DECISIONS.md and V3 faction roster contract.",
+      "specification_reference": "Ferengi population is capped at the configured percentage of sectors (minimum three); roster definitions are capacity, not simultaneous active population. docs/V3_GAMEPLAY_SPEC.md and V3 faction roster contract.",
       "proposed_corrective_action": "Place the temporary fixture definition early in stable roster ordering so it is within the configured active population cap; leave production cap behavior unchanged.",
       "confidence": "confirmed"
     },
@@ -1708,7 +1708,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1785,7 +1785,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1861,7 +1861,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -1899,7 +1899,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -2060,7 +2060,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -2421,7 +2421,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -2535,7 +2535,7 @@
           }
         }
       },
-      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_SPEC.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
       "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
       "confidence": "confirmed"
     },
@@ -3034,7 +3034,7 @@
         ],
         "actual": {"status": "ok", "data": {"rows": [[90, 8, 2, 0, 0, 0, 0]]}}
       },
-      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_DECISIONS.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
+      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_SPEC.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
       "proposed_corrective_action": "Fund the isolated test port sufficiently for the case's explicitly intended full fill; do not alter matcher partial-fill behavior.",
       "confidence": "confirmed"
     },
@@ -3055,7 +3055,7 @@
         ],
         "actual": {"status": "ok", "data": {"rows": [[90, 8, 2, 0, 0]]}}
       },
-      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_DECISIONS.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
+      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_SPEC.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
       "proposed_corrective_action": "Fund the isolated test port sufficiently for the case's explicitly intended full fill; retain the retry/idempotency assertions.",
       "confidence": "confirmed"
     }

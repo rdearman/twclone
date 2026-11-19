@@ -24,6 +24,6 @@ They communicate via:
 ## C. Legacy Notes
 
 *   The V2 protocol was monolithic. V3 splits it by domain.
-*   The former `Intra-Stack_Protocol.md` and `ENGINE.md` protocol material is
+*   The former `Intra-Stack_Protocol.md` and `ARCHITECTURE.md` protocol material is
     superseded by `07_Server_to_Server_Protocol.md` and
     `08_Engine_Event_Contract.md`.

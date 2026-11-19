@@ -13,4 +13,4 @@ The canonical backend location for the new web gateway is the repository-root
 `gateway/` directory. The Angular application belongs in
 `client/angular_client/web/`. The prototype source and its manual echo script
 remain here temporarily for historical reference; do not add new gateway
-features to this directory. See [the architecture decision](../../../docs/V3_WEB_GATEWAY_ARCHITECTURE.md).
+features to this directory. See [the architecture decision](../../../docs/ARCHITECTURE.md#v3-web-gateway-architecture).

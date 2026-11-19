@@ -340,9 +340,9 @@ Updated 2026-11-07.
 - Files changed in the pending batch: `src/db/repo/repo_market.c`,
   `src/db/repo/repo_market.h`, `src/server_cron.c`,
   `tests.v2/test_planetary_server_contract.py`,
-  `docs/V3_GAMEPLAY_COMPLETION_TRACKER.md`,
-  `docs/V3_GAMEPLAY_DECISIONS.md`, and
-  `docs/V3_GAMEPLAY_COMPLETION_TRACKER.md`.
+  `docs/V3_PARITY.md`,
+  `docs/V3_GAMEPLAY_SPEC.md`, and
+  `docs/V3_PARITY.md`.
 - Next exact action when QA is available: run focused Ferengi roster and
   FedSpace robbery JSON suites, then two-worker same-order and competing
   limited-inventory matcher scenarios; only after these complete, run

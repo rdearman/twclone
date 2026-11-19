@@ -1,7 +1,7 @@
 # V3 player feedback acceptance
 
 Evidence collected 14–15 November 2026. Current project regression counts are
-maintained in [`../V3_GAMEPLAY_COMPLETION_TRACKER.md`](../V3_GAMEPLAY_COMPLETION_TRACKER.md);
+maintained in [`../V3_PARITY.md`](../V3_PARITY.md);
 the intermediate test totals below are historical results from this focused
 feedback run.
 

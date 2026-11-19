@@ -1,7 +1,7 @@
 # Galactic Economy
 
 The authoritative product decisions for V3 economic gameplay are maintained in
-[`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md). The complete inventory,
+[`V3_GAMEPLAY_SPEC.md`](V3_GAMEPLAY_SPEC.md). The complete inventory,
 ownership, virtual transport, matching, settlement, funding and accounting
 contract is [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md).
 Protocol details are in

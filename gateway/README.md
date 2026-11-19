@@ -91,5 +91,5 @@ operational security review. The command bridge forwards only existing server
 commands; it does not add gameplay semantics. The Angular app has no direct
 TCP or fallback game-server connection.
 
-See [gateway architecture](../docs/V3_WEB_GATEWAY_ARCHITECTURE.md) and
+See [gateway architecture](../docs/ARCHITECTURE.md#v3-web-gateway-architecture) and
 [HTTP API contract](../docs/V3_WEB_GATEWAY_API.md).

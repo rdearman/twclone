@@ -20,6 +20,12 @@ the warp graph toward active incidents and uses the shared NPC combat path.
 Same-sector observations are retained in `npc_intelligence` only until their
 configured expiry.
 
+This pursuit behavior is an approved TWClone V3 rule and is exercised by the
+`npc_step` scheduler. It is not, by itself, evidence of historical TradeWars
+2002 parity. Scheduler acceptance must cover incident persistence, target
+eligibility/removal, safe-zone exclusions, movement, combat settlement,
+restart and concurrent action idempotency.
+
 ## 1. NPC Commands (Engine Enqueued)
 
 These are primarily Engine-driven commands executed by the Server.
@@ -329,5 +335,4 @@ When `cluster_player_status.banned == true` for a cluster:
 - Unbanning procedures (deferred to Phase D)
 - Cluster-tuned bribe thresholds (Phase D)
 - Record wiping outside Federation (Phase D)
-
 

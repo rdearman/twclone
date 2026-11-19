@@ -237,10 +237,12 @@ bin/
   └─ client              # Compiled test client
 data/                    # menus.json (UI templates)
 docs/
-  ├─ ENGINE.md           # Engine design, tick loop, cron tasks
-  ├─ DATABASE_RULES.md   # Architectural layering, SQL rules
-  ├─ PROTOCOL.v3/        # Complete protocol spec (requests, responses, all commands)
-  └─ *.md                # Design docs (deployment, security, compatibility)
+  ├─ ARCHITECTURE.md     # System, database, engine, and client architecture
+  ├─ V3_GAMEPLAY_SPEC.md # Approved V3 rules and numeric defaults
+  ├─ V3_PARITY.md        # Requirement status and clause-level evidence
+  ├─ DEVELOPMENT.md     # Build and testing
+  ├─ OPERATIONS.md      # Operational references
+  └─ PROTOCOL.v3/       # Canonical wire contracts
 tests.v2/
   ├─ test_rig.json       # Canonical test data (users, ships, sectors, etc.)
   ├─ rig_db.py           # Loads test_rig.json into database
@@ -283,10 +285,12 @@ tests.v2/
 ## Documentation Reference
 
 - **README.md**: Quick start, project layout
-- **docs/ENGINE.md**: Engine design, tick loop, durable rails (events/commands), S2S protocol
-- **docs/DATABASE_RULES.md**: Architectural layering, SQL portability rules, backend support requirements
-- **docs/PROTOCOL.v3/**: Complete message specs, auth, error codes, all command types
-- **docs/PRODUCTION_DEPLOYMENT_GUIDE.md**: TLS, PgBouncer pooling (unlimited concurrency)
+- **docs/ARCHITECTURE.md**: Architecture, database, engine, and client boundaries
+- **docs/V3_GAMEPLAY_SPEC.md**: Approved V3 gameplay rules and numeric defaults
+- **docs/V3_PARITY.md**: Current parent classifications and clause-level acceptance evidence
+- **docs/DEVELOPMENT.md**: Build and regression commands
+- **docs/OPERATIONS.md**: Local operations and deployment/security references
+- **docs/PROTOCOL.v3/**: Complete message specs, authentication, errors, and V3 wire contracts
 - **tests.v2/README_RIG.md**: Test rigging system, adding test data
 
 ## Global Guardrails (Non-Negotiable)
@@ -294,7 +298,7 @@ tests.v2/
 ### HARD CONSTRAINTS
 1. No unrelated refactors
 2. No file renames
-3. No new .md files unless explicitly requested
+3. Keep Markdown documentation small and authoritative; do not create routine progress, audit, or dated report files
 4. No new directories unless explicitly requested
 5. Do not modify existing tests unless explicitly requested
 6. All new tests must be JSON in `tests.v2/`
@@ -308,9 +312,10 @@ tests.v2/
 14. If unsure, ask instead of inventing architecture
 
 ### FILE CREATION POLICY
-- Create only files explicitly named in the task
-- Documentation: update existing docs if possible; if a new report is required, create **exactly ONE** file under `docs/reports/`
-- No changelog, design docs (unless requested), or session summaries
+- Update existing authoritative documentation rather than duplicating requirements
+- Do not create Markdown progress reports for routine work; use commits and test output for transient history
+- Create documentation only for a genuinely new specification or substantial technical reference
+- Avoid dated report filenames and per-task archive documents
 
 ### CHANGE SCOPE RULE
 Changes limited to:

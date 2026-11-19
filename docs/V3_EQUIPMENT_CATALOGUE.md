@@ -64,5 +64,5 @@ mechanics, but does not provide this numeric price table.
 
 The selected values intentionally follow the classic 3.13 reference export.
 They are canonical V3 catalogue defaults; deployments may retain their own
-existing configured catalogue values. See [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md)
+existing configured catalogue values. See [`V3_GAMEPLAY_SPEC.md`](V3_GAMEPLAY_SPEC.md)
 and [`19_Ship_Commands.md`](PROTOCOL.v3/19_Ship_Commands.md).

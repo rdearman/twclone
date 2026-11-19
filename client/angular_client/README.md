@@ -11,7 +11,7 @@ A modern Angular web interface prototype for TWClone.
 The Python service in `client/angular_client/gateway/` is a deprecated
 WebSocket-to-TCP experiment, not the HTTPS gateway. Do not deploy it or add
 new gateway features there. See
-[the v3 gateway architecture decision](../../docs/V3_WEB_GATEWAY_ARCHITECTURE.md).
+[the v3 gateway architecture decision](../../docs/ARCHITECTURE.md#v3-web-gateway-architecture).
 
 ## Requirements
 - Python 3.10+

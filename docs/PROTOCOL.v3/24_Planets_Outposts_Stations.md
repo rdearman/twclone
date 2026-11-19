@@ -1,6 +1,6 @@
 # 24. Planets, Outposts, & Stations
 
-Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Exchange accounting: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+Canonical product decisions: [`../V3_GAMEPLAY_SPEC.md`](../V3_GAMEPLAY_SPEC.md); Exchange accounting: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
 
 ## 1. Planet Interaction
 
@@ -235,18 +235,20 @@ stoppage, slave production output is zero; colonist production continues under
 existing rules.
 
 Slave morale is permanently low and cannot be improved by treatment or
-management. Unrest is deterministic, may stop production and reduce slave
-population, and cannot change ownership. It must be driven by persisted engine
-state, never random rolls or random loss quantities. Unrest interval, stoppage
-duration and population-loss parameters are not assigned defaults here; no
-unrest event may be activated until SysOp policy values and deterministic
-allocation of losses across assigned/unassigned population are configured.
-SysOps can persist the interval (`planet.slave_unrest_interval_days`),
-stoppage duration (`planet.slave_unrest_stoppage_cycles`) and fixed loss
-(`planet.slave_unrest_population_loss`). A value of zero means unset/disabled;
-it is not an active rule. No scheduler currently consumes these settings, and
-the loss-allocation policy remains unresolved. See
-`29_SysOp_Commands.md` and `V3_GAMEPLAY_DECISIONS.md`.
+management. Daily unrest is deterministic, persisted and cannot change
+ownership. The approved V3 daily policy evaluates every 24 game-hours, stops
+slave production for one production cycle, and loses 1% of the current slave
+population per qualifying daily event. The percentage is converted to integer
+population units by floor; assignment losses use deterministic largest-
+remainder allocation and conserve the exact integer loss. Empty populations
+do not create loss events. This daily event is distinct from production-cycle
+unrest: cycle disruption skips only that cycle and causes no population loss.
+The daily policy uses the existing persisted POP-05 scheduler; it does not add
+a second scheduler. Its SysOp settings default to the approved values
+(`planet.slave_unrest_interval_days=1`,
+`planet.slave_unrest_stoppage_cycles=1`,
+`planet.slave_unrest_population_loss_percent=1`). See
+`29_SysOp_Commands.md` and `V3_GAMEPLAY_SPEC.md`.
 
 Evil-aligned players may purchase slaves or enslave colonists during a
 successful planetary conquest. Neutral players may inherit slaves through
@@ -334,7 +336,7 @@ Set the target number of colonists working in each production job on the planet 
 }
 ```
 
-Workers above planet-class capacity or beyond the available colony population are rejected. The difference from the previous assignments is returned to or taken from the unassigned pool. Every 10-minute planet growth tick grows a non-empty colony toward its class population cap and adds new colonists to the unassigned pool. For ORE/ORG/EQU, class rows in `planet_production.workers_per_unit` specify the number of assigned workers required for one unit per tick. Integer labor remainders persist per planet and commodity. Built-in class defaults are the noncanonical, versioned twclone V3 values in `V3_GAMEPLAY_DECISIONS.md`; custom classes may configure their own rate. The approved slave multiplier is applied after normal output is calculated. Fighter production remains a separate citadel-gated contract. The client should show assignments and estimated output separately from confirmed stock.
+Workers above planet-class capacity or beyond the available colony population are rejected. The difference from the previous assignments is returned to or taken from the unassigned pool. Every 10-minute planet growth tick grows a non-empty colony toward its class population cap and adds new colonists to the unassigned pool. For ORE/ORG/EQU, class rows in `planet_production.workers_per_unit` specify the number of assigned workers required for one unit per tick. Integer labor remainders persist per planet and commodity. Built-in class defaults are the noncanonical, versioned twclone V3 values in `V3_GAMEPLAY_SPEC.md`; custom classes may configure their own rate. The approved slave multiplier is applied after normal output is calculated. Fighter production remains a separate citadel-gated contract. The client should show assignments and estimated output separately from confirmed stock.
 
 ### `planet.genesis_create`
 Create a new planet using a Genesis Torpedo. Requires a Genesis Torpedo on the player's ship.

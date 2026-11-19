@@ -1,6 +1,6 @@
 # 23. Combat & Weapons
 
-Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md).
+Canonical product decisions: [`../V3_GAMEPLAY_SPEC.md`](../V3_GAMEPLAY_SPEC.md).
 
 ## 1. Combat Commands
 
