@@ -4,10 +4,14 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 55 VERIFIED, 5
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 16
-verified two `FED-03` child clauses and reconciled existing StarPort acceptance
-at clause level; no incomplete parent was promoted. A focused fresh PostgreSQL
+**Parity refresh — 19 November 2026:** 58 VERIFIED, 2
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 17
+closed all remaining StarPort acceptance clauses and promoted
+`PARITY-PORT-ATTACK-01`, `V3-PORT-BUILD-01`, and `V3-PORT-COMBAT-01` from
+disposable-PostgreSQL and actual Godot UI evidence. The acceptance details are
+in `docs/testing/V3_STARPORT_GODOT_ACCEPTANCE_20261119.md`. Autonomous batch 16
+verified two `FED-03` child clauses and reconciled earlier StarPort acceptance
+at clause level. A focused fresh PostgreSQL
 run passed `suite_fedspace_aggression_captainz.json` 49/49
 after adding exact ISS protected-asset/jurisdiction and Captain Z no-duplicate
 assertions, plus `suite_port_operations.json` 9/9. Federation clauses 1 and 2

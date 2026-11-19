@@ -1,0 +1,39 @@
+{
+  "name": "Godot StarPort strike event live acceptance fixture",
+  "version": "1.0.0",
+  "description": "Seeds one disposable StarPort and keeps the serving server available for the real Godot UI attack test.",
+  "tests": [
+    {
+      "name": "Move ordinary player, ship and port into an unprotected test sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH target AS (SELECT MIN(s.sector_id) AS sector_id FROM sectors s WHERE s.sector_id>10 AND NOT EXISTS(SELECT 1 FROM ports other WHERE other.is_active AND other.sector_id=s.sector_id AND other.port_id<>9)), moved_port AS (UPDATE ports SET sector_id=(SELECT sector_id FROM target),is_active=TRUE,durability=1,defensive_strength=1 WHERE port_id=9 RETURNING sector_id), moved_player AS (UPDATE players SET sector_id=(SELECT sector_id FROM moved_port) WHERE name='planet_gov' RETURNING player_id), moved_ship AS (UPDATE ships SET sector_id=(SELECT sector_id FROM moved_port),shields=1000,fighters=100,hull=100 WHERE ship_id=(SELECT ship_id FROM players WHERE name='planet_gov') RETURNING ship_id), set_turns AS (UPDATE turns SET turns_remaining=10 WHERE player_id=(SELECT player_id FROM moved_player) RETURNING player_id), stock AS (INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('port',9,'ORE',17,1) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=17 RETURNING quantity) SELECT ((SELECT COUNT(*) FROM moved_port)=1 AND (SELECT COUNT(*) FROM moved_player)=1 AND (SELECT COUNT(*) FROM moved_ship)=1 AND (SELECT COUNT(*) FROM set_turns)=1 AND (SELECT COUNT(*) FROM stock)=1)::int;"
+      },
+      "expect": {"status": "ok"},
+      "stop_on_fail": true
+    },
+    {
+      "name": "Allow real Godot UI acceptance to attack the seeded StarPort",
+      "command": "delay",
+      "data": {"seconds": 45}
+    },
+    {
+      "name": "Confirm the live attack consumed the port, stock and one turn and persisted one event and receipt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT is_active=FALSE AND durability=0 FROM ports WHERE port_id=9)::int, (SELECT quantity=0 FROM entity_stock WHERE entity_type='port' AND entity_id=9 AND commodity_code='ORE')::int, (SELECT COUNT(*)=1 FROM v3_port_action_receipts r JOIN players p USING(player_id) WHERE p.name='planet_gov' AND r.action='attack' AND r.result->>'destroyed'='true')::int, (SELECT COUNT(*)=1 FROM player_events e JOIN players p USING(player_id) WHERE p.name='planet_gov' AND e.event_type='player.port_strike.v1')::int, (SELECT COUNT(*)=1 FROM v3_port_action_receipts r JOIN players p USING(player_id) WHERE p.name='planet_gov' AND r.action='attack')::int, (SELECT turns_remaining=499 FROM turns t JOIN players p USING(player_id) WHERE p.name='planet_gov')::int;"
+      },
+      "expect": {"status": "ok"},
+      "asserts": [
+        {"path": "data.rows.0.0", "op": "==", "value": 1},
+        {"path": "data.rows.0.1", "op": "==", "value": 1},
+        {"path": "data.rows.0.2", "op": "==", "value": 1},
+        {"path": "data.rows.0.3", "op": "==", "value": 1},
+        {"path": "data.rows.0.4", "op": "==", "value": 1}
+        ,{"path": "data.rows.0.5", "op": "==", "value": 1}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "name": "StarPort combat numeric contract",
+  "version": "1.0.0",
+  "protocol_category": "18_Ports",
+  "description": "Checks the configured default defence, durability damage formula, shield/fighter/hull retaliation order, and one-turn debit on the actual PostgreSQL server.",
+  "tests": [
+    {"name": "Bootstrap ordinary player", "setup": "macro_auth_user", "username": "planet_gov", "password": "password"},
+    {"name": "Record authoritative pre-attack turn count", "command": "player.my_info", "user": "planet_gov", "expect": {"status": "ok"}, "save": {"starport_turns_before": "data.player.turns_remaining"}},
+    {
+      "name": "Seed a standard port in an unprotected sector and controlled attacker layers",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "WITH target AS (SELECT MIN(s.sector_id) AS sector_id FROM sectors s WHERE s.sector_id>10 AND NOT EXISTS(SELECT 1 FROM ports other WHERE other.is_active AND other.sector_id=s.sector_id AND other.port_id<>9)), moved_port AS (UPDATE ports SET sector_id=(SELECT sector_id FROM target),is_active=TRUE,durability=10000,defensive_strength=1000 WHERE port_id=9 RETURNING sector_id), moved_player AS (UPDATE players SET sector_id=(SELECT sector_id FROM moved_port) WHERE name='planet_gov' RETURNING player_id), moved_ship AS (UPDATE ships SET sector_id=(SELECT sector_id FROM moved_port),shields=999,fighters=5,hull=100 WHERE ship_id=(SELECT ship_id FROM players WHERE name='planet_gov') RETURNING ship_id) SELECT ((SELECT COUNT(*) FROM moved_port)=1 AND (SELECT COUNT(*) FROM moved_player)=1 AND (SELECT COUNT(*) FROM moved_ship)=1)::int;"},
+      "expect": {"status": "ok"},
+      "asserts": [{"path": "data.rows.0.0", "op": "==", "value": 1}]
+    },
+    {
+      "name": "Authenticated arrival refreshes the ordinary player at the StarPort",
+      "command": "auth.login", "user": "planet_gov",
+      "data": {"username": "planet_gov", "passwd": "password"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "First attack charges one turn and damage is max(1,maxattack-1000); retaliation exhausts shields then fighters",
+      "command": "combat.attack.port", "user": "planet_gov",
+      "data": {"port_id": 9, "idempotency_key": "numeric-first-layer-001"},
+      "expect": {"status": "ok", "type": "combat.port_strike.v1"},
+      "asserts": [
+        {"path": "data.retaliation", "op": "==", "value": 1000},
+        {"path": "data.shields_lost", "op": "==", "value": 999},
+        {"path": "data.fighters_lost", "op": "==", "value": 1},
+        {"path": "data.hull_lost", "op": "==", "value": 0}
+      ]
+    },
+    {
+      "name": "Verify first strike durability and persisted damage layers",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": {"sql": "SELECT CASE WHEN p.durability=10000-GREATEST(1,st.maxattack-p.defensive_strength) AND p.defensive_strength=1000 AND r.result->>'retaliation'='1000' AND r.result->>'shields_lost'='999' AND r.result->>'fighters_lost'='1' AND r.result->>'hull_lost'='0' AND s.shields=0 AND s.fighters=4 AND s.hull=100 AND t.turns_remaining=@{starport_turns_before}-1 THEN 1 ELSE 0 END FROM ports p JOIN players pl ON pl.name='planet_gov' JOIN ships s ON s.ship_id=pl.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id JOIN turns t USING(player_id) JOIN v3_port_action_receipts r ON r.player_id=pl.player_id AND r.request_id='numeric-first-layer-001' WHERE p.port_id=9;"},
+      "expect": {"status": "ok"},
+      "asserts": [{"path": "data.rows.0.0", "op": "==", "value": 1}]
+    },
+    {
+      "name": "Prepare second strike to carry retaliation through fighters into hull",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": {"sql": "UPDATE ships SET shields=0,fighters=999,hull=100 WHERE ship_id=(SELECT ship_id FROM players WHERE name='planet_gov');"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Second attack consumes one turn and applies remaining retaliation to hull after fighters",
+      "command": "combat.attack.port", "user": "planet_gov",
+      "data": {"port_id": 9, "idempotency_key": "numeric-second-layer-002"},
+      "expect": {"status": "ok", "type": "combat.port_strike.v1"},
+      "asserts": [
+        {"path": "data.retaliation", "op": "==", "value": 1000},
+        {"path": "data.shields_lost", "op": "==", "value": 0},
+        {"path": "data.fighters_lost", "op": "==", "value": 999},
+        {"path": "data.hull_lost", "op": "==", "value": 1}
+      ]
+    },
+    {
+      "name": "Verify second strike and total turn accounting in PostgreSQL",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": {"sql": "SELECT CASE WHEN p.durability=10000-2*GREATEST(1,st.maxattack-p.defensive_strength) AND s.shields=0 AND s.fighters=0 AND s.hull=99 AND t.turns_remaining=@{starport_turns_before}-2 AND (SELECT COUNT(*)=2 FROM v3_port_action_receipts r WHERE r.player_id=pl.player_id AND r.action='attack') THEN 1 ELSE 0 END FROM ports p JOIN players pl ON pl.name='planet_gov' JOIN ships s ON s.ship_id=pl.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id JOIN turns t USING(player_id) WHERE p.port_id=9;"},
+      "expect": {"status": "ok"},
+      "asserts": [{"path": "data.rows.0.0", "op": "==", "value": 1}]
+    }
+  ]
+}

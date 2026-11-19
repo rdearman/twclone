@@ -1742,6 +1742,24 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			_request_planet_surface_records()
 			_refresh_after_command(["player"])
 			return
+		if command_name == "planet.port.construct":
+			var construction_request: Variant = operation.get("data", {})
+			var requested_planet_id := _authoritative_positive_id(construction_request.get("planet_id", 0)) if construction_request is Dictionary else 0
+			var requested_class: Variant = construction_request.get("port_class", null) if construction_request is Dictionary else null
+			var construction_receipt_valid: bool = response.get("type", null) == "planet.port_construction_v1" and data is Dictionary \
+				and requested_planet_id > 0 and data.get("planet_id", null) == requested_planet_id \
+				and typeof(requested_class) == TYPE_INT and data.get("port_class", null) == requested_class \
+				and _authoritative_positive_id(data.get("construction_id", 0)) > 0 \
+				and str(data.get("status", "")) in ["building", "completed"]
+			if not construction_receipt_valid:
+				gameplay_view.set_command_busy(false)
+				gameplay_view.show_notification("StarPort construction was not confirmed by a matching receipt; refreshing planet and player state.")
+				_reconcile_planet_surface_mutation()
+				return
+			gameplay_view.show_notification("StarPort class %d construction confirmed · %s." % [requested_class, str(data["status"])])
+			_request_planet_surface_records()
+			_refresh_after_command(["player", "ship"])
+			return
 		if command_name == "planet.launch":
 			if not _launch_response_type_matches(response):
 				# A mismatched envelope cannot establish departure or authorize any
@@ -2051,7 +2069,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 func _is_planet_surface_mutation(command: String) -> bool:
 	return command in [
 		"planet.deposit", "planet.withdraw", "planet.harvest", "planet.fighters.transfer",
-		"planet.colonists.allocate", "planet.colonists.set", "planet.market.sell",
+		"planet.colonists.allocate", "planet.colonists.set", "planet.market.sell", "planet.port.construct",
 		"citadel.build", "citadel.upgrade", "planet.rename"
 	]
 

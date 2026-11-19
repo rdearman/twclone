@@ -3383,7 +3383,11 @@ h_port_construction_tick (db_t *db, int64_t now_s)
       json_decref (event);
     }
   if (!db_tx_commit (db, &err)) goto port_construction_failed;
-  return count;
+  /* Cron handler return values follow the engine contract: zero means the
+   * transaction completed successfully. The processed-row count is internal;
+   * returning it made every non-empty construction batch look like a failed
+   * scheduler task after its transaction had already committed. */
+  return 0;
 
 port_construction_failed:
   if (res) db_res_finalize (res);

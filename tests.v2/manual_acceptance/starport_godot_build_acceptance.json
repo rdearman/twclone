@@ -1,0 +1,29 @@
+{
+  "name": "Godot StarPort construction UI acceptance fixture",
+  "version": "1.0.0",
+  "description": "Seeds a landed-owner construction scenario, runs the real Godot Planet menu, and verifies charges and construction state in disposable PostgreSQL.",
+  "tests": [
+    {
+      "name": "Prepare an owned planet and ship in a non-FedSpace sector with exact construction materials",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "WITH target AS (SELECT sector_id,ROW_NUMBER() OVER(ORDER BY sector_id)::int AS n FROM sectors s WHERE s.sector_id>10 AND NOT EXISTS(SELECT 1 FROM ports p WHERE p.is_active AND p.sector_id=s.sector_id AND p.port_id<>9) ORDER BY sector_id LIMIT 2), moved_port AS (UPDATE ports SET sector_id=(SELECT sector_id FROM target WHERE n=1) WHERE port_id=9 RETURNING port_id), moved_planet AS (UPDATE planets SET sector_id=(SELECT sector_id FROM target WHERE n=2) WHERE planet_id=700 RETURNING planet_id,sector_id), moved_player AS (UPDATE players SET sector_id=(SELECT sector_id FROM moved_planet) WHERE name='planet_gov' RETURNING player_id), moved_ship AS (UPDATE ships SET sector_id=(SELECT sector_id FROM moved_planet) WHERE ship_id=(SELECT ship_id FROM players WHERE name='planet_gov') RETURNING ship_id), stock AS (INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',700,'ORE',2000,0),('planet',700,'ORG',2000,0),('planet',700,'EQU',2000,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=2000 RETURNING commodity_code) SELECT ((SELECT COUNT(*) FROM target)=2 AND (SELECT COUNT(*) FROM moved_port)=1 AND (SELECT COUNT(*) FROM moved_planet)=1 AND (SELECT COUNT(*) FROM moved_player)=1 AND (SELECT COUNT(*) FROM moved_ship)=1 AND (SELECT COUNT(*) FROM stock)=3)::int;"},
+      "expect": {"status": "ok"},
+      "asserts": [{"path": "data.rows.0.0", "op": "==", "value": 1}],
+      "stop_on_fail": true
+    },
+    {
+      "name": "Allow the Godot player to land and start class-eight construction through the Planet menu",
+      "command": "delay",
+      "data": {"seconds": 50}
+    },
+    {
+      "name": "Verify one class-eight construction, the exact player credit debit and planetary material debits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "SELECT CASE WHEN (SELECT COUNT(*)=1 AND bool_and(c.status='building' AND c.port_class=8 AND c.player_id=p.player_id AND c.planet_id=700) FROM planet_port_constructions c JOIN players p USING(player_id) WHERE p.name='planet_gov') AND (SELECT credits=999900000 FROM players WHERE name='planet_gov') AND (SELECT COUNT(*)=3 AND bool_and(quantity=1000) FROM entity_stock WHERE entity_type='planet' AND entity_id=700 AND commodity_code IN ('ORE','ORG','EQU')) THEN 1 ELSE 0 END;"},
+      "expect": {"status": "ok"},
+      "asserts": [{"path": "data.rows.0.0", "op": "==", "value": 1}]
+    }
+  ]
+}

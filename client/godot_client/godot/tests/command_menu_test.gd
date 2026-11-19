@@ -804,6 +804,18 @@ func _run() -> void:
 	await process_frame
 	var citadel_button := _action_button(menu, "Build planet citadel")
 	_check(citadel_button != null and not citadel_button.disabled, "planet citadel action stayed unavailable while landed")
+	var starport_construct_button := _action_button(menu, "Construct StarPort")
+	_check(starport_construct_button != null and not starport_construct_button.disabled, "StarPort construction action stayed unavailable on the confirmed landed planet")
+	var before_starport_construct := captured.size()
+	menu._choose_action({"label": "Construct StarPort", "command": "planet.port.construct", "context_id": "planet_id", "fields": [["port_class", "integer", "Trading class (1–8)", "1"]], "mutating": true, "idempotency": true})
+	if menu._form_fields.has("port_class"):
+		(menu._form_fields["port_class"] as LineEdit).text = "8"
+		menu._submit_form()
+	_check(captured.size() == before_starport_construct + 1 and captured.back().get("command") == "planet.port.construct", "StarPort construction menu did not dispatch the server command")
+	if captured.size() > before_starport_construct:
+		var construction_data: Dictionary = captured.back().get("data", {})
+		_check(construction_data.get("planet_id") == 19 and construction_data.get("port_class") == 8, "StarPort construction did not use the confirmed planet ID and selected class")
+		_check(typeof(construction_data.get("idempotency_key", null)) == TYPE_STRING and not str(construction_data.get("idempotency_key", "")).is_empty(), "StarPort construction omitted its idempotency key")
 	menu._choose_action({"label": "Allocate planet colonists", "command": "planet.colonists.allocate", "context_id": "planet_id", "fields": [["ore", "integer", "Ore colonists", "0"], ["organics", "integer", "Organics colonists", "0"], ["equipment", "integer", "Equipment colonists", "0"]], "mutating": true})
 	(menu._form_fields["ore"] as LineEdit).text = "4"
 	(menu._form_fields["organics"] as LineEdit).text = "2"

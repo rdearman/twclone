@@ -1310,6 +1310,7 @@ func _render_actions() -> void:
 			actions.append({"label": "Harvest planet production", "command": "planet.harvest", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Emancipate planet slaves", "command": "planet.emancipate", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Sell planet surplus to Exchange", "command": "planet.market.sell", "context_id": "planet_id", "fields": [["commodity", FIELD_TEXT, "Commodity (ORE, ORG, EQU)", "ORE"], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true})
+			actions.append({"label": "Construct StarPort", "command": "planet.port.construct", "context_id": "planet_id", "fields": [["port_class", FIELD_INT, "Trading class (1–8)", "1"]], "mutating": true, "idempotency": true, "tooltip": "Choose the port's fixed V3 trading class. Construction consumes planetary materials and the server delivers materials on its schedule."})
 			actions.append({"label": "Build planet citadel", "command": "citadel.build", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Upgrade planet citadel", "command": "citadel.upgrade", "context_id": "planet_id", "mutating": true})
 		elif is_landed:

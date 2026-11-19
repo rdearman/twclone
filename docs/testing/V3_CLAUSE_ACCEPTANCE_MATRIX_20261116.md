@@ -2,12 +2,12 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 19 November 2026, after autonomous parity batch 16.
+Reviewed: 19 November 2026, after autonomous parity batch 17.
 
 ## Current measures
 
-- Parent requirements: 67 (55 VERIFIED, 5 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED). Autonomous batch 15 verified `INS-01`, `INS-02`, and `INS-03`; batch 16 closes two `FED-03` child clauses and records further StarPort child evidence, without promoting those incomplete parents.
-- Base clause rows: 227 (164 VERIFIED, 63 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (58 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED). Autonomous batch 17 completed the remaining StarPort acceptance clauses for `PARITY-PORT-ATTACK-01`, `V3-PORT-BUILD-01`, and `V3-PORT-COMBAT-01`.
+- Base clause rows: 227 (169 VERIFIED, 58 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -376,7 +376,7 @@ unverified.
 | `STARPORT-V3-01` | clause 5 | Destroyed port records are retained as inactive history because trade/audit tables hold port foreign keys | VERIFIED | `docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md` and `docs/testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`. |
 | `STARPORT-V3-01` | clause 6 | a replacement port may use the sector | VERIFIED | `docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md` and `docs/testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`. |
 | `STARPORT-V3-01` | clause 7 | No persistent player/corporation port ownership is introduced | VERIFIED | `docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md` and `docs/testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`. |
-| `PARITY-PORT-ATTACK-01` | clause 1 | V3 names `combat.attack.port` and `player.port_strike.v1` | IMPLEMENTED_UNTESTED | Existing live Godot/Python acceptance captures the `combat.attack.port` request and `combat.port_strike.v1` reply plus durable receipt, but does not preserve an event transcript proving delivery of `player.port_strike.v1`; parent clause remains open pending that runtime event evidence. |
+| `PARITY-PORT-ATTACK-01` | clause 1 | V3 names `combat.attack.port` and `player.port_strike.v1` | VERIFIED | `tests.v2/manual_acceptance/starport_godot_event_acceptance.json` passed 3/3 and Godot `live_starport_attack_test.gd` passed 8 checks. The authenticated player attack returned `combat.port_strike.v1`; PostgreSQL readback confirmed one durable strike receipt and exactly one correlated `player.port_strike.v1` event. |
 | `PARITY-PORT-ATTACK-01` | clause 2 | `ports.size` is capacity, not hull strength | VERIFIED | Disposable PostgreSQL StarPort acceptance showed capacity upgrades tracked independently from the `durability` field; the live attack reduced persisted durability while commodity capacity remained a separate per-commodity upgrade (`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`, concurrent upgrade/attack; `V3_STARPORT_ACCEPTANCE_20261114.md`, attack/destruction). `tests.v2/test_starport_sector_and_pta_contract.py` passed 5/5 and confirms the separate durable schema fields. |
 | `PARITY-PHOTON-01` | clause 1 | Original manual: only Missile Frigates/Imperial StarShips use photons | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `PARITY-PHOTON-01` | clause 2 | ship/planet shields protect against impact | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
@@ -400,14 +400,14 @@ unverified.
 | `V3-PHOTON-DURATION-01` | clause 2 | configurable duration in seconds, minimum 1 | VERIFIED | `suite_photon_duration_acceptance.json::case-0007`–`case-0011`; one-second duration accepted, zero and above-maximum rejected, exact expiry and one ammunition debit asserted. Noncanonical twclone setting. |
 | `V3-PORT-BUILD-01` | clause 1 | Initial construction: 100,000 credits plus 1,000 each ORE/ORG/EQU | VERIFIED | Disposable PostgreSQL construction replay after a lost reply and serving-server restart returned the same construction ID; SQL balances showed 500,000→400,000 credits and 2,000→1,000 of each material exactly once (`V3_STARPORT_ACCEPTANCE_20261114.md`, construction/replay). |
 | `V3-PORT-BUILD-01` | clause 2 | three daily deliveries of 100 each commodity (1,300 total of each material) | VERIFIED | `V3_STARPORT_ACCEPTANCE_20261114.md`, three scheduled deliveries across serving-server restarts: each consumed 100 ORE/ORG/EQU once; completion persisted and a further restart did not replay delivery. Injected delivery failure rolled back before retry. |
-| `V3-PORT-BUILD-01` | clause 3 | class-specific exchange directions fixed at completion | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-PORT-BUILD-01` | clause 3 | class-specific exchange directions fixed at completion | VERIFIED | `tests.v2/suite_starport_class_directions.json` passed 7/7 against disposable PostgreSQL after advancing the actual construction scheduler. The completed records and each port's initialized stock established all eight fixed buy/sell class directions. Godot `live_starport_build_test.gd` separately passed 8 UI/network checks and verified a class-8 build through the Planet menu. |
 | `V3-PORT-BUILD-01` | clause 4 | Capacity upgrades: 10,000 credits and 100 units of the selected commodity per level, increasing that commodity's capacity by 1,000 per level, with maximum level 10 | VERIFIED | Disposable PostgreSQL StarPort upgrade acceptance verified selected ORE debit, 10,000-credit charge per level, +1,000 capacity per level, insufficient-material refusal, retry idempotency, two concurrent serialized upgrades, and persistence after server restart (`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`, concurrency/recovery). |
 | `V3-PORT-BUILD-01` | clause 5 | The construction planet supplies materials | VERIFIED | Construction retry and three-delivery PostgreSQL acceptance observed ORE/ORG/EQU debits in the source planet; rollback preserved the planet balances (`V3_STARPORT_ACCEPTANCE_20261114.md`, construction/delivery). |
 | `V3-PORT-BUILD-01` | clause 6 | the upgrading ship supplies the selected commodity and the active port receives the credit cost | VERIFIED | PostgreSQL upgrade acceptance checked the upgrading player's ship cargo debit and active port petty-cash credit, once per committed level; concurrent and same-key retries preserved exact totals (`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`). |
 | `V3-PORT-COMBAT-01` | clause 1 | 10,000 durability | VERIFIED | Disposable PostgreSQL attack/destruction acceptance observed a new tested port at 10,000 durability, reduced to 1,000 after the first strike and tombstoned by the next strike (`V3_STARPORT_ACCEPTANCE_20261114.md`, unprotected-sector attack). |
-| `V3-PORT-COMBAT-01` | clause 2 | 1,000 defensive strength | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PORT-COMBAT-01` | clause 3 | each attack consumes one turn and deals `max(1, shiptypes.maxattack - 1,000)` durability damage | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PORT-COMBAT-01` | clause 4 | retaliation deals 1,000 damage in the existing shield→fighter→hull order | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-PORT-COMBAT-01` | clause 2 | 1,000 defensive strength | VERIFIED | `tests.v2/suite_starport_combat_numeric.json` passed 12/12 against disposable PostgreSQL. Its first strike against a ship with 999 shields and 5 fighters left 0 shields, 4 fighters and unchanged hull, demonstrating exactly 1,000 retaliation damage. |
+| `V3-PORT-COMBAT-01` | clause 3 | each attack consumes one turn and deals `max(1, shiptypes.maxattack - 1,000)` durability damage | VERIFIED | `tests.v2/suite_starport_combat_numeric.json` passed 12/12. Two authenticated attacks used live `shiptypes.maxattack`; SQL confirmed formula-derived durability loss and turn balance 1,000→999→998. |
+| `V3-PORT-COMBAT-01` | clause 4 | retaliation deals 1,000 damage in the existing shield→fighter→hull order | VERIFIED | `tests.v2/suite_starport_combat_numeric.json` passed 12/12. PostgreSQL-backed player state showed the first 1,000 damage consumed shields then fighters; a second attack with no shields and 999 fighters lost one hull point after all fighters were consumed. |
 | `V3-PORT-COMBAT-01` | clause 5 | Remaining commodity stock is destroyed on port destruction | VERIFIED | Same disposable PostgreSQL destruction acceptance asserted the inactive historical port row remained and its remaining stock became zero with no salvage (`V3_STARPORT_ACCEPTANCE_20261114.md`). Injected destruction-stock failure rolled the port, stock, turn and receipt back (`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`). |
 | `V3-PORT-COMBAT-01` | clause 6 | FedSpace Captain Z enforcement applies | VERIFIED | `suite_fedspace_aggression_captainz.json` passed 49/49 on disposable PostgreSQL; the live ordinary-player port-attack refusal and escape-pod recovery are recorded in `V3_STARPORT_ACCEPTANCE_20261114.md`. |
 | `CORP-XFER-01` | clause 1 | Restore same-sector corporation-associate transfer for on-hand credits and active-ship fighters, mines, and current shield charge | VERIFIED | `tests.v2/suite_corp_member_asset_transfers.json`. |
@@ -426,6 +426,15 @@ unverified.
 | `CFG-04` | clause 1 | Existing eligibility and coverage parameters retained | VERIFIED | `suite_economy_insurance.json::case-0001`–`case-0006`, `case-0014`–`case-0015`, 22/22; ordinary authenticated purchase, cargo exclusion and eligibility path exercised. |
 | `CFG-04` | clause 2 | hull-only payout to bank | VERIFIED | `suite_economy_insurance.json::case-0007`–`case-0018`, 22/22; exact hull payout credited to bank once, retry does not duplicate, injected ledger failure rolls policy/bank/fund/ledger state back. |
 
+
+## Autonomous parity batch 17 — StarPort acceptance closure
+
+`PARITY-PORT-ATTACK-01`, `V3-PORT-BUILD-01`, and `V3-PORT-COMBAT-01` are now
+VERIFIED. Batch evidence and the actual Godot construction journey are in
+`docs/testing/V3_STARPORT_GODOT_ACCEPTANCE_20261119.md`. The deterministic
+construction tick's successful handler return was corrected in
+`src/server_cron.c`; a nonzero processed-row count had been interpreted by the
+cron dispatcher as a handler failure even after commit.
 
 ## Clause-level findings beyond the ten unit clauses
 
