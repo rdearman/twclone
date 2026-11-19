@@ -356,3 +356,14 @@ photon firing rollback remain unverified. Full server regressions passed
 `tests.v2` passed 277 with 7 skipped and 227 subtests, and Godot 4.5.1 passed
 106 with 7 live-mode scripts skipped. See the clause matrix and autonomous
 progress log for suite identifiers and exact limits.
+
+`NPC-ORI-01` clause 1 is VERIFIED by the expanded live PostgreSQL
+`orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json` pair
+(80/80): concurrent warp/transwarp settlement, allied exclusion, safe-zone
+overlap, destroyed-NPC exclusion, retry idempotency, and serving-server
+restart/reconnect were checked with database readback. The run exposed a
+concurrent sector-entry deadlock; source now serializes destination entry
+before taking mutable ship/defense locks, and avoids locking read-only ship
+type rows. The Orion parent remains PARTIAL until the separate non-blockader
+personality-preservation clause has runtime evidence. See the clause matrix
+and batch 21 progress record.

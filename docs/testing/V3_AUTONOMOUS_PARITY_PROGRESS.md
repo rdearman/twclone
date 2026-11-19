@@ -782,3 +782,55 @@ No server implementation defect was exposed and no gameplay code changed in
 this batch. Clause evidence was updated without changing parent counts. The
 Orion and POP-05 test/evidence edits are pending their own commit. Unrelated
 worktree modifications remain untouched.
+
+### Batch 21 — Concurrent sector-entry deadlock and Orion protections
+
+Two real concurrent ordinary-player arrivals (warp and transwarp) against a
+defended destination exposed PostgreSQL deadlocks. The entry paths acquired
+the destination, transwarp homing fighter, deployed assets, and ship rows in
+different orders; combat row loading also took `FOR UPDATE` locks on shared,
+read-only ship-type catalogue rows. Movement now acquires a transaction-scoped
+destination advisory lock before any mutable ship/asset locks. Entry-hazard
+settlement uses the same lock inside its transaction, and combat locks only
+mutable ship/ownership rows. MySQL lock-shape regression fixtures were kept in
+sync; MySQL runtime support is not claimed.
+
+The expanded live Orion arrival prepare/verify pair passed **80/80** against a
+fresh disposable PostgreSQL server, including simultaneous warp/transwarp,
+one hostile damage settlement, allied exclusion, replay idempotency, a
+FedSpace/Orion overlap traversed through ordinary warp, and an NPC marked
+destroyed before settlement. The ordinary player retained hull and no Orion
+attack receipt was recorded for the safe-zone or removed-NPC cases. Serving
+server restart/reconnect was exercised. Focused combat/movement/hazard
+regressions passed **157/157** across five suites. Focused Python lock/schema
+tests passed **7/7**.
+
+The full 175-suite disposable PostgreSQL gate was executed after this server
+change. Its initial generic-fixture phase ran 174 suites and reported 2,905
+passed plus four failures in the known context-only BigBang roster and NPC
+restart-verifier suites; TLS was skipped in that non-TLS listener context.
+The exact cases were rerun in their required contexts without changing
+assertions: BigBang roster **2/2** on the untouched BigBang world;
+NPC-population preparation **32/32** followed by a real game-server restart
+and restart verification **4/4**; TLS **4/4** on the dedicated TLS listener.
+Aggregated by distinct suite/case after replacing those context-invalid
+results, all **175/175 suites** are accounted for with **2,913 passed, 0
+failed, 0 skipped**. The initial report is
+`/tmp/twclone-parity-batch21-full.json`; context reports are under
+`/tmp/twclone-parity-batch21-{bigbang,npc-restart,tls}*.json`.
+
+Client regressions passed: Python **834/834**; `pytest -q tests.v2` **277
+passed, 7 skipped, 227 subtests passed**; Godot 4.5.1 **106 passed, 0 failed,
+7 skipped** across 113 scripts (the seven scripts require a live gameplay
+server). The two requested historical Godot tests passed again in that run:
+`persisted_planet_restore_test.gd` 8/8 and `planet_command_response_test.gd`
+117 checks. `make -j4`, focused JSON parsing, and `git diff --check` passed.
+
+`NPC-ORI-01` clause 1 is now VERIFIED, bringing the 227 base clause rows to
+**174 VERIFIED / 53 IMPLEMENTED_UNTESTED**. Clause 2 (full retention of other
+Orion personalities) remains unverified, so the parent is not promoted.
+Parent counts are unchanged at **58 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 6
+PARTIAL, 1 BLOCKED**. No policy decision was inferred. The implementation
+and acceptance change is committed as `4e01e836`; this evidence update is
+pending a separate documentation commit. Unrelated worktree modifications
+remain untouched.
