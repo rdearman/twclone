@@ -75,6 +75,12 @@ func _run() -> void:
 			remains = true
 	_check(not remains, "destroyed StarPort remained in the fresh sector view")
 	_check(app._pending_port_attack.is_empty(), "server reply did not clear the completed idempotent StarPort request")
+	var strike_event_presented := false
+	for activity in app._activity_history:
+		if str(activity).begins_with("Combat · StarPort attack"):
+			strike_event_presented = true
+			break
+	_check(strike_event_presented, "server player.port_strike.v1 event was not presented in the Godot activity feed")
 	if failures.is_empty():
 		print("LIVE_PORT_ATTACK_PASS client=Godot player_id=%s port_id=%d" % [str(app.auth_session.player_id), target_port_id])
 	_finish()

@@ -39,6 +39,7 @@ _CATEGORY_PREFIXES = (
     ("move.", "nav"),
     ("nav.", "nav"),
     ("sector.", "nav"),
+    ("player.port_strike.", "combat"),
     ("combat.", "combat"),
     ("attack.", "combat"),
     ("trade.", "trade"),

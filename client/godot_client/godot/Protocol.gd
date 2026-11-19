@@ -242,6 +242,7 @@ static func classify_event_type(event_type: String) -> String:
 		"move.": "navigation",
 		"nav.": "navigation",
 		"sector.": "navigation",
+		"player.port_strike.": "combat",
 		"combat.": "combat",
 		"attack.": "combat",
 		"trade.": "trade",

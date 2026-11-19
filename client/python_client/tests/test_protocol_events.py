@@ -26,6 +26,7 @@ from protocol import Conn, EventQueue, classify_event_type
 
 def test_tavern_events_are_classified_for_social_presentation():
     assert classify_event_type("tavern.round.bought") == "chat"
+    assert classify_event_type("player.port_strike.v1") == "combat"
 
 
 def _make_conn_pair(debug=False):

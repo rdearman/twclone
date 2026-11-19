@@ -36,6 +36,8 @@ static func notification_for(event: Dictionary) -> String:
 		return ""
 	if category == "combat" and event_type == "combat.hit":
 		return _combat_hit(data)
+	if category == "combat" and event_type == "player.port_strike.v1":
+		return _port_strike(data)
 	if category == "combat" and event_type == "player.attack_planet.v1":
 		return _planet_attack(data)
 	if category == "combat" and event_type == "player.capture_planet.v1":
@@ -76,6 +78,15 @@ static func _planet_capture(data: Dictionary) -> String:
 	var previous_owner: Variant = data.get("previous_owner", null)
 	if typeof(previous_owner) == TYPE_INT and int(previous_owner) > 0:
 		summary += " · previous owner %d" % int(previous_owner)
+	return "Combat · " + summary
+
+static func _port_strike(data: Dictionary) -> String:
+	var summary := "StarPort attack"
+	for field in [["damage", "damage"], ["retaliation", "retaliation"], ["durability_remaining", "durability remaining"]]:
+		if _authoritative_int(data.get(field[0], null)) and int(data[field[0]]) >= 0:
+			summary += " · %s: %d" % [field[1], int(data[field[0]])]
+	if typeof(data.get("destroyed", null)) == TYPE_BOOL and bool(data.get("destroyed")):
+		summary += " · port destroyed"
 	return "Combat · " + summary
 
 static func _combat_hit(data: Dictionary) -> String:
