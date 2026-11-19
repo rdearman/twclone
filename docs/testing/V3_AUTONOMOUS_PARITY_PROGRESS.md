@@ -1007,6 +1007,13 @@ Starting classification: **61 VERIFIED, 1 IMPLEMENTED_UNVERIFIED, 4 PARTIAL,
 IMPLEMENTED_UNVERIFIED, 3 PARTIAL, 1 BLOCKED**. `PARITY-TOLL-01` is promoted
 after its final ordinary-warp acceptance clause was exercised.
 
+The final process inventory later found three stale Godot executables running
+only the two named prior scripts: one `planet_command_response_test.gd` process
+and two `persisted_planet_restore_test.gd` processes, aged three days or eleven
+hours. Those exact `gdot` PIDs were stopped; unrelated processes were untouched.
+The scripts themselves had already passed in this run (117 checks and 8/8), so
+their old backtraces are not unresolved test failures.
+
 The updated `suite_combat_toll_fighters.json` passed **21/21** cases against a
 fresh disposable PostgreSQL database. A normal warp displayed a 30-credit offer
 for 30 toll fighters, acceptance transferred exactly 30 credits and allowed
@@ -1033,7 +1040,33 @@ The temporary Python harness output check was also corrected to capture the
 interactive prompt separately from printed client text. Final normal-warp and
 Python acceptance runs passed; no gameplay server defect was found.
 
-Evidence is in the clause matrix and decision register. The four remaining
-PARTIAL parents and next independent gaps are to be reconciled from the live
-matrix; `POP-07` remains documentary `IMPLEMENTED_UNVERIFIED`, and POP-05's
-unset daily numeric policy remains BLOCKED.
+Evidence is in the clause matrix and decision register. The remaining five
+non-verified parents are now all decision-bound rather than safe independent
+implementation tasks:
+
+- `POP-07` — IMPLEMENTED_UNVERIFIED: its corporation-capture statement is a
+  documentary scope constraint; the evidence policy requires runtime evidence
+  and no runtime prohibition was approved.
+- `POP-05` — BLOCKED: daily recurrence interval, persistent stoppage duration,
+  and population-loss amount are still unspecified. The separately approved
+  per-production-cycle unrest rule is already implemented and tested.
+- `FED-03` — PARTIAL: the decision register excludes ISS pursuit from this
+  bounded scope, while Protocol V3 and `iss_patrol_step` implement pursuit;
+  approval is needed on which contract controls.
+- `EXC-09` — PARTIAL: the 30-day scheduler simulation verifies invariants, but
+  there is no quantitative sustainability threshold for a pass/fail balance
+  result; no economic rate was tuned.
+- `PARITY-PHOTON-01` — PARTIAL: `combat.fire_photon` targets an adjacent sector
+  without a ship target, so an approved wire/effect rule is needed to test the
+  manual's ship-shield protection statement.
+
+No independent code change can close these five without changing an approved
+scope/policy or inventing a runtime mechanic. Focused acceptance results for
+this run: normal toll suite **21/21**, Python toll fixture **20/20**, Python
+toll menu **5/5**, Python planet-capture suite **27/27** and Python menu **5/5**;
+Godot planet-capture UI **10 checks**, restart suite **13/13**, and targeted
+planet regressions **8/8**, **117 checks**, and **244 menu checks**. Full
+Python passed **834/834**; `tests.v2` passed **277**, skipped **7**, with **227
+subtests**; Godot 4.5.1 passed **106**, failed **0**, skipped **8** (114
+scripts accounted for). The broad server suite was not rerun because no server
+implementation changed in these acceptance batches.
