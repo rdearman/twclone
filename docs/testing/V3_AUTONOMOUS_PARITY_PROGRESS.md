@@ -521,3 +521,25 @@ IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED**. Base clause totals moved
 from **140 VERIFIED / 87 IMPLEMENTED_UNTESTED** to **153 VERIFIED / 74
 IMPLEMENTED_UNTESTED**. Exact evidence is recorded against the thirteen
 insurance clauses in the matrix.
+
+## Batch 16 — Federation ISS boundaries
+
+Extended `suite_fedspace_aggression_captainz.json` with ordinary-player and
+authoritative PostgreSQL checks for ISS jurisdiction. Against a fresh
+disposable PostgreSQL/server on unique local game/S2S ports, the suite passed
+**49/49**; `suite_port_operations.json` passed **9/9** in the same run. The
+full focused run completed **58/58**, with zero failed suites. Assertions
+prove Captain Z handles a FedSpace attack without creating an ISS incident,
+an unprotected outside-FedSpace target creates none, and a target registered
+as an enabled protected Federation ship creates one incident naming the exact
+target and origin. The first attempt failed before auth because the default
+S2S listener port could not bind; rerunning on unique ports resolved the
+environment collision. A separate attempt with an invalid full-path suite
+argument did not execute tests.
+
+`tests.v2/test_starport_sector_and_pta_contract.py` passed **5/5**. No
+gameplay defect was found. `FED-03` clauses 1 and 2 now have live acceptance
+evidence; clause 3 remains unverified because the approved decision register
+excludes ISS pursuit from this bounded work while Protocol V3 and the running
+implementation explicitly define pursuit. No rule was changed or inferred.
+Parent classifications are unchanged.

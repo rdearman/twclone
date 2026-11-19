@@ -94,6 +94,16 @@
       ]
     },
     {
+      "name": "Test 1e: Captain Z enforcement does not create an ISS incident",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM npc_security_incidents WHERE offender_player_id = @{attacker_captainz_1_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
       "name": "Setup: Attacker2 User (for non-FedSpace test)",
       "setup": "macro_auth_user",
       "username": "attacker_captainz_2",
@@ -175,6 +185,40 @@
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test 2d: Unprotected target does not create an ISS incident",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM npc_security_incidents WHERE offender_player_id = @{attacker_captainz_2_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Rig: Register target ship as explicitly protected Federation asset",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO federation_protected_assets (asset_kind,asset_id,reason,enabled) VALUES ('ship',@{target_ship_id_2},'V3 ISS scope acceptance fixture',TRUE) ON CONFLICT (asset_kind,asset_id) DO UPDATE SET enabled=TRUE,reason=EXCLUDED.reason;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 2e: Attacking an explicitly protected ship creates an ISS incident",
+      "command": "combat.attack",
+      "data": { "target_ship_id": "@target_ship_id_2" },
+      "user": "attacker_captainz_2",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 2f: ISS incident records the protected asset and jurisdiction",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM npc_security_incidents WHERE offender_player_id=@{attacker_captainz_2_player_id} AND protected_asset_kind='ship' AND protected_asset_id=@{target_ship_id_2} AND origin_sector_id=@{non_fed_sector} AND status='open';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
       ]
     },
     {
