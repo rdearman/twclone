@@ -433,3 +433,26 @@ Classification moved from **48 VERIFIED / 11 IMPLEMENTED_UNVERIFIED / 7
 PARTIAL / 1 BLOCKED** to **49 VERIFIED / 10 IMPLEMENTED_UNVERIFIED / 6
 PARTIAL / 1 BLOCKED**. Base clause totals are **131 VERIFIED / 96
 IMPLEMENTED_UNTESTED**.
+
+## Batch 13 — synchronous transwarp interruption contract
+
+Verified `MOVE-03` and `MOVE-04`. The contract specifies synchronous
+transwarp completion and no interruption unless a canonical trigger is
+approved; the current V3 implementation has no arbitrary random interruption
+path. Extended the disposable PostgreSQL transwarp suite to require the
+`transwarp_complete` response and assert that the successful movement creates
+no interruption event. The suite passed **24/24**, including prior fuel,
+destination, missing-homing-reference and persisted-arrival checks. The
+movement hazard rollback acceptance remains the executable transaction
+atomicity evidence. `tests.v2/test_transwarp_server_contract.py` passed **6/6**.
+No gameplay defect was found. Classification moved from **49 VERIFIED / 10
+IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED** to **51 VERIFIED / 8
+IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED**; clause totals moved from
+**131 VERIFIED / 96 IMPLEMENTED_UNTESTED** to **136 VERIFIED / 91
+IMPLEMENTED_UNTESTED**. The policy-dependent POP-05 blocker is unchanged.
+
+The next small acceptance candidates are `INS-01`, `INS-02` and `INS-03`
+insurance settlement requirements, followed by `BANK-05`. Existing insurance
+evidence uses a fixture-inserted claim and does not prove ordinary-client
+purchase plus qualifying destruction, so it cannot promote the insurance
+parents by itself.

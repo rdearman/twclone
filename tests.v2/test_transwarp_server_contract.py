@@ -91,6 +91,21 @@ class TranswarpServerContractTests(unittest.TestCase):
         self.assertIn("transwarp_complete", self.handler)
         self.assertNotIn("interrupted", self.handler.lower())
 
+    def test_transwarp_acceptance_requires_complete_response_without_interrupt_event(self):
+        complete = next(
+            test for test in self.suite["tests"]
+            if test.get("name") == "Positive: One-hop transwarp consumes exactly three Fuel Ore"
+        )
+        self.assertIn(
+            {"path": "data.status", "op": "==", "value": "transwarp_complete"},
+            complete["asserts"],
+        )
+        event_check = next(
+            test for test in self.suite["tests"]
+            if test.get("name") == "Successful transwarp creates no interruption event"
+        )
+        self.assertIn("transwarp%interrupt", event_check["data"]["sql"])
+
     def test_fuel_refusal_and_success_are_covered_by_handler_harness(self):
         harness = (ROOT / "tests.v2/test_server_transwarp_validation.c").read_text(
             encoding="utf-8"

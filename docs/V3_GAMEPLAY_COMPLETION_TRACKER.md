@@ -4,8 +4,15 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 49 VERIFIED, 10
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 12
+**Parity refresh — 19 November 2026:** 51 VERIFIED, 8
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 13
+verified `MOVE-03` and `MOVE-04`: a live disposable-PostgreSQL transwarp
+journey returned `transwarp_complete`, persisted destination and exact fuel
+debit, and created no interruption event. The response and interruption
+assertions passed in `suite_movement_move_transwarp.json` (24/24); transaction
+atomicity is backed by the prior movement-hazard injected rollback acceptance.
+`test_transwarp_server_contract.py` passed 6/6. Exact clause evidence is in
+the matrix. Autonomous batch 12
 verified `POP-02`. Live disposable PostgreSQL suites passed 47/47 capture
 cases and 14/14 neutral slave-trade cases. They confirmed evil enslavement,
 good liberation, neutral inheritance, neutral enslavement refusal without

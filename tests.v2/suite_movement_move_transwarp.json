@@ -177,7 +177,8 @@
       "command": "move.transwarp",
       "data": { "to_sector_id": 10 },
       "user": "mover_transwarp",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.status", "op": "==", "value": "transwarp_complete" }]
     },
     {
       "name": "Successful transwarp persists fuel debit and destination",
@@ -191,6 +192,16 @@
         { "path": "data.rows.0.0", "op": "==", "value": 10 },
         { "path": "data.rows.0.1", "op": "==", "value": 0 }
       ]
+    },
+    {
+      "name": "Successful transwarp creates no interruption event",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM engine_events WHERE actor_player_id=@{mover_transwarp_player_id} AND type ILIKE '%transwarp%interrupt%'"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 0 }]
     },
     {
       "name": "Negative: Transwarp Missing Auth",
