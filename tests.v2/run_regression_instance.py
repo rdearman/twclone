@@ -428,6 +428,8 @@ def main(argv=None):
             "--report", str(report_path),
             "--capture-responses", str(capture_path),
         ]
+        if args.second_server_port is not None:
+            runner += ["--second-server-port", str(args.second_server_port)]
         selected_suite_paths = []
         for suite in args.suite or []:
             suite_path = Path(suite)

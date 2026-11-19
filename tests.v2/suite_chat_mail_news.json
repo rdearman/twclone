@@ -141,6 +141,38 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Setup: Insert a fresh notice for concurrent acknowledgements",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO system_notice (created_at, title, body, severity) VALUES (now(), 'Concurrent Ack Alert', 'Concurrent body', 'info');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Get concurrent notice ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT system_notice_id FROM system_notice WHERE title = 'Concurrent Ack Alert' ORDER BY system_notice_id DESC LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "concurrent_notice_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Acknowledge one durable notice concurrently from two sessions",
+      "parallel_requests": [
+        { "command": "notice.ack", "user": "comm_user_a", "data": { "notice_id": "@{concurrent_notice_id}" } },
+        { "command": "notice.ack", "user": "comm_user_a", "data": { "notice_id": "@{concurrent_notice_id}" } }
+      ],
+      "expect_each": { "status": "ok" },
+      "expect": { "status": "ok", "type": "test.concurrent_requests" }
+    },
+    {
+      "name": "Concurrent acknowledgements leave one seen row and the connection remains usable",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM notice_seen WHERE notice_id=@{concurrent_notice_id} AND player_id=(SELECT player_id FROM players WHERE name='comm_user_a');" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
       "name": "Setup: Seed paged notices",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "INSERT INTO system_notice (created_at, title, body, severity) VALUES (now(), 'Page A', 'A', 'info'), (now(), 'Page B', 'B', 'info'), (now(), 'Page C', 'C', 'info');" },

@@ -29,6 +29,27 @@
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
     },
     {
+      "name": "Fixture: Ensure Ferengi faction for the NPC tick",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO corporations(name,owner_id,tag) SELECT 'Ferengi Alliance',player_id,'FENG' FROM players WHERE name='System' AND NOT EXISTS(SELECT 1 FROM corporations WHERE tag='FENG');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: Ensure Ferengi homeworld for the NPC tick",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO planets(planet_id,num,sector_id,name,owner_id,owner_type,class,type,created_by) SELECT 2,2,2,'Ferengi Homeworld',corporation_id,'corp','M',(SELECT planettypes_id FROM planettypes WHERE code='M'),owner_id FROM corporations WHERE tag='FENG' ON CONFLICT(planet_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,owner_type='corp',sector_id=2;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Enable deterministic scheduler for NPC persistence acceptance",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Fixture: Create an ordinary persisted Orion NPC identity",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "INSERT INTO players (player_id,name,passwd,sector_id,commission_id,is_npc) SELECT 987654,'V3 Orion persistence QA',(SELECT passwd FROM players WHERE name='admin' LIMIT 1),(SELECT MIN(cs.sector_id) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id=cs.cluster_id WHERE c.role='ORION'),1,TRUE ON CONFLICT (player_id) DO UPDATE SET sector_id=EXCLUDED.sector_id,is_npc=TRUE;" },
@@ -36,16 +57,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Fixture: Attach Orion NPC to an Orion corporation",
+      "name": "Fixture: Ensure an Orion corporation and attach the NPC captain",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO corporations (corporation_id,name,owner_id,tag,ship_personality) VALUES (987654,'V3 Orion persistence QA',987654,'ORION','blockader') ON CONFLICT (corporation_id) DO UPDATE SET owner_id=987654,tag='ORION',ship_personality='blockader';" },
+      "data": { "sql": "WITH ensured AS (INSERT INTO corporations(name,owner_id,tag,ship_personality) SELECT 'V3 Orion persistence QA',987654,'ORION','blockader' WHERE NOT EXISTS (SELECT 1 FROM corporations WHERE upper(tag)='ORION') RETURNING corporation_id,owner_id), faction AS (SELECT corporation_id,owner_id FROM ensured UNION ALL SELECT corporation_id,owner_id FROM corporations WHERE upper(tag)='ORION' AND NOT EXISTS(SELECT 1 FROM ensured)), member AS (INSERT INTO corp_members(corporation_id,player_id,role) SELECT corporation_id,987654,CASE WHEN owner_id=987654 THEN 'Leader' ELSE 'Officer' END FROM faction ON CONFLICT (corporation_id,player_id) DO UPDATE SET role=EXCLUDED.role RETURNING player_id) SELECT COUNT(*) FROM member;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Fixture: Confirm Orion owner membership",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(*) FROM corp_members WHERE corporation_id=987654 AND player_id=987654 AND role='Leader';" },
+      "data": { "sql": "SELECT COUNT(*) FROM corp_members cm JOIN corporations c USING(corporation_id) WHERE cm.player_id=987654 AND cm.role IN ('Officer','Leader') AND upper(c.tag)='ORION';" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
@@ -79,10 +100,20 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Phase 3 wait: Allow the real NPC engine tick to run",
-      "command": "delay",
-      "data": { "seconds": 65 },
+      "name": "Phase 3: Choose deterministic NPC scheduler time",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint+30;" },
+      "user": "admin",
+      "save": { "npc_phase3_now": "data.rows.0.0" },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 3: Execute the real NPC engine tick",
+      "command": "sys.cron.advance_to",
+      "data": { "now_s": "@{npc_phase3_now}", "confirm": true },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.tasks_run", "op": ">", "value": 0 }]
     },
     {
       "name": "Phase 3: Ferengi traders remain persistent",
@@ -100,10 +131,20 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Phase 4 wait: Allow the real NPC engine tick to run",
-      "command": "delay",
-      "data": { "seconds": 65 },
+      "name": "Phase 4: Choose deterministic NPC scheduler time",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint+30;" },
+      "user": "admin",
+      "save": { "npc_phase4_now": "data.rows.0.0" },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 4: Execute the real NPC engine tick again",
+      "command": "sys.cron.advance_to",
+      "data": { "now_s": "@{npc_phase4_now}", "confirm": true },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.tasks_run", "op": ">", "value": 0 }]
     },
     {
       "name": "Phase 4: Orion ships remain persistent",
@@ -136,6 +177,13 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": "daily@06:00Z" }]
+    },
+    {
+      "name": "Disable deterministic scheduler test hook",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE config SET value='0' WHERE key='test.deterministic_scheduler_enabled';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     }
   ]
 }

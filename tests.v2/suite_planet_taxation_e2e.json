@@ -6,6 +6,13 @@
       "setup": "macro_bootstrap_admin"
     },
     {
+      "name": "Enable deterministic scheduler for isolated tax acceptance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Save admin balance before assessment",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -58,12 +65,22 @@
       "name": "Run the daily planet-tax cron",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'daily_planet_tax';" }
     },
     {
-      "name": "Wait for tax assessment",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Choose deterministic tax assessment time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint+30;" },
+      "save": { "planet_tax_now_1": "data.rows.0.0" }
+    },
+    {
+      "name": "Run the real daily tax handler",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{planet_tax_now_1}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify assessment and player receipt",
@@ -88,12 +105,22 @@
       "name": "Retry the daily tax task",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'daily_planet_tax';" }
     },
     {
-      "name": "Wait for idempotent tax retry",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Choose deterministic tax retry time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint+30;" },
+      "save": { "planet_tax_now_2": "data.rows.0.0" }
+    },
+    {
+      "name": "Retry the real daily tax handler",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{planet_tax_now_2}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify a repeated task does not credit twice",
@@ -156,12 +183,22 @@
       "name": "Run daily tax cron for corporate colony",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'daily_planet_tax';" }
     },
     {
-      "name": "Wait for corporate tax receipt",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Choose deterministic corporate tax time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint+30;" },
+      "save": { "planet_tax_now_3": "data.rows.0.0" }
+    },
+    {
+      "name": "Run the real daily tax handler for the corporation",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{planet_tax_now_3}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify corporation receives the daily colony tax",
@@ -180,6 +217,13 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "UPDATE planet_tax_global_config SET rate_bps = 0, enabled = FALSE WHERE config_id = 1;" }
+    },
+    {
+      "name": "Disable deterministic scheduler test hook",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE config SET value='0' WHERE key='test.deterministic_scheduler_enabled';" },
+      "expect": { "status": "ok" }
     }
   ]
 }

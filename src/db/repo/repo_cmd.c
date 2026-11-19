@@ -3814,24 +3814,28 @@ db_notice_mark_seen (db_t *db, int notice_id, int player_id)
     }
   db_error_t err;
   
-  const char *sql_template =
-    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s);";
+  /* Multiple game-server loops may deliver the same durable notice at once.
+     Catching a unique violation in PostgreSQL is not sufficient inside the
+     caller's transaction: the transaction stays aborted. Use an atomic
+     conflict-safe insert instead. */
+  const char *ignore_clause = sql_insert_ignore_clause(db);
+  if (!ignore_clause)
+    return ERR_DB;
+
+  char sql_template[512];
+  snprintf (sql_template, sizeof sql_template,
+            "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s) %s;",
+            sql_now_expr(db), ignore_clause);
 
   char sql_dialect[512];
-  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
-
-  char sql[512];
-  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
+  sql_build (db, sql_template, sql_dialect, sizeof sql_dialect);
 
   if (!db_exec (db,
-                sql,
+                sql_dialect,
                 (db_bind_t[]){db_bind_i64 (notice_id), db_bind_i64 (player_id)},
                 2,
                 &err))
     {
-      if (err.code == ERR_DB_CONSTRAINT) {
-        return 0; // DO NOTHING
-      }
       return err.code;
     }
   return 0;

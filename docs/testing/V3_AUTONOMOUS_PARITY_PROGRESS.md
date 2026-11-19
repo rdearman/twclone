@@ -2,6 +2,55 @@
 
 Updated: 19 November 2026
 
+## Batch 18 — regression isolation and notice concurrency
+
+Starting parent classification: **58 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 6
+PARTIAL, 1 BLOCKED**. The five named first-batch requirements (`CFG-01`,
+`CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`) were already
+verified in the committed matrix; no evidence was duplicated and no status
+changed.
+
+The two prior Godot background tests were not running. Their exact scripts
+passed again (`persisted_planet_restore_test.gd`: 8/8;
+`planet_command_response_test.gd`: 117 checks). No process was terminated.
+
+The full disposable server run discovered 174 suites, executed 173, and
+reported **2,857 passed, 8 failed, 4 skipped** (2,865 executed cases). Four
+market-suite failures were test-environment defects: the test hard-coded
+parallel ports 12530/12531 instead of using the runner ports, and its seller
+fixture reused a production port/order book. The JSON runner now accepts a
+second server port and a per-request `server: "second"` selector; the market
+acceptance creates an isolated port. The focused fresh-PostgreSQL run passed
+`suite_planet_market_buy_order_lifecycle.json` **54/54**, including both
+actual V3 server processes in the concurrent settlement case.
+
+The other four failed cases are known context/order problems in the generic
+all-suites invocation: the BigBang roster case runs after the generic rig has
+replaced BigBang data, and the restart-verification suite runs before its
+population-preparation suite and without a serving-process restart. Each
+scenario previously passed in its required isolated context; they must be
+counted as separate ordered acceptance phases in the next comprehensive gate.
+The full suite was not rerun after the market/runner correction in this
+batch, so the aggregate gate is not claimed green.
+
+The full-run server log also exposed a real concurrent-notice defect:
+`db_notice_mark_seen` caught a duplicate-key error from a competing system
+notice delivery but PostgreSQL had already aborted the caller's transaction.
+It now uses the database driver's conflict-safe `INSERT ... DO NOTHING`
+fragment. The live `suite_chat_mail_news.json` passes **30/30**, including
+simultaneous acknowledgements from two authenticated sessions and the
+single-row persistence assertion. No duplicate-key or aborted-transaction
+error appeared in that focused server log. `make -j4` passed; `pytest -q
+tests.v2` passed **277**, skipped **7**, and passed **227 subtests** when run
+with local socket access. Python/Godot gameplay classifications did not
+change.
+
+No parent requirement is promoted by this regression work. Next: run the
+context-sensitive NPC scenarios in their required order, rerun the broad
+server gate after the fixture/runner correction, then close the remaining
+Orion safe-zone/protection/race acceptance without inventing a player
+protection rule absent from the approved contract.
+
 ## Starting checkpoint
 
 - Branch: `v3-development`
@@ -47,6 +96,14 @@ Executable evidence:
 - `persisted_planet_restore_test.gd`: 8 passed; `planet_command_response_test.gd`:
   117 checks passed.
 
+## Godot background-process check
+
+The two named Godot scripts were not running at the start of this continuation.
+No processes were terminated. The prior parser backtrace was already resolved:
+the progress record above shows `persisted_planet_restore_test.gd` 8/8 and
+`planet_command_response_test.gd` 117 checks passed. They are not outstanding
+failures; both remain included in the Godot regression suite.
+
 The `--restart-between-suites` attempt is not counted as passing: after the
 harness restarted the serving server, AddressSanitizer reported a startup
 failure in `load_bootstrap_config` at `getenv`. Photon expiry restart evidence
@@ -62,6 +119,41 @@ IMPLEMENTED_UNTESTED across 227 base rows.
 No gameplay server defect was found in these five requirements. The Godot
 parser failure was corrected. The JSON assertion runner gained a
 `not_contains` operator for the fixed-setting negative assertion.
+
+## Batch 17 — StarPort acceptance closure
+
+Starting classification: **55 VERIFIED, 5 IMPLEMENTED_UNVERIFIED, 6 PARTIAL,
+1 BLOCKED**. Ending classification: **58 VERIFIED, 2 IMPLEMENTED_UNVERIFIED,
+6 PARTIAL, 1 BLOCKED**. Base clause rows moved from 164/63 to **169 VERIFIED / 58
+IMPLEMENTED_UNTESTED**.
+
+Promoted `PARITY-PORT-ATTACK-01`, `V3-PORT-BUILD-01`, and
+`V3-PORT-COMBAT-01`. Evidence:
+
+- `manual_acceptance/starport_godot_event_acceptance.json`: 3/3, plus the
+  authenticated Godot attack UI journey: 8 checks and authoritative PostgreSQL
+  receipt/event/inactive-port/stock assertions.
+- `suite_starport_class_directions.json`: 7/7 against disposable PostgreSQL;
+  all eight fixed port classes completed by the actual deterministic scheduler.
+- `suite_starport_combat_numeric.json`: 12/12 against disposable PostgreSQL;
+  defence strength, attack formula, turn charge, retaliation layers and
+  persisted durability were checked.
+- `manual_acceptance/starport_godot_build_acceptance.json`: 3/3, plus
+  `live_starport_build_test.gd`: 8 Godot UI/network checks. The test waited for
+  authoritative planet reads and verified class-8 construction and exact
+  credit/material deductions in PostgreSQL.
+- `command_menu_test.gd`: 244 checks; `planet_landing_response_test.gd`: 91
+  checks; `tests.v2/test_deterministic_scheduler_contract.py`: 3 passed;
+  `make -j4` passed.
+
+One genuine defect was fixed: the successful port-construction cron handler
+returned its processed-row count, which the scheduler treated as failure after
+commit. It now returns the documented success value. The initial Godot build
+failure was test timing: the client correctly disabled menu actions while
+planet detail requests were outstanding; the live test now waits for them.
+No gameplay assertion was relaxed.
+
+Detailed acceptance: `docs/testing/V3_STARPORT_GODOT_ACCEPTANCE_20261119.md`.
 
 ### Evidence policy item
 

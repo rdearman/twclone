@@ -71,10 +71,10 @@
       "save": { "market_planet_id": "data.planet_id" }
     },
     {
-      "name": "Choose a real port for the sell-side fixture",
+      "name": "Create an isolated port for the sell-side fixture",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT port_id FROM ports ORDER BY port_id LIMIT 1;" },
+      "data": { "sql": "WITH available AS (SELECT sector_id FROM sectors s WHERE NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id=s.sector_id AND p.is_active=TRUE) ORDER BY sector_id LIMIT 1) INSERT INTO ports(name,sector_id,type) SELECT 'QA planet market isolated seller',sector_id,1 FROM available RETURNING port_id;" },
       "save": { "market_seller_port_id": "data.rows.0.0" }
     },
     {
@@ -345,11 +345,18 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Remove unrelated late-created ORE orders from concurrent fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE commodity_orders SET status='cancelled',cancellation_reason='isolated concurrent settlement fixture' WHERE commodity_id=(SELECT commodities_id FROM commodities WHERE code='ORE') AND status='open' AND commodity_orders_id NOT IN (@{concurrent_buy_order_id},@{concurrent_sell_order_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Overlap two settlement handlers after expiring only the disposable scheduler lock",
       "parallel_requests": [
-        { "command": "sys.cron.advance_to", "user": "admin", "host": "127.0.0.1", "port": 12530, "timeout": 20, "data": { "now_s": "@{concurrent_settlement_at}", "confirm": true } },
-        { "command": "sys.raw_sql_exec", "user": "admin", "host": "127.0.0.1", "port": 12531, "timeout": 20, "delay_before_send_ms": 1500, "data": { "sql": "UPDATE locks SET until_ms=0 WHERE lock_name='daily_market_settlement';" } },
-        { "command": "sys.cron.advance_to", "user": "admin", "host": "127.0.0.1", "port": 12531, "timeout": 20, "delay_before_send_ms": 3000, "data": { "now_s": "@{concurrent_settlement_retry_at}", "confirm": true } }
+        { "command": "sys.cron.advance_to", "user": "admin", "timeout": 20, "data": { "now_s": "@{concurrent_settlement_at}", "confirm": true } },
+        { "command": "sys.raw_sql_exec", "user": "admin", "timeout": 20, "delay_before_send_ms": 1500, "data": { "sql": "UPDATE locks SET until_ms=0 WHERE lock_name='daily_market_settlement';" } },
+        { "command": "sys.cron.advance_to", "user": "admin", "server": "second", "timeout": 20, "delay_before_send_ms": 3000, "data": { "now_s": "@{concurrent_settlement_retry_at}", "confirm": true } }
       ],
       "expect_each": { "status": "ok" },
       "expect": { "status": "ok", "type": "test.concurrent_requests" },

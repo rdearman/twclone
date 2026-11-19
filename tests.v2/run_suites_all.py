@@ -201,6 +201,8 @@ def run_all():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.environ.get("TWCLONE_TEST_HOST", HOST))
     parser.add_argument("--port", type=int, default=int(os.environ.get("TWCLONE_TEST_PORT", PORT)))
+    parser.add_argument("--second-server-port", type=int,
+                        help="Optional second loopback game-server port for concurrent acceptance")
     parser.add_argument("--client-idle-timeout-ms", type=int, default=8000,
                         help="Reconnect cached clients before the server's idle request deadline")
     parser.add_argument("--suite", action="append", help="Run only this suite; repeatable")
@@ -273,13 +275,14 @@ def run_all():
             return 2
         report["database_rigged"] = True
 
-    runner = JsonSuiteRunner(
-        args.host,
-        args.port,
-        macros_path=os.path.join(base_dir, "macros.json"),
-        capture_responses=args.capture_responses,
-        client_idle_timeout_ms=args.client_idle_timeout_ms,
-    )
+    runner_options = {
+        "macros_path": os.path.join(base_dir, "macros.json"),
+        "capture_responses": args.capture_responses,
+        "client_idle_timeout_ms": args.client_idle_timeout_ms,
+    }
+    if args.second_server_port is not None:
+        runner_options["second_server_port"] = args.second_server_port
+    runner = JsonSuiteRunner(args.host, args.port, **runner_options)
 
     candidate_suites = discover_json_suites(base_dir)
     if args.suite:

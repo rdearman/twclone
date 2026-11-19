@@ -19,9 +19,11 @@ class JsonSuiteRunner:
     def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json",
                  use_tls: bool = False, tls_skip_verify: bool = False,
                  capture_responses: Optional[str] = None,
-                 client_idle_timeout_ms: int = 8000):
+                 client_idle_timeout_ms: int = 8000,
+                 second_server_port: Optional[int] = None):
         self.host = host
         self.port = port
+        self.second_server_port = second_server_port
         self.timeout = timeout
         self.client_idle_timeout_seconds = max(0.025, client_idle_timeout_ms / 1000.0)
         self.default_use_tls = use_tls
@@ -464,7 +466,12 @@ class JsonSuiteRunner:
                     session = None
                 client = TWClient(
                     request.get("host", self.host),
-                    int(request.get("port", self.port)),
+                    int(request.get(
+                        "port",
+                        self.second_server_port
+                        if request.get("server") == "second" and self.second_server_port
+                        else self.port,
+                    )),
                     timeout=int(request.get("timeout", self.timeout)),
                     use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify,
                 )
@@ -877,11 +884,18 @@ def main(argv=None):
         help="Game server port (default: TWCLONE_TEST_PORT or 1234)",
     )
     parser.add_argument("--timeout", type=int, default=25)
+    parser.add_argument("--second-server-port", type=int,
+                        help="Optional second loopback game-server port for concurrent acceptance")
     parser.add_argument("--capture-responses", help="Append redacted RPC responses as JSONL")
     args = parser.parse_args(argv)
 
-    runner = JsonSuiteRunner(args.host, args.port, timeout=args.timeout,
-                             capture_responses=args.capture_responses)
+    runner_options = {
+        "timeout": args.timeout,
+        "capture_responses": args.capture_responses,
+    }
+    if args.second_server_port is not None:
+        runner_options["second_server_port"] = args.second_server_port
+    runner = JsonSuiteRunner(args.host, args.port, **runner_options)
     return 0 if runner.run_suite(args.suite) else 1
 
 
