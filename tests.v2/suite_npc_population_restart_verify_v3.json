@@ -37,7 +37,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT CASE WHEN COUNT(*)=5 AND BOOL_AND(p.sector_id=s.sector_id) THEN 1 ELSE 0 END FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id JOIN players p ON p.player_id=so.player_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE;"
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), cfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='orion.population.basis_points'),50) AS bp,COALESCE((SELECT value::int FROM config WHERE key='orion.population.minimum'),5) AS minimum), target AS (SELECT GREATEST(cfg.minimum,CEIL(universe.sectors*cfg.bp/10000.0)::int) AS n FROM universe CROSS JOIN cfg), active AS (SELECT COUNT(*)::int AS n,COALESCE(BOOL_AND(p.sector_id=s.sector_id),FALSE) AS sectors_match FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id AND so.is_primary=TRUE JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id AND c.tag='ORION' WHERE COALESCE(s.destroyed,FALSE)=FALSE) SELECT CASE WHEN active.n=target.n AND active.sectors_match THEN 1 ELSE 0 END FROM active,target;"
       },
       "expect": { "status": "ok" },
       "asserts": [

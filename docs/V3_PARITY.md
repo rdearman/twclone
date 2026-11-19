@@ -35,6 +35,78 @@ These are regression results, not proof of complete parity. Full-world NPC popul
 - Parent requirements: 67 (66 VERIFIED, 0 IMPLEMENTED_UNVERIFIED, 1 PARTIAL, 0 BLOCKED, 0 MISSING).
 - Base acceptance clauses: 227. Clause evidence is tracked separately; further subclauses may clarify compound parent behavior but do not change the base-row count.
 
+## Parent classifications
+
+| Requirement | Parent status |
+|---|---|
+| `BANK-01` | VERIFIED |
+| `BANK-02` | VERIFIED |
+| `BANK-03` | VERIFIED |
+| `BANK-04` | VERIFIED |
+| `BANK-05` | VERIFIED |
+| `CFG-01` | VERIFIED |
+| `CFG-02` | VERIFIED |
+| `CFG-03` | VERIFIED |
+| `CFG-04` | VERIFIED |
+| `COMBAT-01` | VERIFIED |
+| `COMBAT-02` | VERIFIED |
+| `CORP-XFER-01` | VERIFIED |
+| `EXC-01` | VERIFIED |
+| `EXC-02` | VERIFIED |
+| `EXC-03` | VERIFIED |
+| `EXC-04` | VERIFIED |
+| `EXC-05` | VERIFIED |
+| `EXC-06` | VERIFIED |
+| `EXC-07` | VERIFIED |
+| `EXC-08` | VERIFIED |
+| `EXC-09` | VERIFIED |
+| `FED-01` | VERIFIED |
+| `FED-02` | VERIFIED |
+| `FED-03` | VERIFIED |
+| `HARV-01` | VERIFIED |
+| `HARV-02` | VERIFIED |
+| `HARV-03` | VERIFIED |
+| `INS-01` | VERIFIED |
+| `INS-02` | VERIFIED |
+| `INS-03` | VERIFIED |
+| `MOVE-01` | VERIFIED |
+| `MOVE-02` | VERIFIED |
+| `MOVE-03` | VERIFIED |
+| `MOVE-04` | VERIFIED |
+| `MOVE-05` | VERIFIED |
+| `NPC-FER-01` | VERIFIED |
+| `NPC-ORI-01` | VERIFIED |
+| `NPC-POP-01` | VERIFIED |
+| `NPC-POP-02` | VERIFIED |
+| `NPC-POP-03` | VERIFIED |
+| `PARITY-PHOTON-01` | PARTIAL |
+| `PARITY-PORT-ATTACK-01` | VERIFIED |
+| `PARITY-TOLL-01` | VERIFIED |
+| `PARITY-TW-HOMING-01` | VERIFIED |
+| `PLANET-01` | VERIFIED |
+| `PLAYER-01` | VERIFIED |
+| `POP-01` | VERIFIED |
+| `POP-02` | VERIFIED |
+| `POP-03` | VERIFIED |
+| `POP-04` | VERIFIED |
+| `POP-05` | VERIFIED |
+| `POP-06` | VERIFIED |
+| `POP-07` | VERIFIED |
+| `PTA-V3-01` | VERIFIED |
+| `SHIP-01` | VERIFIED |
+| `SHIP-02` | VERIFIED |
+| `SHIP-03` | VERIFIED |
+| `SHIP-04` | VERIFIED |
+| `SHIP-05` | VERIFIED |
+| `STARPORT-V3-01` | VERIFIED |
+| `SYS-07` | VERIFIED |
+| `TRADE-01` | VERIFIED |
+| `V3-PHOTON-DURATION-01` | VERIFIED |
+| `V3-PLANET-RATE-01` | VERIFIED |
+| `V3-PORT-BUILD-01` | VERIFIED |
+| `V3-PORT-COMBAT-01` | VERIFIED |
+| `V3-TOLL-RATE-01` | VERIFIED |
+
 | Requirement | Clause | Acceptance condition | Clause status | Evidence / next action |
 |---|---|---|---|---|
 | `POP-01` | clause 1 | A planet is `COLONIST`, `SLAVE`, or `UNPOPULATED` | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` ran against disposable PostgreSQL; assertions exercised all three classifications and passed. |
