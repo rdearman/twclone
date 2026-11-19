@@ -1,0 +1,87 @@
+{
+  "test_suite_name": "V3 Orion Non-blockader Personality Runtime Acceptance",
+  "description": "Run the authoritative Orion scheduler against disposable PostgreSQL and verify balanced, offensive, defensive, and looter movement outcomes without relying on random target selection for offensive or looter ships.",
+  "tests": [
+    {
+      "name": "Bootstrap disposable SysOp fixture session",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Ensure Orion corporation is available for ordinary NPC membership lookup",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations(name,owner_id,tag,ship_personality) VALUES ('Orion Personality QA',107,'ORION','balanced') ON CONFLICT (upper(tag)) WHERE tag IS NOT NULL DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Read Orion home sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT center_sector FROM clusters WHERE role='ORION' LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "orion_personality_home": "data.rows.0.0" }
+    },
+    {
+      "name": "Select an unprotected non-port origin with an outgoing warp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id>10 AND s.sector_id<>@{orion_personality_home} AND EXISTS (SELECT 1 FROM sector_warps w WHERE w.from_sector=s.sector_id) AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id=s.sector_id) AND NOT EXISTS (SELECT 1 FROM cluster_sectors cs JOIN clusters c ON c.clusters_id=cs.cluster_id WHERE cs.sector_id=s.sector_id AND c.law_severity>0) ORDER BY s.sector_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_personality_origin": "data.rows.0.0" }
+    },
+    {
+      "name": "Select a distinct port sector for looter targeting",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT sector_id FROM ports WHERE sector_id<>@{orion_personality_origin} ORDER BY sector_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_personality_port": "data.rows.0.0" }
+    },
+    {
+      "name": "Create four named NPC captains with distinct existing Orion personalities",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH fixture(personality) AS (VALUES ('balanced'),('offensive'),('defensive'),('looter')), created AS (INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) SELECT 'Orion runtime personality '||personality,'$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',@{orion_personality_origin},100000,2,TRUE,1 FROM fixture RETURNING player_id,name), members AS (INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,p.player_id,'Officer' FROM corporations c CROSS JOIN created p WHERE c.tag='ORION' ON CONFLICT(corporation_id,player_id) DO NOTHING RETURNING player_id), ships AS (INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,personality,destroyed) SELECT 'Orion runtime personality hull '||replace(p.name,'Orion runtime personality ',''),2,@{orion_personality_origin},10,100,0,100,replace(p.name,'Orion runtime personality ',''),FALSE FROM created p RETURNING ship_id,name) INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT s.ship_id,p.player_id,1,TRUE FROM ships s JOIN created p ON s.name='Orion runtime personality hull '||replace(p.name,'Orion runtime personality ','');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Give offensive and looter personalities deterministic active target intelligence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO npc_intelligence(npc_ship_id,target_player_id,last_known_sector_id,source,observed_at,expires_at) SELECT s.ship_id,107,CASE WHEN p.name LIKE '% offensive' THEN @{orion_personality_home} ELSE @{orion_personality_port} END,'personality_acceptance',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '1 hour' FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id AND so.is_primary=TRUE JOIN players p ON p.player_id=so.player_id WHERE s.name IN ('Orion runtime personality hull offensive','Orion runtime personality hull looter');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Run the actual registered NPC scheduler and Orion movement routine",
+      "command": "sys.cron.npc_step_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify balanced, offensive, defensive, and looter outcomes and action receipts",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT s.sector_id<>@{orion_personality_origin} AND s.sector_id>10 FROM ships s WHERE s.name='Orion runtime personality hull balanced')::int,(SELECT s.sector_id=@{orion_personality_home} FROM ships s WHERE s.name='Orion runtime personality hull offensive')::int,(SELECT EXISTS(SELECT 1 FROM sector_warps w JOIN ships s ON s.name='Orion runtime personality hull defensive' WHERE w.from_sector=@{orion_personality_origin} AND w.to_sector=s.sector_id) FROM ships s WHERE s.name='Orion runtime personality hull defensive')::int,(SELECT s.sector_id=@{orion_personality_port} FROM ships s WHERE s.name='Orion runtime personality hull looter')::int,(SELECT COUNT(*)=4 FROM npc_action_log l JOIN ships s ON s.ship_id=l.npc_ship_id WHERE l.faction='ORION' AND l.action_type='move' AND l.status='completed' AND l.idempotency_key LIKE 'orion:move:%' AND s.name LIKE 'Orion runtime personality hull %')::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

@@ -16,6 +16,12 @@
     { "name": "Recipient joins corporation", "command": "corp.join", "data": { "corp_id": "@corp_id" }, "user": "corp_asset_recipient", "expect": { "status": "ok" } },
     { "name": "Give recipient ship capacity for transferred mines", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Merchant Cruiser') WHERE ship_id=(SELECT ship_id FROM players WHERE name='corp_asset_recipient');" }, "expect": { "status": "ok" } },
     {
+      "name": "Pause shield regeneration during exact transfer accounting",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=FALSE WHERE name='shield_regen';" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Seed on-hand assets and recipient capacities",
       "command": "sys.raw_sql_exec", "user": "admin",
       "data": { "sql": "WITH player_setup AS (SELECT player_id,name,ship_id FROM players WHERE name IN ('corp_asset_sender','corp_asset_recipient')) UPDATE ships s SET fighters=CASE p.name WHEN 'corp_asset_sender' THEN 10 ELSE 0 END, mines=CASE p.name WHEN 'corp_asset_sender' THEN 10 ELSE 0 END, installed_shields=LEAST(st.maxshields,20), shields=CASE p.name WHEN 'corp_asset_sender' THEN LEAST(st.maxshields,10) ELSE 0 END FROM player_setup p, shiptypes st WHERE p.ship_id=s.ship_id AND st.shiptypes_id=s.type_id;" },
@@ -68,6 +74,19 @@
       "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "shields", "quantity": 3 },
       "expect": { "status": "ok", "type": "corp.member.asset_transferred_v1" },
       "asserts": [{ "path": "data.sender_remaining", "op": "==", "value": 7 }, { "path": "data.recipient_total", "op": "==", "value": 3 }]
+    },
+    {
+      "name": "Verify exact shield charge conservation and unchanged installed capacities",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT shields=7 AND installed_shields=20 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='corp_asset_sender'))::int,(SELECT shields=3 AND installed_shields=LEAST(st.maxshields,20) FROM ships s JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE s.ship_id=(SELECT ship_id FROM players WHERE name='corp_asset_recipient'))::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }, { "path": "data.rows.0.1", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Restore shield regeneration after deterministic transfer accounting",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=TRUE WHERE name='shield_regen';" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Reject nonmember recipient",

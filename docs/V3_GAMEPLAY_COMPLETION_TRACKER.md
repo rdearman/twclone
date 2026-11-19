@@ -4,8 +4,10 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 58 VERIFIED, 2
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 17
+**Parity refresh — 19 November 2026:** 59 VERIFIED, 2
+IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 21
+verified `NPC-ORI-01` through concurrent/safe-zone arrival acceptance and a
+live scheduler personality matrix. Autonomous batch 17
 closed all remaining StarPort acceptance clauses and promoted
 `PARITY-PORT-ATTACK-01`, `V3-PORT-BUILD-01`, and `V3-PORT-COMBAT-01` from
 disposable-PostgreSQL and actual Godot UI evidence. The acceptance details are
@@ -168,9 +170,13 @@ fails on a new connection without automatic reauthentication.
 `SHIP-01` is VERIFIED by 37 live PostgreSQL cases across StarDock,
 black-market and inventory-authorized ship-sale facilities, including durable
 sale accounting and duplicate-payout rejection.
-The Orion targeting
-decision remains PARTIAL: its 60-case PostgreSQL run passed, while safe-zone,
-protected-player, NPC-removal and genuine concurrent-arrival cases remain open.
+`NPC-ORI-01` is now VERIFIED: arrival acceptance passed 80/80, including
+concurrent warp/transwarp, allied exclusion, FedSpace overlap, removed-NPC
+exclusion, retry and serving-server restart; the live non-blockader personality
+matrix passed 9/9 for balanced, offensive, defensive and looter movement. A
+concurrent entry race exposed and fixed a PostgreSQL deadlock. The exact cases
+and implementation references are in the clause matrix and batch 21/22
+progress records.
 The approved ruleset 1.2 cycle unrest and Ferengi destruction reward passed
 focused PostgreSQL acceptance. `NPC-FER-01` is VERIFIED by authenticated
 attack/wanted-list/pursuit/retry/destruction tests (45/45) and a serving-server
@@ -357,13 +363,38 @@ photon firing rollback remain unverified. Full server regressions passed
 106 with 7 live-mode scripts skipped. See the clause matrix and autonomous
 progress log for suite identifiers and exact limits.
 
-`NPC-ORI-01` clause 1 is VERIFIED by the expanded live PostgreSQL
-`orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json` pair
-(80/80): concurrent warp/transwarp settlement, allied exclusion, safe-zone
-overlap, destroyed-NPC exclusion, retry idempotency, and serving-server
-restart/reconnect were checked with database readback. The run exposed a
-concurrent sector-entry deadlock; source now serializes destination entry
-before taking mutable ship/defense locks, and avoids locking read-only ship
-type rows. The Orion parent remains PARTIAL until the separate non-blockader
-personality-preservation clause has runtime evidence. See the clause matrix
-and batch 21 progress record.
+`NPC-ORI-01` is VERIFIED. Clause 1 acceptance is the expanded live PostgreSQL
+arrival pair (80/80), and clause 2 is `manual_acceptance/orion_personality_runtime.json`
+(9/9). The latter executes the registered scheduler and verifies persisted
+sector outcomes and one action receipt each for balanced, offensive,
+defensive, and looter personalities. The concurrent sector-entry deadlock fix
+and all evidence are recorded in commits `4e01e836` and `72b1aa60`, plus the
+subsequent acceptance-evidence commit.
+
+`COMBAT-01` destruction side effects are now independently verified against a
+disposable PostgreSQL database. The ordinary-player preparation journey
+passed 34/34 cases; the suite restarted the serving game server, and the
+ordinary-player recovery/retry journey passed 9/9. Coverage includes a hull
+whose ship type has no escape pod, exact equipment and cargo loss, preserved
+personal/bank/planet/corporate assets, one valid active pod, duplicate attack
+rejection, restart persistence, and the same preservation checks after Terra
+Captain Z enforcement. The test exposed stale authoritative `ship_cargo` rows
+after destruction; the destruction transaction now deletes that inventory.
+See `combat_ship_destruction_prepare.json` and
+`combat_ship_destruction_restart_verify.json` in `tests.v2/manual_acceptance/`
+and the corresponding clause rows in the acceptance matrix.
+
+The full generic-context server run after this change discovered 175 suites,
+executed 174 and reported 2,904 passed, 5 failed and 4 TLS cases not run on
+the non-TLS listener. The failures were isolated and rerun in their actual
+contexts: the corporation asset-transfer fixture now pauses only shield
+regeneration while checking exact charge conservation (36/36); the BigBang
+NPC roster and serving-server restart sequence passed 2/2, 32/32 and 4/4;
+TLS smoke passed 4/4 on its dedicated listener. Aggregated without duplicating
+the NPC preparation suite, the current regression evidence covers 175/175
+suites, **2,912 passed, 0 failed, 0 skipped**. Full Python client tests passed
+834/834; `pytest tests.v2` passed 277 with 7 documented skips and 227
+subtests; Godot 4.5.1 passed 106 scripts, with 7 live-server scripts skipped
+by its non-live runner. These are regression results, not new parent
+promotions; parent totals remain 59 VERIFIED, 2 IMPLEMENTED_UNVERIFIED,
+5 PARTIAL and 1 BLOCKED.

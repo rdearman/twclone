@@ -834,3 +834,74 @@ PARTIAL, 1 BLOCKED**. No policy decision was inferred. The implementation
 and acceptance change is committed as `4e01e836`; this evidence update is
 pending a separate documentation commit. Unrelated worktree modifications
 remain untouched.
+
+### Batch 22 — Orion personality runtime evidence
+
+Added `manual_acceptance/orion_personality_runtime.json` and ran it against
+the actual registered Orion scheduler on a fresh disposable PostgreSQL server.
+It passed **9/9**. Authoritative SQL readback verified a balanced NPC moved
+from its origin, an offensive NPC moved to its seeded intelligence target, a
+defensive NPC moved along an existing outgoing warp, and a looter moved to a
+seeded port sector. Each ship had exactly one completed durable movement
+receipt. This is behavior-level acceptance in addition to the existing unit
+tests for personality resolution/target selection; no personality rules were
+changed.
+
+Both `NPC-ORI-01` clauses are now VERIFIED. The parent classification advances
+to **59 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED**. The base
+clause count advances to **175 VERIFIED / 52 IMPLEMENTED_UNTESTED** of 227.
+The suite
+report is `/tmp/twclone-orion-personality.json`. Implementation/focused
+acceptance is `4e01e836`; batch-21 evidence is `72b1aa60`; this classification
+update and new suite are pending their bounded commit. No unresolved gameplay
+policy was inferred.
+
+### Batch 23 — Ship destruction side effects and recovery
+
+Inspected only the two named stale Godot commands; neither process existed.
+Reran `persisted_planet_restore_test.gd` (8/8) and
+`planet_command_response_test.gd` (117 checks), both passing.
+
+Extended `COMBAT-01` acceptance with ordinary-player PostgreSQL preparation
+and post-restart verification suites. The first fixture run was invalid:
+sector 11 contained pre-existing defenses that destroyed the attacker during
+arrival, and corporation assets seeded in that same sector were consumed by
+the encounter. The fixture now selects a sector without hazards/defenses and
+seeds unrelated corporate assets outside it; no gameplay assertion was
+relaxed. The corrected suites passed **34/34** and **9/9** cases, with a real
+serving-server restart between them. They verify combat destruction without
+escape-pod ship equipment, equipment/cargo loss, exact preservation of bank,
+planet, secondary-hull, corporation treasury and defense assets, one valid
+active escape pod, retry idempotency, and Terra enforcement. This acceptance
+found a real defect: authoritative `ship_cargo` survived destruction.
+`repo_ships_handle_destruction()` now deletes that inventory atomically with
+the destroyed hull and pod transition.
+
+Focused Python combat/client recovery tests passed **20/20**. Disposable
+PostgreSQL combat regressions `suite_combat_advanced.json` and
+`suite_combat_and_crime.json` passed **71/71**. A full generic-context server
+run discovered 175 suites, executed 174, and reported **2,904 passed, 5
+failed, 4 TLS cases skipped**. The five failures grouped into one scheduler
+timing fixture (corporation shield charge transfer) and two suites requiring
+their documented untouched-BigBang/restart contexts. The corporation fixture
+now disables and restores shield regeneration around its exact charge tests,
+and verifies the persisted charge/capacity after transfer; it passes **36/36**.
+The NPC BigBang roster, initialization and actual restart verifier pass
+**2/2**, **32/32** and **4/4** with a BigBang world and a real serving-server
+restart. The dedicated TLS suite passes **4/4**. Aggregating each suite once,
+all **175/175 suites** are covered with **2,912 passed, 0 failed, 0 skipped**;
+the unmodified generic run and context replacements are retained separately
+in `/tmp/twclone-parity-batch23-{full,corp,npc-context,tls}*`.
+
+The specified first batch
+(`CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, `V3-PHOTON-DURATION-01`) was already
+fully VERIFIED with executable evidence in the matrix and requires no repeat
+or implementation. `COMBAT-01` remains parent-VERIFIED; its seven detailed
+clause rows now have explicit executable evidence. Parent counts are unchanged.
+
+After enabling loopback access required by the test-local sockets, the full
+Python client suite passed **834/834**. `pytest -q tests.v2` passed **277**,
+with **7 skipped** and **227 subtests passed**. Godot 4.5.1 client regressions
+passed **106**, failed **0**, with **7 live-server-only scripts skipped** by
+the non-live runner. The two historical planet scripts passed again as noted
+above. The full server was built with `make -j4`; `git diff --check` passed.
