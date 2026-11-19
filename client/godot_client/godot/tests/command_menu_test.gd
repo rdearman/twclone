@@ -674,9 +674,11 @@ func _run() -> void:
 	menu._render_actions()
 	var attack_planet_button := _action_button(menu, "Attack this planet")
 	_check(attack_planet_button != null and not attack_planet_button.disabled, "listed non-FedSpace planet attack was not available")
-	menu._choose_action({"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true})
+	menu._choose_action({"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true, "fields": [["enslave_colonists", "boolean", "Enslave colonists", "false"]]})
+	if menu._form_fields.get("enslave_colonists") is CheckBox:
+		(menu._form_fields["enslave_colonists"] as CheckBox).button_pressed = true
 	menu._submit_form()
-	_check(captured.size() == before_corporation_actions + 2 and captured.back()["data"] == {"planet_id": 19}, "planet attack did not use the selected authoritative planet ID")
+	_check(captured.size() == before_corporation_actions + 2 and captured.back()["data"] == {"planet_id": 19, "enslave_colonists": true}, "planet attack did not dispatch the selected planet and enslavement choice")
 	menu._snapshot["hud"]["sector_id"] = 5
 	menu._render_actions()
 	await process_frame

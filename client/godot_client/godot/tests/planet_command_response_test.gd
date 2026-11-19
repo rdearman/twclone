@@ -149,7 +149,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "type": "combat.attack_planet", "data": {
 			"planet_id": 88, "attacker_remaining_fighters": 12,
-			"defender_remaining_fighters": 0, "captured": true,
+			"defender_remaining_fighters": 0, "captured": true, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)
@@ -162,7 +162,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "type": "planet.info", "data": {
 			"planet_id": 77, "attacker_remaining_fighters": 12,
-			"defender_remaining_fighters": 0, "captured": true,
+			"defender_remaining_fighters": 0, "captured": true, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)
@@ -175,7 +175,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "data": {
 			"planet_id": 77, "attacker_remaining_fighters": 12,
-			"defender_remaining_fighters": 0, "captured": true,
+			"defender_remaining_fighters": 0, "captured": true, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)
@@ -186,7 +186,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "type": "combat.attack_planet", "data": {
 			"planet_id": 77, "attacker_remaining_fighters": 12,
-			"defender_remaining_fighters": 0, "captured": true,
+			"defender_remaining_fighters": 0, "captured": true, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)
@@ -199,7 +199,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "type": "combat.attack_planet", "data": {
 			"planet_id": 77, "attacker_remaining_fighters": 0,
-			"defender_remaining_fighters": 4, "captured": false,
+			"defender_remaining_fighters": 4, "captured": false, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)
@@ -210,7 +210,7 @@ func _run() -> void:
 	await app._finish_command_reply(
 		{"status": "ok", "type": "combat.attack_planet", "data": {
 			"planet_id": 77, "attacker_remaining_fighters": "0",
-			"defender_remaining_fighters": 4, "captured": false,
+			"defender_remaining_fighters": 4, "captured": false, "enslaved_colonists": false,
 		}},
 		{"label": "Attack planet", "command": "combat.attack_planet", "mutating": true, "data": {"planet_id": 77}},
 	)

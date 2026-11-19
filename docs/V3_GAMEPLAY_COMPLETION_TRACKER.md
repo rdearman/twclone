@@ -4,8 +4,19 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 48 VERIFIED, 11
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 11
+**Parity refresh — 19 November 2026:** 49 VERIFIED, 10
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 12
+verified `POP-02`. Live disposable PostgreSQL suites passed 47/47 capture
+cases and 14/14 neutral slave-trade cases. They confirmed evil enslavement,
+good liberation, neutral inheritance, neutral enslavement refusal without
+combat/population mutation, and neutral slave-purchase refusal without
+changing credits, turns, cargo or port stock. This exposed a server response
+defect: the capture event recorded `enslaved_colonists`, but the combat
+response omitted it. The server now returns the authoritative outcome;
+Python and Godot validate/present it, and both expose the player's choice.
+Python planet-attack tests passed 9/9, Godot command menu passed 238 checks,
+planet response passed 117, and presenter passed 13. Exact acceptance cases
+are in the clause matrix. Autonomous batch 11
 verified `PARITY-TW-HOMING-01`. Live disposable PostgreSQL acceptance passed
 23/23 cases: absent destination fighter refusal left fuel, turns and location
 unchanged; transwarp succeeded after a destination fighter was deployed, with

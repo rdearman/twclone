@@ -399,3 +399,37 @@ Classification moved from **47 VERIFIED / 12 IMPLEMENTED_UNVERIFIED / 7
 PARTIAL / 1 BLOCKED** to **48 VERIFIED / 11 IMPLEMENTED_UNVERIFIED / 7
 PARTIAL / 1 BLOCKED**. Clause totals are **129 VERIFIED / 98
 IMPLEMENTED_UNTESTED**. No unrelated files were staged.
+
+## Batch 12 — population capture choices and neutral acquisition limits
+
+`POP-02` is VERIFIED. The existing live capture suite was extended with a
+neutral player's explicit `enslave_colonists=true` refusal and a before/after
+snapshot of planet owner, slave count/type, planet fighters, player turns and
+ship fighters. The refusal left all values unchanged; the same neutral player
+then captured the slave planet without conversion. Evil enslavement and good
+liberation assertions remain in the same ordinary-player server flow.
+`suite_combat_advanced.json` passed **47/47** against disposable PostgreSQL.
+A new suite, `suite_neutral_slave_trade.json`, passed **14/14** and verified
+that a neutral player's slave purchase is refused while credits, turns, ship
+cargo and port stock remain unchanged. It is included in
+`suite_regression_full.json`.
+
+The acceptance exposed a genuine protocol defect: the capture event already
+recorded `enslaved_colonists`, but the successful response omitted the field.
+The server now returns the authoritative Boolean. Python's attack flow asks
+for the choice and validates/presents the result. Godot exposes a checkbox,
+validates the response field and presents it. The published V3 response schema
+was updated. Python planet-attack tests passed **9/9**; the full Python client
+suite passed **830/830** with loopback socket permission. Godot command menu
+passed **238 checks**, planet response passed **117**, presenter passed **13**;
+the full Godot 4.5.1 client suite passed **106**, **0 failed**, **6 skipped**
+out of 112 scripts. The six skips are live database journeys not enabled by
+that offline runner.
+
+An initial neutral-purchase fixture used an invalid raw SQL CTE/update shape;
+it was corrected to choose the port first, then move player and ship using the
+saved sector. This was a fixture issue; the final acceptance rerun passed.
+Classification moved from **48 VERIFIED / 11 IMPLEMENTED_UNVERIFIED / 7
+PARTIAL / 1 BLOCKED** to **49 VERIFIED / 10 IMPLEMENTED_UNVERIFIED / 6
+PARTIAL / 1 BLOCKED**. Base clause totals are **131 VERIFIED / 96
+IMPLEMENTED_UNTESTED**.

@@ -1597,6 +1597,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				and str(attack_response_type) == "combat.attack_planet"
 			var reported_planet_id := _authoritative_positive_id(data.get("planet_id", 0))
 			var attack_result_valid := data.get("captured", null) is bool \
+				and data.get("enslaved_colonists", null) is bool \
 				and data.get("attacker_remaining_fighters", null) is int \
 				and int(data.get("attacker_remaining_fighters", -1)) >= 0 \
 				and data.get("defender_remaining_fighters", null) is int \

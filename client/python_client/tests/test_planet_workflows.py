@@ -1598,15 +1598,15 @@ def test_planet_landing_refusal_does_not_replace_player_from_other_session(
 def test_planet_attack_delegates_protection_and_loss_to_server(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory(sector={"id": 7, "planets": [{"id": 8, "name": "Safe target"}]})
     fake_conn.queue("combat.attack_planet", {"status": "refused", "error": {"message": "Captain Z intervenes"}})
-    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
     client.combat_attack_planet_flow(ctx)
-    assert fake_conn.calls[0] == {"command": "combat.attack_planet", "data": {"planet_id": 8}}
+    assert fake_conn.calls[0] == {"command": "combat.attack_planet", "data": {"planet_id": 8, "enslave_colonists": False}}
     assert "Captain Z intervenes" in capsys.readouterr().out
 
     ctx.last_sector_desc = {"id": 17, "planets": [{"id": 1, "name": "Terra"}]}
     fake_conn.queue("combat.attack_planet", {"status": "refused", "error": {"message": "Terra sanction"}})
     client.combat_attack_planet_flow(ctx)
-    assert {"command": "combat.attack_planet", "data": {"planet_id": 1}} in fake_conn.calls
+    assert {"command": "combat.attack_planet", "data": {"planet_id": 1, "enslave_colonists": False}} in fake_conn.calls
     assert "Terra sanction" in capsys.readouterr().out
 
 
@@ -1616,11 +1616,11 @@ def test_planet_attack_uses_listed_target_and_displays_server_counts(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue("combat.attack_planet", {"status": "ok", "type": "combat.attack_planet", "data": {
         "planet_id": 80, "attacker_remaining_fighters": 12,
-        "defender_remaining_fighters": 0, "captured": True,
+        "defender_remaining_fighters": 0, "captured": True, "enslaved_colonists": True,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 12}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1628,7 +1628,8 @@ def test_planet_attack_uses_listed_target_and_displays_server_counts(
     assert "Captured: True" in out
     assert "Attacker fighters remaining: 12" in out
     assert "Planet fighters remaining: 0" in out
-    assert fake_conn.calls[0] == {"command": "combat.attack_planet", "data": {"planet_id": 80}}
+    assert "Colonists enslaved: True" in out
+    assert fake_conn.calls[0] == {"command": "combat.attack_planet", "data": {"planet_id": 80, "enslave_colonists": True}}
 
 
 def test_planet_attack_without_canonical_response_type_refreshes_only(
@@ -1637,11 +1638,11 @@ def test_planet_attack_without_canonical_response_type_refreshes_only(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue_untyped("combat.attack_planet", {"status": "ok", "data": {
         "planet_id": 80, "attacker_remaining_fighters": 12,
-        "defender_remaining_fighters": 0, "captured": True,
+        "defender_remaining_fighters": 0, "captured": True, "enslaved_colonists": False,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 12}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1659,11 +1660,11 @@ def test_planet_attack_loss_displays_authoritative_non_capture_result(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue("combat.attack_planet", {"status": "ok", "type": "combat.attack_planet", "data": {
         "planet_id": 80, "attacker_remaining_fighters": 0,
-        "defender_remaining_fighters": 4, "captured": False,
+        "defender_remaining_fighters": 4, "captured": False, "enslaved_colonists": False,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 0}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1682,11 +1683,11 @@ def test_planet_attack_success_with_malformed_loss_capture_facts_refreshes_only(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue("combat.attack_planet", {"status": "ok", "data": {
         "planet_id": 80, "attacker_remaining_fighters": "0",
-        "defender_remaining_fighters": 4, "captured": False,
+        "defender_remaining_fighters": 4, "captured": False, "enslaved_colonists": False,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 0}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1720,7 +1721,7 @@ def test_planet_attack_refusal_refreshes_after_authoritative_defense_report(
     fake_conn.queue("ship.status", {"status": "ok", "data": {
         "ship": {"id": 9, "fighters": 2}
     }})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1739,11 +1740,11 @@ def test_planet_attack_rejects_result_for_different_planet_and_refreshes(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue("combat.attack_planet", {"status": "ok", "data": {
         "planet_id": 81, "attacker_remaining_fighters": 12,
-        "defender_remaining_fighters": 0, "captured": True,
+        "defender_remaining_fighters": 0, "captured": True, "enslaved_colonists": False,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 12}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1759,11 +1760,11 @@ def test_planet_attack_rejects_success_with_unexpected_response_type(
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
     fake_conn.queue("combat.attack_planet", {"status": "ok", "type": "planet.info", "data": {
         "planet_id": 80, "attacker_remaining_fighters": 12,
-        "defender_remaining_fighters": 0, "captured": True,
+        "defender_remaining_fighters": 0, "captured": True, "enslaved_colonists": False,
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 12}}})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 
@@ -1784,7 +1785,7 @@ def test_planet_attack_invalid_reply_reconciles_without_claiming_capture(
     fake_conn.queue("ship.status", {"status": "ok", "data": {
         "ship": {"id": 9, "fighters": 0}
     }})
-    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+    monkeypatch.setattr("builtins.input", lambda prompt: "1" if "number" in prompt.lower() else "n" if "enslav" in prompt.lower() else "y")
 
     client.combat_attack_planet_flow(ctx)
 

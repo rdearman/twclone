@@ -1323,7 +1323,12 @@ func _render_actions() -> void:
 		# Selection metadata is server-owned JSON.  Do not coerce booleans or
 		# floating-point values into an ID while deciding whether an action is
 		# restricted; dispatch uses the same fail-closed identity validation.
-		var attack_action := {"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true}
+		var attack_action := {
+			"label": "Attack this planet", "command": "combat.attack_planet",
+			"context_id": "planet_id", "mutating": true,
+			"form_notice": "Choose whether to enslave colonists on successful capture. The server enforces alignment and population rules.",
+			"fields": [["enslave_colonists", "boolean", "Enslave colonists on successful capture", "false"]],
+		}
 		actions.append(attack_action)
 		var selected_metadata: Dictionary = _selection.get("data", {})
 		if selected_metadata.has("planet_id") and _authoritative_selection_id(selected_metadata, "planet_id") == null:

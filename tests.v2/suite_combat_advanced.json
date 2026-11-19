@@ -199,7 +199,10 @@
       "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": true },
       "user": "combat_ace",
       "expect": { "status": "ok" },
-      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+      "asserts": [
+        { "path": "data.captured", "op": "==", "value": true },
+        { "path": "data.enslaved_colonists", "op": "==", "value": true }
+      ]
     },
     {
       "name": "Assert enslavement changes only population type and combat ownership/defenses",
@@ -236,7 +239,10 @@
       "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": false },
       "user": "combat_ace",
       "expect": { "status": "ok" },
-      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+      "asserts": [
+        { "path": "data.captured", "op": "==", "value": true },
+        { "path": "data.enslaved_colonists", "op": "==", "value": false }
+      ]
     },
     {
       "name": "Assert liberation preserves population, allocations, treasury and planetary stock",
@@ -268,12 +274,44 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Capture neutral attacker and planet state before forbidden enslavement choice",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT p.owner_id,p.population,p.fighters,t.turns_remaining,s.fighters FROM planets p JOIN players a ON a.player_id=@{combat_ace_player_id} JOIN turns t ON t.player_id=a.player_id JOIN ships s ON s.ship_id=a.ship_id WHERE p.planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "save": {
+        "neutral_before_owner": "data.rows.0.0",
+        "neutral_before_population": "data.rows.0.1",
+        "neutral_before_planet_fighters": "data.rows.0.2",
+        "neutral_before_turns": "data.rows.0.3",
+        "neutral_before_ship_fighters": "data.rows.0.4"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Neutral cannot request enslavement during an attack",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": true },
+      "user": "combat_ace",
+      "expect": { "status": "error", "error_code": 402 }
+    },
+    {
+      "name": "Forbidden neutral enslavement choice preserves planet and player combat state",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN p.owner_id=@{neutral_before_owner} AND p.owner_type='player' AND p.population=@{neutral_before_population} AND p.population_type='SLAVE' AND p.fighters=@{neutral_before_planet_fighters} AND t.turns_remaining=@{neutral_before_turns} AND s.fighters=@{neutral_before_ship_fighters} THEN 1 ELSE 0 END FROM planets p JOIN players a ON a.player_id=@{combat_ace_player_id} JOIN turns t ON t.player_id=a.player_id JOIN ships s ON s.ship_id=a.ship_id WHERE p.planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
       "name": "Neutral attacker inherits slave population on successful capture",
       "command": "combat.attack_planet",
       "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": false },
       "user": "combat_ace",
       "expect": { "status": "ok" },
-      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+      "asserts": [
+        { "path": "data.captured", "op": "==", "value": true },
+        { "path": "data.enslaved_colonists", "op": "==", "value": false }
+      ]
     },
     {
       "name": "Assert neutral capture retains slaves and planetary assets",

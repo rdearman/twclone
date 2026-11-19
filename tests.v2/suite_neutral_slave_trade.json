@@ -1,0 +1,85 @@
+{
+  "name": "Neutral slave-trade exclusion",
+  "description": "An ordinary neutral player cannot buy slaves; refusal preserves every settlement input.",
+  "tests": [
+    {
+      "name": "Setup neutral trader",
+      "setup": "macro_auth_user",
+      "username": "neutral_slave_buyer",
+      "password": "password"
+    },
+    {
+      "name": "Rig the ordinary player as neutral-aligned",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET alignment=0 WHERE name='neutral_slave_buyer'" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save unprotected port identity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT port_id,sector_id FROM ports WHERE sector_id>10 ORDER BY port_id LIMIT 1" },
+      "save": { "neutral_slave_port_id": "data.rows.0.0", "neutral_slave_sector_id": "data.rows.0.1" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig neutral player at the unprotected port sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id=@{neutral_slave_sector_id} WHERE name='neutral_slave_buyer'" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig active ship at the neutral player's port sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id=@{neutral_slave_sector_id} WHERE ship_id=(SELECT ship_id FROM players WHERE name='neutral_slave_buyer')" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Configure the selected port to sell one slave unit",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM port_trade WHERE port_id=@{neutral_slave_port_id} AND commodity='SLV'" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed slave sale mode and stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO port_trade(port_id,commodity,mode,maxproduct) VALUES(@{neutral_slave_port_id},'SLV','sell',100)" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed authoritative slave stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price,last_updated_ts) VALUES('port',@{neutral_slave_port_id},'SLV',10,1000,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=10,price=1000" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Capture neutral buyer balances and stock before purchase attempt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.credits,t.turns_remaining,COALESCE(c.quantity,0),(SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{neutral_slave_port_id} AND commodity_code='SLV') FROM players p JOIN turns t ON t.player_id=p.player_id LEFT JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='SLV' WHERE p.name='neutral_slave_buyer'" },
+      "save": { "neutral_slave_credits": "data.rows.0.0", "neutral_slave_turns": "data.rows.0.1", "neutral_slave_cargo": "data.rows.0.2", "neutral_slave_stock": "data.rows.0.3" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Neutral player is refused when buying slaves",
+      "command": "trade.buy",
+      "user": "neutral_slave_buyer",
+      "data": { "sector_id": "@{neutral_slave_sector_id}", "port_id": "@{neutral_slave_port_id}", "idempotency_key": "neutral-slave-buy-refusal", "items": [{ "commodity": "SLV", "quantity": 1 }] },
+      "expect": { "status": "refused", "error_code": 1112 }
+    },
+    {
+      "name": "Neutral slave-buy refusal preserves credits turns cargo and port stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.credits=@{neutral_slave_credits} AND t.turns_remaining=@{neutral_slave_turns} AND COALESCE(c.quantity,0)=@{neutral_slave_cargo} AND (SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{neutral_slave_port_id} AND commodity_code='SLV')=@{neutral_slave_stock} THEN 1 ELSE 0 END FROM players p JOIN turns t ON t.player_id=p.player_id LEFT JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='SLV' WHERE p.name='neutral_slave_buyer'" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    }
+  ]
+}

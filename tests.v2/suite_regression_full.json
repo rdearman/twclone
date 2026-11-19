@@ -23,7 +23,8 @@
     "suite_phase9_1_state_updates.json",
     "suite_phase9_2_cluster_pressure.json",
     "suite_phase10_market_decay.json",
-    "suite_commodity_quantity_restrictions.json"
+    "suite_commodity_quantity_restrictions.json",
+    "suite_neutral_slave_trade.json"
   ],
   "meta": {
     "features_covered": [

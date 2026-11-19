@@ -8196,6 +8196,8 @@ def _planet_attack_result_is_authoritative(data: Any, planet_id: int) -> bool:
         return False
     if data.get("planet_id") != planet_id or type(data.get("captured")) is not bool:
         return False
+    if type(data.get("enslaved_colonists")) is not bool:
+        return False
     return all(
         type(data.get(field)) is int and data[field] >= 0
         for field in ("attacker_remaining_fighters", "defender_remaining_fighters")
@@ -8317,8 +8319,18 @@ def combat_attack_planet_flow(ctx: Context):
     if input(f"Attack {planet.get('name', 'this planet')} (ID {planet_id})? This can destroy fighters and change ownership. (y/N): ").strip().lower() != "y":
         print("Cancelled.")
         return
+    enslavement_answer = input(
+        "If you are evil-aligned, enslave colonists if capture succeeds? [y/N]: "
+    ).strip().lower()
+    if enslavement_answer not in ("", "y", "yes", "n", "no"):
+        print("Invalid enslavement choice; no request was sent.")
+        return
+    enslave_colonists = enslavement_answer in ("y", "yes")
     try:
-        response = ctx.conn.rpc("combat.attack_planet", {"planet_id": planet_id})
+        response = ctx.conn.rpc("combat.attack_planet", {
+            "planet_id": planet_id,
+            "enslave_colonists": enslave_colonists,
+        })
     except (ConnectionError, OSError) as exc:
         ctx.state["last_rpc"] = None
         print(f"Planet attack outcome is uncertain after connection loss: {exc}")
@@ -8359,6 +8371,8 @@ def combat_attack_planet_flow(ctx: Context):
     print(f"  Captured: {data.get('captured', 'not reported')}")
     print(f"  Attacker fighters remaining: {data.get('attacker_remaining_fighters', 'not reported')}")
     print(f"  Planet fighters remaining: {data.get('defender_remaining_fighters', 'not reported')}")
+    if isinstance(data.get("enslaved_colonists"), bool):
+        print(f"  Colonists enslaved: {data['enslaved_colonists']}")
     _refresh_after_planet_attack(ctx)
 
 

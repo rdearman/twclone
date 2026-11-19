@@ -10,9 +10,13 @@ Attack another ship.
 
 ### `combat.attack_planet`
 Attack a planet in the current sector.
-**Args**: `{ "planet_id": 123 }`.
+**Args**: `{ "planet_id": 123, "enslave_colonists": false }`. The Boolean
+choice is required when an evil-aligned attacker targets a colonist population;
+the server rejects `true` for other alignments or population types. Omit it for
+other attacks.
 **Response**: `combat.attack_planet` returns `planet_id`,
-`attacker_remaining_fighters`, `defender_remaining_fighters`, and `captured`.
+`attacker_remaining_fighters`, `defender_remaining_fighters`, `captured`, and
+`enslaved_colonists`.
 Successful attacks are recorded as `player.attack_planet.v1` with `planet_id`,
 `result`, `ship_loss`, and `planet_loss`; captures are recorded as
 `player.capture_planet.v1` with `planet_id` and `previous_owner`.

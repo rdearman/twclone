@@ -58,7 +58,7 @@ func _initialize() -> void:
 	assert(str(data_envelope["message"]).contains("Atmospheric Quasar"))
 	assert(str(data_envelope["message"]).contains("12 damage"))
 	assert(str(data_envelope["message"]).contains("did not remain in the sector"))
-	assert(Presenter.attack_result({"planet_id": 42, "captured": true, "attacker_remaining_fighters": 12, "defender_remaining_fighters": 0}).contains("captured: true"))
+	assert(Presenter.attack_result({"planet_id": 42, "captured": true, "enslaved_colonists": false, "attacker_remaining_fighters": 12, "defender_remaining_fighters": 0}).contains("captured: true"))
 	var malformed_attack := Presenter.attack_result({"planet_id": "42", "captured": "true", "attacker_remaining_fighters": -1, "defender_remaining_fighters": 0})
 	assert(malformed_attack.contains("Planet not reported"))
 	assert(malformed_attack.contains("captured: not reported"))

@@ -517,6 +517,8 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "defender_remaining_fighters",
 		       json_integer (p_fighters - planet_loss));
   json_object_set_new (resp, "captured", json_boolean (captured));
+  json_object_set_new (resp, "enslaved_colonists",
+                       json_boolean (enslave_colonists));
 
   send_response_ok_take (ctx, root, "combat.attack_planet", &resp);
   return 0;

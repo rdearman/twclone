@@ -76,8 +76,9 @@ static func attack_result(data: Dictionary) -> String:
 	var captured := _reported_bool(data.get("captured"))
 	var attacker_remaining := _reported_nonnegative_int(data.get("attacker_remaining_fighters"))
 	var defender_remaining := _reported_nonnegative_int(data.get("defender_remaining_fighters"))
-	return "Planet %s · captured: %s · your fighters remaining: %s · planet fighters remaining: %s" % [
-		planet_id, captured, attacker_remaining, defender_remaining,
+	var enslaved := _reported_bool(data.get("enslaved_colonists"))
+	return "Planet %s · captured: %s · colonists enslaved: %s · your fighters remaining: %s · planet fighters remaining: %s" % [
+		planet_id, captured, enslaved, attacker_remaining, defender_remaining,
 	]
 
 static func _reported_positive_int(value: Variant) -> String:
