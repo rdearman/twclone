@@ -7025,6 +7025,37 @@ def _refresh_planet_overview(ctx: Context, planet_id: int) -> None:
         _print_planet_overview(planet)
 
 
+@register("planet_view_flow")
+def planet_view_flow(ctx: Context):
+    """Display the server's public, read-only planet view response."""
+    planet_id = _current_or_selected_planet_id(ctx)
+    if planet_id is None:
+        return
+    response = ctx.conn.rpc("planet.view", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet overview refused: {_planet_error(response)}")
+        return
+    if response.get("type") != "planet.view_v1":
+        print("[Error] Planet overview response type was unexpected.")
+        return
+    data = get_data(response)
+    if not isinstance(data, dict) or data.get("planet_id") != planet_id:
+        print("[Error] Planet overview did not identify the selected planet.")
+        return
+    print("\n--- Planet Public Overview ---")
+    for key, label in (("name", "Name"), ("class", "Class"),
+                       ("population", "Population"),
+                       ("population_type", "Population type"),
+                       ("morale_status", "Morale status"),
+                       ("treasury", "Authorized treasury")):
+        if key in data:
+            print(f"{label}: {data[key]}")
+    for key in ("goods", "production", "citadel"):
+        if key in data:
+            print(f"{key.title()}: {json.dumps(data[key], sort_keys=True)}")
+
+
 def _current_or_selected_planet_id(ctx: Context) -> Optional[int]:
     current = _planet_id(ctx)
     if current:

@@ -292,8 +292,18 @@
       "title": "--- Planet Surface ---",
       "options": [
         {
+          "key": "v",
+          "label": "(V) Public Planet Overview",
+          "action": {
+            "pycall": "planet_view_flow"
+          },
+          "show_if": [
+            "on_planet"
+          ]
+        },
+        {
           "key": "i",
-          "label": "(I) Planet Overview",
+          "label": "(I) Detailed Planet Information",
           "action": {
             "pycall": "planet_overview_flow"
           }

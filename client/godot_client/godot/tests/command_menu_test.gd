@@ -194,6 +194,17 @@ func _run() -> void:
 	menu._snapshot["player"] = {"ship_id": 88, "last_planet_id": 19}
 	menu._active_category = "PLANET"
 	menu._render_actions()
+	var planet_view_button := _action_button(menu, "Public planet overview")
+	_check(planet_view_button != null and not planet_view_button.disabled, "landed planet public overview was unavailable")
+	var before_planet_view := captured.size()
+	if planet_view_button != null:
+		planet_view_button.pressed.emit()
+	_check(captured.size() == before_planet_view + 1, "planet overview action did not dispatch")
+	if captured.size() > before_planet_view:
+		_check(captured[before_planet_view]["command"] == "planet.view", "public overview dispatched a non-overview command")
+		_check(captured[before_planet_view]["data"] == {"planet_id": 19}, "public overview did not bind the selected planet ID")
+		_check(not captured[before_planet_view]["mutating"], "read-only planet overview was marked as a mutation")
+	captured.resize(before_planet_view)
 	var harvest_button := _action_button(menu, "Harvest planet production")
 	_check(harvest_button != null and not harvest_button.disabled, "landed planet harvest workflow was unavailable despite its published V3 contract")
 	var before_harvest := captured.size()

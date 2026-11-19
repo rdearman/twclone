@@ -7,6 +7,7 @@
     { "name": "Create owner", "setup": "macro_auth_user", "username": "planet_fighter_owner", "password": "qa-password" },
     { "name": "Create visitor", "setup": "macro_auth_user", "username": "planet_fighter_visitor", "password": "qa-password" },
     { "name": "Create corporate officer", "setup": "macro_auth_user", "username": "planet_emancipate_officer", "password": "qa-password" },
+    { "name": "Create unrelated planet viewer", "setup": "macro_auth_user", "username": "planet_unrelated_viewer", "password": "qa-password" },
     {
       "name": "Fixture planet and citadel",
       "command": "sys.raw_sql_exec", "user": "admin",
@@ -190,6 +191,12 @@
       "asserts": [ { "path": "data.citadel.treasury_balance", "op": "not_exists" } ]
     },
     {
+      "name": "Snapshot planet state before public read-only overview",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE TABLE v3_qa_planet_view_before AS SELECT p.population,p.population_type,p.colonists_unassigned,p.colonists_ore,p.colonists_org,p.colonists_eq,p.fighters,c.treasury,(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORE') AS ore,(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORG') AS org,(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='EQU') AS equ FROM planets p JOIN citadels c ON c.planet_id=p.planet_id WHERE p.planet_id=977701;" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Landed visitor overview omits treasury and ownership data",
       "command": "planet.view", "user": "planet_fighter_visitor",
       "data": { "planet_id": 977701 },
@@ -197,15 +204,39 @@
       "asserts": [
         { "path": "data.treasury", "op": "not_exists" },
         { "path": "data.owner_id", "op": "not_exists" },
+        { "path": "data.owner_type", "op": "not_exists" },
+        { "path": "data.sector_id", "op": "not_exists" },
         { "path": "data.goods", "op": "exists" },
+        { "path": "data.production", "op": "exists" },
+        { "path": "data.population", "op": "==", "value": { "sql_int": "SELECT population FROM v3_qa_planet_view_before;" } },
+        { "path": "data.population_type", "op": "==", "value": "SLAVE" },
         { "path": "data.morale_status", "op": "==", "value": "LOW" }
       ]
+    },
+    {
+      "name": "Public overview read leaves planet stock, population, defenses, and treasury unchanged",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN (p.population,p.population_type,p.colonists_unassigned,p.colonists_ore,p.colonists_org,p.colonists_eq,p.fighters,c.treasury,(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORE'),(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORG'),(SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='EQU')) IS NOT DISTINCT FROM (b.population,b.population_type,b.colonists_unassigned,b.colonists_ore,b.colonists_org,b.colonists_eq,b.fighters,b.treasury,b.ore,b.org,b.equ) THEN 'true' ELSE 'false' END FROM planets p JOIN citadels c ON c.planet_id=p.planet_id CROSS JOIN v3_qa_planet_view_before b WHERE p.planet_id=977701;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "true" } ]
+    },
+    {
+      "name": "Remove public-view state snapshot",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP TABLE v3_qa_planet_view_before;" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Unauthorized visitor cannot emancipate",
       "command": "planet.emancipate", "user": "planet_fighter_visitor",
       "data": { "planet_id": 977701 },
       "expect": { "status": "error" }
+    },
+    {
+      "name": "Reset owner slave population for exact full emancipation case",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE planets SET population=1000,population_type='SLAVE',colonists_unassigned=400,colonists_ore=300,colonists_org=200,colonists_eq=100 WHERE planet_id=977701;" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Owner emancipates the whole population without cost",
@@ -267,6 +298,23 @@
       "command": "planet.emancipate", "user": "planet_fighter_owner",
       "data": { "planet_id": 977703 }, "expect": { "status": "ok", "type": "planet.emancipated_v1" },
       "asserts": [ { "path": "data.population", "op": "==", "value": 400 }, { "path": "data.population_type", "op": "==", "value": "COLONIST" } ]
+    },
+    {
+      "name": "Create authorized corporation planet treasury for overview access",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO citadels(planet_id,level,treasury,owner_id,construction_status,target_level,construction_start_time,construction_end_time,planetaryShields,militaryReactionLevel,qCannonSector,qCannonAtmosphere) VALUES (977703,1,777,@{planet_fighter_owner_player_id},'idle',0,0,0,0,0,0,0) ON CONFLICT(planet_id) DO UPDATE SET treasury=777;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Corporation Member receives authorized treasury in overview",
+      "command": "planet.view", "user": "planet_fighter_visitor",
+      "data": { "planet_id": 977703 }, "expect": { "status": "ok", "type": "planet.view_v1" },
+      "asserts": [ { "path": "data.treasury", "op": "==", "value": 777 }, { "path": "data.owner_id", "op": "not_exists" } ]
+    },
+    {
+      "name": "Unrelated player cannot inspect remote corporation planet",
+      "command": "planet.view", "user": "planet_unrelated_viewer",
+      "data": { "planet_id": 977703 }, "expect": { "status": "error" }
     },
     {
       "name": "Corporation emancipation preserves population and every allocation",

@@ -1250,7 +1250,10 @@ func _render_actions() -> void:
 		child.queue_free()
 	var actions: Array = []
 	if _active_category == "PLANET":
-		actions = [{"label": "Planet information", "command": "planet.info", "context_id": "planet_id"}]
+		actions = [
+			{"label": "Public planet overview", "command": "planet.view", "context_id": "planet_id"},
+			{"label": "Planet information", "command": "planet.info", "context_id": "planet_id"}
+		]
 		var ship_state: Dictionary = _snapshot.get("ship", {})
 		var landed_state: Variant = ship_state.get("onplanet", null)
 		var player_state: Dictionary = _snapshot.get("player", {})

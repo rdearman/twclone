@@ -267,3 +267,33 @@ IMPLEMENTED_UNTESTED. The next small candidate is `PLANET-01` visibility and
 response privacy, then `SHIP-05` used-hull pricing/identity and insurance
 policy clauses. Any runtime result will be interpreted against the current
 protocol and code rather than stale recovery summaries.
+
+## Batch 7 — PLANET-01 public and detailed read workflows
+
+The prior clients exposed only detailed `planet.info`; the approved public
+read-only `planet.view` was absent from Python and Godot surface menus. Added a
+Python surface workflow that validates response type/planet identity and
+prints only the public field allowlist, and a distinct Godot read-only overview
+action. Detailed `planet.info` remains available as its own action. Python menu
+and response tests passed **101/101**; Godot command-menu regression passed
+**226 checks**.
+
+`suite_planet_fighter_transfers.json` passed **78/78** against disposable
+PostgreSQL. It proves the view does not change stocks, population, allocations,
+planet defenses or treasury using before/after SQL snapshots; owner/Leader and
+corporation Member access; landed visitor's no-treasury projection; unrelated
+remote player's refusal; current population and production values; slave LOW
+morale; and detailed `planet.info` ownership response. The fixture's daily
+planet growth changed population between earlier read and emancipation checks,
+so read assertions now compare with an immediate authoritative snapshot
+instead of a hard-coded stale population value. A second setup issue was a
+citadel fixture owner ID incorrectly using a corporation ID where the schema
+requires a player ID; the QA fixture was corrected. Neither required a
+production server change.
+
+`PLANET-01` is promoted to VERIFIED. Classification moved from 42 VERIFIED /
+17 IMPLEMENTED_UNVERIFIED to **43 VERIFIED / 16 IMPLEMENTED_UNVERIFIED**, with
+7 PARTIAL, 1 BLOCKED; base clauses are now 127 VERIFIED / 100
+IMPLEMENTED_UNTESTED. Next I am selecting another minimal gap from the matrix;
+candidate `SHIP-05` covers used-hull identity/equipment and pricing, with
+`INS-01`/`INS-02` settlement clauses also available for focused acceptance.

@@ -105,6 +105,15 @@ def test_online_player_directory_is_reachable_in_normal_play(ctx_factory, menus)
     assert "player.list_online" in commands
 
 
+def test_landed_surface_exposes_public_and_detailed_planet_reads(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    ctx.state.update(on_planet=True, current_planet_id=77)
+    visible = _visible_options(menus["SURFACE"], ctx)
+    workflows = {option.get("action", {}).get("pycall") for option in visible}
+    assert "planet_view_flow" in workflows
+    assert "planet_overview_flow" in workflows
+
+
 def test_corporation_member_can_reach_leave_workflow(ctx_factory, menus):
     ctx = ctx_factory()
     ctx.state["in_corporation"] = True

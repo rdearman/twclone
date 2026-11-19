@@ -156,6 +156,25 @@ def test_emancipation_refusal_does_not_claim_conversion(
     assert "is now COLONIST" not in output
 
 
+def test_public_planet_view_uses_exact_response_type_and_identity(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory(sector={"id": 17})
+    ctx.state.update(on_planet=True, current_planet_id=77)
+    fake_conn.queue("planet.view", {
+        "status": "ok", "type": "planet.view_v1",
+        "data": {"planet_id": 77, "name": "Nereid", "population": 50,
+                 "population_type": "COLONIST", "owner_id": 999},
+    })
+
+    client.planet_view_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "planet.view", "data": {"planet_id": 77}}]
+    output = capsys.readouterr().out
+    assert "Nereid" in output
+    assert "owner_id" not in output
+
+
 def test_landing_success_with_mismatched_player_refresh_stays_non_actionable(
     ctx_factory, fake_conn, capsys
 ):

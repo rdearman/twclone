@@ -4,8 +4,15 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 42 VERIFIED, 17
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 6
+**Parity refresh — 19 November 2026:** 43 VERIFIED, 16
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 7
+verified `PLANET-01` through a 78-case live PostgreSQL suite. It covers the
+read-only public overview, detailed owner view, dynamic population/production/
+morale data, treasury visibility for owners and corporation members, refusal
+for an unrelated remote player, and state snapshots proving the view changes
+no planetary accounting. Python and Godot now expose the public `planet.view`
+separately from detailed `planet.info`. Exact references are in the matrix.
+Autonomous batch 6
 verified `PLAYER-01`: live acceptance covered duplicate sessions, ascending
 pagination, invalid/empty pages, exact public profile fields and JSON-null
 corporation state. It exposed and fixed a server response defect: PostgreSQL
