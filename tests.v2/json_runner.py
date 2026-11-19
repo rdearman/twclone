@@ -520,6 +520,20 @@ class JsonSuiteRunner:
                      == expected_each["error_code"])
                 for response in responses
             )
+            for response in responses:
+                for assertion in expected_each.get("asserts", []):
+                    actual, found = self._resolve_assertion_path(
+                        response, assertion["path"]
+                    )
+                    expected = self._expand_vars(assertion.get("value"))
+                    passed, detail = self._evaluate_assertion(
+                        assertion["op"], actual, expected, found
+                    )
+                    if not passed:
+                        statuses_ok = False
+                        errors.append(
+                            f"assertion failed at {assertion['path']}: {detail}"
+                        )
             self._current_response = {
                 "id": "test-concurrent",
                 "status": "ok" if statuses_ok and not any(errors) else "error",
@@ -827,6 +841,18 @@ class JsonSuiteRunner:
             passed = isinstance(actual, list)
         elif op == "is_empty":
             passed = isinstance(actual, (list, dict, str)) and len(actual) == 0
+        elif op == "unique_by":
+            passed = (isinstance(actual, list) and isinstance(expected, str)
+                      and all(isinstance(item, dict) and expected in item
+                              for item in actual)
+                      and len({item[expected] for item in actual}) == len(actual))
+        elif op == "sorted_by":
+            values = ([item.get(expected) for item in actual]
+                      if isinstance(actual, list) and isinstance(expected, str)
+                      and all(isinstance(item, dict) for item in actual) else None)
+            passed = values is not None and all(
+                left <= right for left, right in zip(values, values[1:])
+            )
         elif op == "len_gt":
             count = cls._numeric(len(actual)) if isinstance(actual, (list, dict, str)) else None
             right = cls._numeric(expected)

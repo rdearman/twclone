@@ -2,12 +2,12 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 19 November 2026, after autonomous parity batch 5.
+Reviewed: 19 November 2026, after autonomous parity batch 6.
 
 ## Current measures
 
-- Parent requirements: 67 (41 VERIFIED, 18 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`; batch 3 verified `NPC-POP-01`, `NPC-POP-02`, and `NPC-POP-03`; batch 4 verified `EXC-05`, including concurrent settlement across two live servers and PostgreSQL order-lock/accounting assertions; batch 5 verified `POP-06`, including owner/Leader/Officer authorization, Member refusal, allocation conservation, rollback, and Python/Godot menu workflows. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
-- Base clause rows: 227 (119 VERIFIED, 108 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (42 VERIFIED, 17 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`; batch 3 verified `NPC-POP-01`, `NPC-POP-02`, and `NPC-POP-03`; batch 4 verified `EXC-05`, including concurrent settlement across two live servers and PostgreSQL order-lock/accounting assertions; batch 5 verified `POP-06`, including owner/Leader/Officer authorization, Member refusal, allocation conservation, rollback, and Python/Godot menu workflows; batch 6 verified `PLAYER-01` pagination, deduplication, stable order, allowlisted response fields and both client menus. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Base clause rows: 227 (123 VERIFIED, 104 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -294,10 +294,10 @@ unverified.
 | `BANK-05` | clause 2 | durable exact-once occurrence, atomic bank debit/credit/ledger | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-05` | clause 3 | cancellation serializes with execution | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-05` | clause 4 | no arbitrary order cap | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `PLAYER-01` | clause 1 | 1-based page/limit | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `PLAYER-01` | clause 2 | deduplicate authenticated players before pagination | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `PLAYER-01` | clause 3 | deterministic ordering | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `PLAYER-01` | clause 4 | return only ID, username, corporation (null if none), alignment | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `PLAYER-01` | clause 1 | 1-based page/limit | VERIFIED | `suite_player_status.json::case-0007`–`case-0010`: pages 1/2/3 with limit 1 return correct pagination, empty terminal page and reject page 0. Live disposable PostgreSQL suite: 12/12. |
+| `PLAYER-01` | clause 2 | deduplicate authenticated players before pagination | VERIFIED | `suite_player_status.json::case-0005` issues two simultaneous list requests using separate TCP connections with the same authenticated player session; each result has unique player IDs and reports the online total after de-duplication. |
+| `PLAYER-01` | clause 3 | deterministic ordering | VERIFIED | `suite_player_status.json::case-0005`, `case-0007`, `case-0008`: live response IDs are ascending; page 1 returns the lowest online ID and page 2 the next ID. |
+| `PLAYER-01` | clause 4 | return only ID, username, corporation (null if none), alignment | VERIFIED | `suite_player_status.json::case-0005` asserts exact keys on each profile; `case-0008` confirms unaffiliated corporation is JSON null. Python `test_online_player_directory_is_reachable_in_normal_play` passed; Godot command menu `player.list_online` dispatch passed in the 221-check menu regression. |
 | `PLANET-01` | clause 1 | `planet.view` read-only | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `PLANET-01` | clause 2 | `planet.info` detailed management | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `PLANET-01` | clause 3 | appropriate population/production/morale | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |

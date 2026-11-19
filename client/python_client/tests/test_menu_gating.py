@@ -99,6 +99,12 @@ def test_normal_mode_excludes_debug_only_menu_entries(ctx_factory, menus):
     assert "equity.portfolio.list" in exchange_commands
 
 
+def test_online_player_directory_is_reachable_in_normal_play(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    commands = _collect_rpc_commands(menus, "MAIN", ctx)
+    assert "player.list_online" in commands
+
+
 def test_corporation_member_can_reach_leave_workflow(ctx_factory, menus):
     ctx = ctx_factory()
     ctx.state["in_corporation"] = True

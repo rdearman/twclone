@@ -198,7 +198,9 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
           return 0;
         }
       const char *username = db_res_col_text (res, 0, &err);
-      const char *corporation = db_res_col_text (res, 1, &err);
+      bool corporation_is_null = db_res_col_is_null (res, 1);
+      const char *corporation = corporation_is_null
+        ? NULL : db_res_col_text (res, 1, &err);
       int alignment = db_res_col_i32 (res, 2, &err);
       json_t *player = json_object ();
       bool allocation_ok = player && username

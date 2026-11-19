@@ -26,6 +26,24 @@ func _run() -> void:
 		if str(candidate.get("command", "")) == "mail.inbox":
 			communication_mail_action = candidate
 	_check(communication_mail_action.get("fixed", null) is Dictionary and communication_mail_action["fixed"].is_empty(), "communications mail inbox sent unsupported request fields")
+	var online_players_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
+		if str(candidate.get("command", "")) == "player.list_online":
+			online_players_action = candidate
+	_check(not online_players_action.is_empty(), "online player directory is absent from the Godot communications menu")
+	menu._active_category = "COMMUNICATIONS"
+	menu._render_actions()
+	await process_frame
+	var online_players_button := _action_button(menu, "Online players")
+	var before_online_players := captured.size()
+	_check(online_players_button != null and not online_players_button.disabled, "online player directory is unavailable in the Godot menu")
+	if online_players_button != null:
+		online_players_button.pressed.emit()
+	_check(captured.size() == before_online_players + 1 and captured.back()["command"] == "player.list_online", "Godot online player menu did not dispatch the canonical command")
+	captured.resize(before_online_players)
+	menu._active_category = "NAVIGATION"
+	menu._render_actions()
+	await process_frame
 	var stale_scan_button := _action_button(menu, "Scan adjacent sectors")
 	_check(stale_scan_button != null and stale_scan_button.disabled and stale_scan_button.tooltip_text.contains("Refresh the current sector"), "scan was enabled without a fresh authoritative sector")
 	var stale_density_button := _action_button(menu, "Sector density scan")

@@ -241,3 +241,29 @@ IMPLEMENTED_UNTESTED. Next I am checking the small online-player listing
 requirement (`PLAYER-01`); prior regression notes record conflicting page/limit
 and offset/fields schemas, so promotion depends on reconciling that published
 contract rather than assuming the old fixture or implementing a guess.
+
+## Batch 6 — PLAYER-01 online player directory
+
+The current V3 protocol, request/response schemas and server implementation
+agree on one-based `page`/`limit`, unique authenticated players, ascending
+player-ID order, and a four-field public profile. Old recovery notes claiming
+an offset/fields mismatch were stale. Live acceptance found one genuine defect:
+the PostgreSQL driver returned a non-NULL empty string for a SQL NULL
+corporation value unless the result null bitmap was checked. The server now
+uses `db_res_col_is_null()` and emits JSON null for unaffiliated players.
+
+`suite_player_status.json` passed **12/12** against disposable PostgreSQL.
+It issued concurrent same-session requests on separate sockets and asserted
+de-duplication, ordering, exact allowlisted keys, one-based pagination, empty
+terminal page, invalid page refusal and null corporation. Python normal-menu
+reachability passed in `test_menu_gating.py` (**17 passed**); Godot
+communications menu dispatch passed in `command_menu_test.gd` (**221 checks**).
+`make -j4` passed, and focused JSON runner tests passed **32/32**.
+
+`PLAYER-01` is promoted to VERIFIED. Classification moved from 41 VERIFIED /
+18 IMPLEMENTED_UNVERIFIED to **42 VERIFIED / 17 IMPLEMENTED_UNVERIFIED**, with
+7 PARTIAL, 1 BLOCKED; base clause rows now stand at 123 VERIFIED / 104
+IMPLEMENTED_UNTESTED. The next small candidate is `PLANET-01` visibility and
+response privacy, then `SHIP-05` used-hull pricing/identity and insurance
+policy clauses. Any runtime result will be interpreted against the current
+protocol and code rather than stale recovery summaries.

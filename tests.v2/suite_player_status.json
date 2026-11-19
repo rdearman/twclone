@@ -11,6 +11,22 @@
       "password": "password"
     },
     {
+      "name": "Online listing deduplicates concurrent sessions and returns sorted allow-listed profiles",
+      "parallel_requests": [
+        { "user": "status_player", "command": "player.list_online", "data": { "page": 1, "limit": 50 } },
+        { "user": "status_player", "command": "player.list_online", "data": { "page": 1, "limit": 50 } }
+      ],
+      "expect_each": {
+        "status": "ok",
+        "asserts": [
+          { "path": "data.total_online", "op": ">=", "value": 2 },
+          { "path": "data.players", "op": "unique_by", "value": "player_id" },
+          { "path": "data.players", "op": "sorted_by", "value": "player_id" },
+          { "path": "data.players.0", "op": "keys_eq", "value": ["player_id", "username", "corporation", "alignment"] }
+        ]
+      }
+    },
+    {
       "name": "Player List Online",
       "command": "player.list_online",
       "user": "status_player",
@@ -23,6 +39,39 @@
         { "path": "data.limit", "op": "==", "value": 50 },
         { "path": "data.players", "op": "contains", "value": "status_player" },
         { "path": "data.players.0", "op": "keys_eq", "value": ["player_id", "username", "corporation", "alignment"] }
+      ]
+    },
+    {
+      "name": "Online list page one returns lowest player ID and bounded page",
+      "command": "player.list_online", "user": "status_player",
+      "data": { "page": 1, "limit": 1 }, "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total_online", "op": "==", "value": 2 },
+        { "path": "data.returned_count", "op": "==", "value": 1 },
+        { "path": "data.page", "op": "==", "value": 1 },
+        { "path": "data.limit", "op": "==", "value": 1 },
+        { "path": "data.players.0.player_id", "op": "==", "value": "@{admin_player_id}" }
+      ]
+    },
+    {
+      "name": "Online list page two returns the next stable player ID",
+      "command": "player.list_online", "user": "status_player",
+      "data": { "page": 2, "limit": 1 }, "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total_online", "op": "==", "value": 2 },
+        { "path": "data.returned_count", "op": "==", "value": 1 },
+        { "path": "data.players.0.player_id", "op": "==", "value": "@{status_player_player_id}" },
+        { "path": "data.players.0.corporation", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "Online list beyond last page is empty without changing the total",
+      "command": "player.list_online", "user": "status_player",
+      "data": { "page": 3, "limit": 1 }, "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total_online", "op": "==", "value": 2 },
+        { "path": "data.returned_count", "op": "==", "value": 0 },
+        { "path": "data.players", "op": "is_empty" }
       ]
     },
     {

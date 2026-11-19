@@ -60,3 +60,13 @@ def test_missing_paths_and_unknown_operators_fail_closed():
     passed, detail = evaluate("not_a_real_operator", 1, 1, True)
     assert passed is False
     assert "unsupported assertion operator" in detail
+
+
+def test_unique_and_sorted_key_assertions():
+    evaluate = JsonSuiteRunner._evaluate_assertion
+    ordered = [{"player_id": 7}, {"player_id": 12}]
+    assert evaluate("unique_by", ordered, "player_id", True)[0] is True
+    assert evaluate("sorted_by", ordered, "player_id", True)[0] is True
+    assert evaluate("unique_by", [{"player_id": 7}, {"player_id": 7}], "player_id", True)[0] is False
+    assert evaluate("sorted_by", [{"player_id": 12}, {"player_id": 7}], "player_id", True)[0] is False
+    assert evaluate("unique_by", [{"username": "x"}], "player_id", True)[0] is False

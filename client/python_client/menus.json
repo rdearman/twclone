@@ -1933,6 +1933,17 @@
           }
         },
         {
+          "key": "o",
+          "label": "(O) Online players",
+          "action": {
+            "rpc": {
+              "command": "player.list_online",
+              "data": { "page": 1, "limit": 50 }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
           "key": "t",
           "label": "(T) Player trade offers",
           "action": {

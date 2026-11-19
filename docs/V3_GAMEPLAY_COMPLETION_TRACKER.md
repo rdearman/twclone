@@ -4,8 +4,14 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 41 VERIFIED, 18
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 5
+**Parity refresh — 19 November 2026:** 42 VERIFIED, 17
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 6
+verified `PLAYER-01`: live acceptance covered duplicate sessions, ascending
+pagination, invalid/empty pages, exact public profile fields and JSON-null
+corporation state. It exposed and fixed a server response defect: PostgreSQL
+NULL was serialized as an empty string. The Python communications menu now
+exposes Online Players, and Godot menu dispatch is tested. Exact evidence is
+in the clause matrix. Autonomous batch 5
 verified `POP-06` after exposing the already implemented emancipation command
 through landed-planet workflows in Python and Godot. Disposable PostgreSQL
 acceptance covered player ownership, corporation Leader/Officer access, Member
