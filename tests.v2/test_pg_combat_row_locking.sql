@@ -48,7 +48,7 @@ BEGIN
     JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE
     LEFT JOIN corp_members cm ON cm.player_id = op.player_id
     WHERE s.ship_id = v_ship_id
-   FOR UPDATE OF s, st, op SKIP LOCKED;
+   FOR UPDATE OF s, op SKIP LOCKED;
 
   IF v_locked_ship_id IS DISTINCT FROM v_ship_id THEN
     RAISE EXCEPTION 'targeted lock did not retrieve combat ship %', v_ship_id;
@@ -56,4 +56,4 @@ BEGIN
 END
 $test$;
 
-\echo 'Combat row-lock regression passed: original query raises 0A000; targeted locks retrieve the ship.'
+\echo 'Combat row-lock regression passed: original query raises 0A000; targeted mutable-row locks retrieve the ship.'

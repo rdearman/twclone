@@ -1821,6 +1821,13 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
                            "Could not begin warp transaction");
       return 0;
     }
+  if (db_combat_lock_sector_for_entry (db, to) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not serialize destination entry defenses");
+      return 0;
+    }
 
   json_t *toll_accept_value = json_object_get (data, "toll_accept");
   if (json_is_string (toll_offer_value))
@@ -2889,6 +2896,13 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB_TX,
                            "Could not begin transwarp transaction");
+      return 0;
+    }
+  if (db_combat_lock_sector_for_entry (db, to_sector_id) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not serialize destination entry defenses");
       return 0;
     }
   int previous_sector = ctx->sector_id;

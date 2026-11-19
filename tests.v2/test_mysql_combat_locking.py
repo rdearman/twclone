@@ -15,7 +15,7 @@ class CombatLockDialectTests(unittest.TestCase):
         end = repo.index("int db_combat_load_ship_full_unlocked", start)
         query = repo[start:end]
 
-        self.assertIn("sql_for_update_of (db, \"s, st, op\"", query)
+        self.assertIn("sql_for_update_of (db, \"s, op\"", query)
         self.assertIn("SKIP LOCKED", query)
         self.assertIn("LEFT JOIN corp_members cm", query)
 

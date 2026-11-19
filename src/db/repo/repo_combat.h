@@ -43,6 +43,8 @@ int db_combat_list_mines(db_t *db, int player_id, json_t **out_array);
 /* Deploy Fighters */
 int db_combat_get_ship_sector_locked(db_t *db, int ship_id, int *sector_id);
 int db_combat_lock_sector(db_t *db, int sector_id);
+/* Blocking destination lock used to serialize entry-hazard settlement. */
+int db_combat_lock_sector_for_entry(db_t *db, int sector_id);
 int db_combat_sum_sector_fighters(db_t *db, int sector_id, int *total);
 int db_combat_consume_ship_fighters(db_t *db, int ship_id, int amount);
 int db_combat_insert_sector_fighters(db_t *db, int sector_id, int owner_id, int corp_id, int mode, int amount);

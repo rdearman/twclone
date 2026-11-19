@@ -19,6 +19,21 @@
       "password": "qa-password"
     },
     {
+      "name": "Setup ordinary safe-zone arrival player",
+      "setup": "macro_auth_user",
+      "username": "orion_safe_zone_arrival",
+      "password": "qa-password"
+    },
+    {
+      "name": "Include FedSpace sector 10 in the temporary Orion-control overlap fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO cluster_sectors(cluster_id,sector_id) SELECT clusters_id,10 FROM clusters WHERE role='ORION' ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Read Orion controlled-sector center",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -51,7 +66,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES (@{orion_arrival_origin},@{orion_arrival_home}),(@{orion_arrival_home},@{orion_arrival_origin}) ON CONFLICT DO NOTHING;"
+        "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES (@{orion_arrival_origin},@{orion_arrival_home}),(@{orion_arrival_home},@{orion_arrival_origin}),(2,10) ON CONFLICT DO NOTHING;"
       },
       "expect": {
         "status": "ok"

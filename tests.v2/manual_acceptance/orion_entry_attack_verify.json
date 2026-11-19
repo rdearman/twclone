@@ -19,6 +19,12 @@
       "password": "qa-password"
     },
     {
+      "name": "Login safe-zone arrival player after restart",
+      "setup": "macro_auth_user",
+      "username": "orion_safe_zone_arrival",
+      "password": "qa-password"
+    },
+    {
       "name": "Read Orion controlled-sector center after restart",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -293,6 +299,111 @@
       ]
     },
     {
+      "name": "Stage an Orion blockader and ordinary player in overlapping FedSpace sector 10",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH player_reset AS (UPDATE players SET sector_id=1 WHERE name='orion_safe_zone_arrival' RETURNING player_id,ship_id), safe_ship AS (UPDATE ships s SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=0 FROM player_reset p WHERE s.ship_id=p.ship_id RETURNING s.ship_id), npc_blockader AS (UPDATE ships s SET sector_id=10,personality='blockader',destroyed=FALSE,hull=100,shields=0 FROM ship_ownership so JOIN players p ON p.player_id=so.player_id WHERE so.ship_id=s.ship_id AND p.name='Orion QA captain 1' RETURNING s.ship_id) DELETE FROM npc_action_log l USING player_reset p WHERE l.faction='ORION' AND l.target_player_id=p.player_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear disposable deployed defenses from the FedSpace travel path",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id IN (2,10);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Safe-zone player enters the Orion-overlap sector by ordinary warp",
+      "command": "move.warp",
+      "user": "orion_safe_zone_arrival",
+      "data": { "to_sector_id": 2 },
+      "expect": { "status": "ok", "type": "move.result" }
+    },
+    {
+      "name": "Safe-zone player continues ordinary warp into sector 10",
+      "command": "move.warp",
+      "user": "orion_safe_zone_arrival",
+      "data": { "to_sector_id": 10 },
+      "expect": { "status": "ok", "type": "move.result" }
+    },
+    {
+      "name": "Confirm Orion-controlled safe-zone arrival before scheduler settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT sector_id=10 FROM players WHERE name='orion_safe_zone_arrival')::int,(SELECT COUNT(*)>0 FROM cluster_sectors cs JOIN clusters c ON c.clusters_id=cs.cluster_id WHERE c.role='ORION' AND cs.sector_id=10)::int,(SELECT hull=100 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_safe_zone_arrival'))::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Run authoritative Orion scheduler with a blockader in protected FedSpace",
+      "command": "sys.cron.npc_step_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "FedSpace protection prevents Orion attack and preserves hull",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT hull=100 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_safe_zone_arrival'))::int,(SELECT COUNT(*)=0 FROM npc_action_log WHERE faction='ORION' AND action_type IN ('attack','blockade_attack') AND target_player_id=(SELECT player_id FROM players WHERE name='orion_safe_zone_arrival'))::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Stage a hostile target after its Orion blockader is removed before settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH target AS (UPDATE players SET sector_id=@{orion_arrival_home} WHERE name='orion_arrival_hostile' RETURNING player_id,ship_id), target_ship AS (UPDATE ships s SET sector_id=@{orion_arrival_home},onplanet=FALSE,destroyed=FALSE,hull=100,shields=0 FROM target t WHERE s.ship_id=t.ship_id RETURNING s.ship_id), quiet_fleet AS (UPDATE ships s SET sector_id=@{orion_arrival_home},personality='defensive',destroyed=(p.name='Orion QA captain 1') FROM ship_ownership so JOIN players p ON p.player_id=so.player_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE so.ship_id=s.ship_id AND c.tag='ORION' AND p.is_npc=TRUE RETURNING s.ship_id) DELETE FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM target);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify the targeting blockader is destroyed before scheduler settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT COALESCE(destroyed,FALSE) FROM ships WHERE name='Orion QA NPC hull 1')::int,(SELECT COUNT(*)=0 FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile'))::int,(SELECT hull=100 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Settle scheduler after blockader removal",
+      "command": "sys.cron.npc_step_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Removed blockader cannot attack during scheduler settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT hull=100 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))::int,(SELECT COUNT(*)=0 FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile'))::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 }
+      ]
+    },
+    {
       "name": "Logout hostile player",
       "command": "auth.logout",
       "user": "orion_arrival_hostile",
@@ -307,6 +418,12 @@
       "expect": {
         "status": "ok"
       }
+    },
+    {
+      "name": "Logout safe-zone player",
+      "command": "auth.logout",
+      "user": "orion_safe_zone_arrival",
+      "expect": { "status": "ok" }
     }
   ]
 }

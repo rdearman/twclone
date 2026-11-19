@@ -19,7 +19,7 @@ SELECT s.ship_id
  JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE
  LEFT JOIN corp_members cm ON cm.player_id = op.player_id
  WHERE s.ship_id = $ship_id
- FOR UPDATE OF s, st, op;
+ FOR UPDATE OF s, op;
 \\! touch "$tmpdir/locked"
 SELECT pg_sleep(2);
 ROLLBACK;
@@ -37,7 +37,7 @@ if [[ ! -e "$tmpdir/locked" ]]; then
   exit 1
 fi
 
-skipped=$("${PSQL[@]}" -c "SELECT s.ship_id FROM ships s JOIN shiptypes st ON st.shiptypes_id = s.type_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = $ship_id FOR UPDATE OF s, st, op SKIP LOCKED")
+skipped=$("${PSQL[@]}" -c "SELECT s.ship_id FROM ships s JOIN shiptypes st ON st.shiptypes_id = s.type_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = $ship_id FOR UPDATE OF s, op SKIP LOCKED")
 if [[ -n "$skipped" ]]; then
   wait "$holder_pid" || true
   echo "SKIP LOCKED returned a ship held by a concurrent combat transaction: $skipped" >&2
@@ -45,7 +45,7 @@ if [[ -n "$skipped" ]]; then
 fi
 
 wait "$holder_pid"
-released=$("${PSQL[@]}" -c "SELECT s.ship_id FROM ships s JOIN shiptypes st ON st.shiptypes_id = s.type_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = $ship_id FOR UPDATE OF s, st, op SKIP LOCKED")
+released=$("${PSQL[@]}" -c "SELECT s.ship_id FROM ships s JOIN shiptypes st ON st.shiptypes_id = s.type_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = $ship_id FOR UPDATE OF s, op SKIP LOCKED")
 if [[ "$released" != "$ship_id" ]]; then
   echo "Combat row remained locked after rollback; expected $ship_id, got '$released'" >&2
   exit 1

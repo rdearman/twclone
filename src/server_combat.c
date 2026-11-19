@@ -1933,11 +1933,36 @@ server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
       if (!*report)
         return -1;
     }
+  /* A destination may receive multiple arrivals at once. Lock its sector row
+   * before taking any asset or ship locks so all arrivals resolve hazards in
+   * one order and cannot deadlock while consuming shared defenses. This nests
+   * inside the movement transaction when one is already active.
+   */
+  db_error_t txerr;
+  db_error_clear (&txerr);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    return -1;
+  if (db_combat_lock_sector_for_entry (db, sector_id) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  int result = 0;
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   
   /* Apply to entering ship */
   int destroyed = server_combat_apply_entry_hazards_single (db, ctx, sector_id,
                                                             report);
+  if (destroyed < 0)
+    {
+      result = -1;
+      goto finish_entry_transaction;
+    }
+  if (destroyed == 1)
+    {
+      result = 1;
+      goto finish_entry_transaction;
+    }
   
   /* Apply to towed ship if any */
   if (ship_id > 0)
@@ -1954,18 +1979,37 @@ server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
           int towed_rc = server_combat_apply_entry_hazards_single
             (db, &towed_ctx, sector_id, NULL);
           if (towed_rc < 0)
-            return -1;
+            {
+              result = -1;
+              goto finish_entry_transaction;
+            }
           if (towed_rc == 1)
             {
               /* Towed ship destroyed! Disengage beam. */
               if (repo_ships_clear_is_being_towed_by (db, towed_sid) != 0
                   || repo_ships_clear_towing_id (db, ship_id) != 0)
-                return -1;
+                {
+                  result = -1;
+                  goto finish_entry_transaction;
+                }
+              result = 1;
+              goto finish_entry_transaction;
             }
         }
     }
 
-  return destroyed;
+finish_entry_transaction:
+  if (result < 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  return result;
 }
 
 int

@@ -197,6 +197,50 @@ int db_combat_lock_sector(db_t *db, int sector_id) {
     return (found && err.code == 0) ? 0 : -1;
 }
 
+int
+db_combat_lock_sector_for_entry (db_t *db, int sector_id)
+{
+  if (!db || sector_id <= 0)
+    return -1;
+  if (db_backend (db) == DB_BACKEND_POSTGRES)
+    {
+      /* Movement has already written rows with sector foreign keys by the
+       * time entry hazards run. Those writes hold KEY SHARE locks on the
+       * sectors row, so upgrading two concurrent transactions to FOR UPDATE
+       * can deadlock. A transaction-scoped advisory lock serializes the same
+       * destination without conflicting with those foreign-key locks.
+       */
+      db_res_t *lock_res = NULL;
+      db_error_t lock_err = {0};
+      char lock_sql[256];
+      int64_t lock_key = ((int64_t) 0x5457434c << 32)
+                         | (uint32_t) sector_id;
+      if (sql_build (db,
+                     "SELECT pg_advisory_xact_lock({1});",
+                     lock_sql, sizeof (lock_sql)) != 0
+          || !db_query (db, lock_sql,
+                        (db_bind_t[]){ db_bind_i64 (lock_key) },
+                        1, &lock_res, &lock_err))
+        return -1;
+      int locked = db_res_step (lock_res, &lock_err) ? 1 : 0;
+      db_res_finalize (lock_res);
+      return locked && lock_err.code == 0 ? 0 : -1;
+    }
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  char sql_tmpl[256], sql[256];
+  snprintf (sql_tmpl, sizeof (sql_tmpl),
+            "SELECT sector_id FROM sectors WHERE sector_id = {1}%s;",
+            sql_for_update (db));
+  if (sql_build (db, sql_tmpl, sql, sizeof (sql)) != 0
+      || !db_query (db, sql, (db_bind_t[]){ db_bind_i64 (sector_id) }, 1,
+                    &res, &err))
+    return -1;
+  int found = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return found && err.code == 0 ? 0 : -1;
+}
+
 int db_combat_sum_sector_fighters(db_t *db, int sector_id, int *total) {
     if (!db || !total) return -1;
     db_res_t *res = NULL;
@@ -290,7 +334,12 @@ int db_combat_load_ship_full_locked(db_t *db, int ship_id, repo_combat_ship_full
     db_error_t err = {0};
     char lock_clause[128] = { 0 };
     char sql_tmpl[1024];
-    if (sql_for_update_of (db, "s, st, op", lock_clause,
+    /* Shiptype combat attributes are catalogue data and never mutate as part
+     * of combat. Locking the shared shiptypes row for every ship of a class
+     * creates cross-ship lock cycles with sector-entry serialization. Lock
+     * only the mutable ship state and its primary ownership row.
+     */
+    if (sql_for_update_of (db, "s, op", lock_clause,
 			   sizeof (lock_clause)) != 0)
       return -1;
     if (skip_locked)
