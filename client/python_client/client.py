@@ -3057,6 +3057,17 @@ def pretty_print_shipyard_list(ctx):
     else:
         print("No ships available at this shipyard.")
 
+    used_ships = data.get("used_available", [])
+    print("\nUsed hulls (existing ships; identity and installed equipment retained):")
+    if isinstance(used_ships, list) and used_ships:
+        for used in used_ships:
+            if isinstance(used, dict):
+                print(f"  - {used.get('name')} [{used.get('ship_type')}] ship {used.get('ship_id')} "
+                      f"· {used.get('price')} cr · hull {used.get('hull_value')} + equipment "
+                      f"{used.get('installed_equipment_value')} (inventory {used.get('used_inventory_id')})")
+    else:
+        print("  No used hulls are listed.")
+
 @register("pretty_print_hardware_list")
 def pretty_print_hardware_list(ctx):
     resp = ctx.state.get("last_rpc")
@@ -8892,6 +8903,80 @@ def shipyard_upgrade_flow(ctx: Context):
     else:
         print(f"[Error] Ship upgrade failed: {upgrade_resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(upgrade_resp)
+
+@register("shipyard_used_purchase_flow")
+def shipyard_used_purchase_flow(ctx: Context):
+    """Purchase a server-listed existing used hull without replacing its ID."""
+    list_resp = ctx.conn.rpc("shipyard.list", {})
+    ctx.state["last_rpc"] = list_resp
+    if (not isinstance(list_resp, dict) or list_resp.get("status") != "ok"
+            or list_resp.get("type") != "shipyard.list_v1"):
+        print("[Error] Could not retrieve the authoritative used-hull list.")
+        return
+    data = list_resp.get("data")
+    used = data.get("used_available") if isinstance(data, dict) else None
+    if not isinstance(used, list):
+        print("[Error] The shipyard response did not contain used_available.")
+        return
+    valid_used = [entry for entry in used if isinstance(entry, dict)
+                  and type(entry.get("used_inventory_id")) is int
+                  and entry["used_inventory_id"] > 0
+                  and type(entry.get("ship_id")) is int and entry["ship_id"] > 0
+                  and type(entry.get("price")) is int and entry["price"] >= 0]
+    if not valid_used:
+        print("No used hulls are currently available at this shipyard.")
+        return
+    print("\n--- Used Hulls Available at this Shipyard ---")
+    for index, entry in enumerate(valid_used, 1):
+        print(f"  {index}. {entry.get('name', 'Unnamed hull')} ({entry.get('ship_type', 'Unknown type')}) "
+              f"ID {entry['ship_id']} · price {entry['price']} credits · hull value {entry.get('hull_value')} "
+              f"+ retained equipment {entry.get('installed_equipment_value')}")
+    try:
+        choice = int(input("Enter used hull number to purchase: ").strip())
+    except ValueError:
+        print("Invalid choice.")
+        return
+    if not 1 <= choice <= len(valid_used):
+        print("Invalid choice.")
+        return
+    selected = valid_used[choice - 1]
+    inventory_id = selected["used_inventory_id"]
+    original_ship_id = selected["ship_id"]
+    price = selected["price"]
+    if input(f"Purchase existing hull {selected.get('name', original_ship_id)} for {price} credits? [y/N]: ").strip().lower() != "y":
+        print("Used-hull purchase cancelled.")
+        return
+    result = ctx.conn.rpc("shipyard.upgrade", {"used_inventory_id": inventory_id})
+    ctx.state["last_rpc"] = result
+    receipt = get_data(result) if isinstance(result, dict) else None
+    valid_receipt = (
+        isinstance(result, dict) and result.get("status") == "ok"
+        and result.get("type") == "shipyard.upgraded_v1"
+        and isinstance(receipt, dict)
+        and receipt.get("used_inventory_id") == inventory_id
+        and receipt.get("ship_id") == original_ship_id
+        and receipt.get("credits_spent") == price
+    )
+    if not valid_receipt:
+        if isinstance(result, dict) and result.get("status") != "ok":
+            print(f"[Error] Used-hull purchase refused: {_planet_error(result)}")
+        else:
+            print("[Warning] Used-hull purchase was not confirmed by a matching server receipt.")
+        _hud_rpc(ctx, "player.my_info", {})
+        _hud_rpc(ctx, "ship.status", {})
+        if not _refresh_sector_after_shipyard(ctx):
+            print("[Warning] Could not refresh sector after the uncertain used-hull response.")
+        return
+    print(f"Purchased existing ship {original_ship_id} for {price} credits; hull and equipment identity were retained.")
+    my_info = _hud_rpc(ctx, "player.my_info", {})
+    if my_info.get("status") == "ok":
+        ctx.player_info = get_data(my_info)
+    else:
+        print("[Warning] Could not refresh player credits after used-hull purchase.")
+    if _hud_rpc(ctx, "ship.status", {}).get("status") != "ok":
+        print("[Warning] Could not refresh the active used ship status.")
+    if not _refresh_sector_after_shipyard(ctx):
+        print("[Warning] Could not refresh sector after used-hull purchase.")
 
 @register("buy_ship_flow")
 def buy_ship_flow(ctx: Context):

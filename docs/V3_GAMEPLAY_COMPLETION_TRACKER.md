@@ -4,8 +4,18 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 43 VERIFIED, 16
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 7
+**Parity refresh — 19 November 2026:** 44 VERIFIED, 15
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 8
+verified `SHIP-05` through a 35-case live PostgreSQL used-hull and sale
+acceptance. The purchase retained the original hull identity, condition and
+equipment, transferred primary ownership and active-ship identity atomically,
+deducted the exact 80% configured valuation once, removed the inventory row,
+and rejected a retry. The same suite confirmed standalone sales still pay the
+independent 60% rate. The acceptance exposed and fixed a server transaction
+defect: used-hull purchase transferred primary ownership but did not update
+the player's active `ship_id`, violating the deferred ship-owner invariant.
+Python menu/workflow and Godot shipyard UI regressions pass; exact references
+are in the clause matrix and autonomous progress log. Autonomous batch 7
 verified `PLANET-01` through a 78-case live PostgreSQL suite. It covers the
 read-only public overview, detailed owner view, dynamic population/production/
 morale data, treasury visibility for owners and corporation members, refusal

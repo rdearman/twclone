@@ -316,9 +316,9 @@ func _run() -> void:
 	menu.show_shipyard({"available": [
 		{"name": "Scout", "type_id": 7, "eligible": true, "net_cost": "100"},
 		{"name": "Capital", "type_id": 8, "eligible": false, "reasons": ["insufficient holds"]},
-	]}, "Bit Banger")
-	_check(menu._shipyard_rows.get_child_count() == 2, "shipyard list did not render available hull choices")
-	if menu._shipyard_rows.get_child_count() == 2:
+	], "used_available": [{"used_inventory_id": 91, "ship_id": 42, "name": "Retained Scout", "ship_type": "Scout", "price": 12345, "hull_value": 10000, "installed_equipment_value": 5431}]}, "Bit Banger")
+	_check(menu._shipyard_rows.get_child_count() == 4, "shipyard list did not render new and used hull choices")
+	if menu._shipyard_rows.get_child_count() >= 3:
 		_check((menu._shipyard_rows.get_child(0) as Button).disabled == false, "eligible shipyard hull was disabled")
 		_check((menu._shipyard_rows.get_child(1) as Button).disabled, "ineligible shipyard hull was selectable")
 	menu._choose_shipyard_hull(7, "Bit Banger")
@@ -327,17 +327,28 @@ func _run() -> void:
 	_check(captured.size() == 9 and captured[8]["command"] == "shipyard.upgrade", "shipyard selection did not submit upgrade")
 	if captured.size() > 8:
 		_check(captured[8]["data"] == {"new_type_id": 7, "new_ship_name": "New Scout"} and captured[8]["mutating"], "shipyard upgrade payload was incorrect")
+	var used_hull_button := menu._shipyard_rows.get_child(3) as Button
+	_check(not used_hull_button.disabled, "server-listed used hull was unavailable")
+	var before_used_purchase := captured.size()
+	used_hull_button.pressed.emit()
+	_check(menu._form_dialog.visible, "used-hull purchase did not require confirmation")
+	if menu._form_dialog.visible:
+		(menu._form_dialog.get_ok_button() as Button).pressed.emit()
+	_check(captured.size() == before_used_purchase + 1 and captured.back()["command"] == "shipyard.upgrade", "used-hull menu did not dispatch upgrade command")
+	if captured.size() > before_used_purchase:
+		_check(captured[before_used_purchase]["data"] == {"used_inventory_id": 91}, "used-hull request did not use the server-listed inventory ID")
+		_check(captured[before_used_purchase]["mutating"], "used-hull purchase was not marked as a mutation")
 	menu._choose_action({"command": "player.set_prefs", "label": "Set clock preference", "mutating": true, "preference_key": "ui.clock_24h", "preference_type": "bool", "fields": [["value", "boolean", "Use 24-hour clock", "false"]]})
 	(menu._form_fields["value"] as CheckBox).button_pressed = false
 	menu._submit_form()
-	_check(captured.size() == 10 and captured[9]["data"] == {"items": [{"key": "ui.clock_24h", "type": "bool", "value": false}]}, "preference form did not construct the server's items payload")
+	_check(captured.size() == 11 and captured[10]["data"] == {"items": [{"key": "ui.clock_24h", "type": "bool", "value": false}]}, "preference form did not construct the server's items payload")
 	menu.show_deployed_assets({"entries": [{"asset_id": 21, "count": 12, "offense_mode": "DEFEND"}]}, "fighters", 17)
 	await process_frame
 	_check(menu._shipyard_rows.get_child_count() == 1, "deployed fighter asset was not rendered")
 	menu._recall_asset(21)
-	_check(captured.size() == 11 and captured[10]["command"] == "fighters.recall", "fighter recall did not emit the server command")
-	if captured.size() > 10:
-		_check(captured[10]["data"] == {"sector_id": 17, "asset_id": 21} and captured[10]["mutating"], "fighter recall omitted sector or asset identity")
+	_check(captured.size() == 12 and captured[11]["command"] == "fighters.recall", "fighter recall did not emit the server command")
+	if captured.size() > 11:
+		_check(captured[11]["data"] == {"sector_id": 17, "asset_id": 21} and captured[11]["mutating"], "fighter recall omitted sector or asset identity")
 	menu.show_deployed_assets({"entries": [
 		{"asset_id": "22", "count": 4, "offense_mode": "DEFEND"},
 		{"asset_id": true, "count": 4, "offense_mode": "DEFEND"},
@@ -346,27 +357,27 @@ func _run() -> void:
 	await process_frame
 	_check(menu._shipyard_rows.get_child_count() == 1, "schema-mismatched deployment IDs became actionable recall rows")
 	menu._recall_asset(23)
-	_check(captured.size() == 12 and captured[11]["data"] == {"sector_id": 17, "asset_id": 23}, "valid authoritative deployment ID was not recallable")
+	_check(captured.size() == 13 and captured[12]["data"] == {"sector_id": 17, "asset_id": 23}, "valid authoritative deployment ID was not recallable")
 	_check(not menu._categories().has("TAVERN"), "Tavern commands were exposed outside the StarDock tavern")
 	menu._choose_action({"command": "tavern.dice.play", "label": "Play dice", "mutating": true})
-	_check(captured.size() == 12, "a Tavern RPC was sent without Tavern access")
+	_check(captured.size() == 13, "a Tavern RPC was sent without Tavern access")
 	menu.set_tavern_access(true)
 	_check(menu._categories().has("TAVERN") and menu._active_category == "TAVERN", "entering the Tavern did not expose its command category")
 	menu._choose_action({"label": "Post tavern graffiti", "command": "tavern.graffiti.post", "mutating": true, "fields": [["text", "text", "Graffiti", ""]]})
 	(menu._form_fields["text"] as LineEdit).text = "Hello, spacefarers"
 	menu._submit_form()
-	_check(captured.size() == 13 and captured[12]["data"] == {"text": "Hello, spacefarers"}, "tavern graffiti did not send its handler-confirmed text field")
+	_check(captured.size() == 14 and captured[13]["data"] == {"text": "Hello, spacefarers"}, "tavern graffiti did not send its handler-confirmed text field")
 	menu._choose_action({"label": "Buy a rumour hint · 50 CR", "command": "tavern.rumour.get_hint", "mutating": true})
 	menu._submit_form()
-	_check(captured.size() == 14 and captured[13]["command"] == "tavern.rumour.get_hint" and captured[13]["data"].is_empty(), "paid rumour action did not confirm and send the empty server payload")
+	_check(captured.size() == 15 and captured[14]["command"] == "tavern.rumour.get_hint" and captured[14]["data"].is_empty(), "paid rumour action did not confirm and send the empty server payload")
 	menu.set_tavern_access(false)
 	_check(not menu._categories().has("TAVERN") and menu._active_category != "TAVERN", "leaving the Tavern left its commands exposed")
 	menu.set_activity_history(["Maintenance · Scheduled in ten minutes."])
 	menu._choose_action({"local_activity": true})
-	_check(captured.size() == 14, "opening recent event history emitted a server command")
+	_check(captured.size() == 15, "opening recent event history emitted a server command")
 	_check(menu._result_text.text == "Maintenance · Scheduled in ten minutes.", "recent event history did not show the sanitized event summary")
 	menu._choose_action({"local_help": true})
-	_check(captured.size() == 14, "opening the field guide emitted a server command")
+	_check(captured.size() == 15, "opening the field guide emitted a server command")
 	_check(menu._result_text.text.contains("Actions are discrete requests") and menu._result_text.text.contains("screen position of a marker is decorative"), "field guide omitted the authoritative command and decorative-coordinate rules")
 	menu._choose_action({"label": "Jettison cargo", "command": "trade.jettison", "mutating": true, "form_notice": "Permanently destroys cargo and consumes one turn.", "fields": [["commodity", "text", "Commodity", "ore"], ["quantity", "integer", "Quantity", "1"]]})
 	var jettison_notice_shown := false
@@ -377,9 +388,9 @@ func _run() -> void:
 	menu._form_fields["commodity"].text = "ore"
 	menu._form_fields["quantity"].text = "3"
 	menu._submit_form()
-	_check(captured.size() == 15 and captured[14]["command"] == "trade.jettison", "handler-compatible cargo jettison command was not submitted")
+	_check(captured.size() == 16 and captured[15]["command"] == "trade.jettison", "handler-compatible cargo jettison command was not submitted")
 	if captured.size() > 14:
-		_check(captured[14]["data"] == {"commodity": "ore", "quantity": 3} and captured[14]["mutating"], "cargo jettison did not use the implemented commodity/quantity contract")
+		_check(captured[15]["data"] == {"commodity": "ore", "quantity": 3} and captured[15]["mutating"], "cargo jettison did not use the implemented commodity/quantity contract")
 	menu._snapshot["freshness"] = {"sector": "fresh"}
 	var navigation_actions: Array = CommandMenu.COMMANDS.get("NAVIGATION", [])
 	var route_action: Dictionary = {}
@@ -390,16 +401,16 @@ func _run() -> void:
 	menu._choose_action(route_action)
 	(menu._form_fields["to_sector_id"] as LineEdit).text = "42"
 	menu._submit_form()
-	_check(captured.size() == 16 and captured[15]["command"] == "move.autopilot.start", "route planner did not use the implemented compatible command")
+	_check(captured.size() == 17 and captured[16]["command"] == "move.autopilot.start", "route planner did not use the implemented compatible command")
 	if captured.size() > 15:
-		_check(captured[15]["data"] == {"to_sector_id": 42} and captured[15]["mutating"], "route planner did not mark the saved-route update as mutating")
+		_check(captured[16]["data"] == {"to_sector_id": 42} and captured[16]["mutating"], "route planner did not mark the saved-route update as mutating")
 	var autopilot_status_action: Dictionary = {}
 	for candidate in navigation_actions:
 		if str(candidate.get("command", "")) == "move.autopilot.status":
 			autopilot_status_action = candidate
 	_check(not autopilot_status_action.is_empty(), "navigation menu does not expose the implemented autopilot status query")
 	menu._choose_action(autopilot_status_action)
-	_check(captured.size() == 17 and captured[16]["command"] == "move.autopilot.status" and captured[16]["data"].is_empty() and not captured[16]["mutating"], "autopilot status did not issue the empty read-only command")
+	_check(captured.size() == 18 and captured[17]["command"] == "move.autopilot.status" and captured[17]["data"].is_empty() and not captured[17]["mutating"], "autopilot status did not issue the empty read-only command")
 	var expected_controls := [
 		{"label": "Autopilot · stop at next sector", "command": "move.autopilot.control", "data": {"action": "stop_at_next"}},
 		{"label": "Autopilot · continue route", "command": "move.autopilot.control", "data": {"action": "continue"}},
@@ -428,7 +439,7 @@ func _run() -> void:
 	menu._choose_action(warp_action)
 	(menu._form_fields["to_sector_id"] as LineEdit).text = "18"
 	menu._submit_form()
-	_check(captured.size() == 22 and captured[21]["command"] == "move.warp" and captured[21]["data"] == {"to_sector_id": 18} and captured[21]["mutating"], "numeric warp did not use the direct authoritative move command")
+	_check(captured.size() == 23 and captured[22]["command"] == "move.warp" and captured[22]["data"] == {"to_sector_id": 18} and captured[22]["mutating"], "numeric warp did not use the direct authoritative move command")
 	menu._snapshot["disconnected"] = false
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
@@ -439,7 +450,7 @@ func _run() -> void:
 	menu._choose_action(session_commands[0])
 	_check(menu._logout_dialog.visible, "logout did not require a confirmation step")
 	menu._logout_dialog.confirmed.emit()
-	_check(captured.size() == 23 and captured[22]["command"] == "auth.logout" and captured[22]["data"].is_empty(), "confirmed logout did not send the documented empty payload")
+	_check(captured.size() == 24 and captured[23]["command"] == "auth.logout" and captured[23]["data"].is_empty(), "confirmed logout did not send the documented empty payload")
 	var pinned_help := {"label": "Controls and command flow", "local_help": true}
 	menu._pinned_actions.clear()
 	menu._key_bindings.clear()

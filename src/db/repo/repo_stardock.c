@@ -981,6 +981,19 @@ repo_stardock_purchase_used_ship (db_t *db, int32_t player_id,
              (db_bind_t[]){db_bind_i32 (used_ship_id),db_bind_i32 (player_id)},
              2, &err))
       goto used_fail;
+    /* The used hull becomes the buyer's active ship in the same transaction
+     * as its primary ownership transfer. The deferred active-owner invariant
+     * validates both records at commit. */
+    if (sql_build (db,
+        "UPDATE players SET ship_id={1} WHERE player_id={2} AND ship_id={3}",
+        sql, sizeof sql) != 0)
+      { err.code = ERR_DB_QUERY_FAILED; goto used_fail; }
+    affected = 0;
+    if (!db_exec_rows_affected (db, sql,
+          (db_bind_t[]){db_bind_i32 (used_ship_id),db_bind_i32 (player_id),
+            db_bind_i32 (old_ship_id)}, 3, &affected, &err)
+        || affected != 1)
+      { if (!err.code) err.code = ERR_DB_BUSY; goto used_fail; }
     if (sql_build (db,
         "DELETE FROM shipyard_used_inventory WHERE used_inventory_id={1} "
         "AND ship_id={2} AND port_id={3}", sql, sizeof sql) != 0)

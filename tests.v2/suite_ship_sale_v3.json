@@ -95,7 +95,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "WITH yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players SET sector_id = (SELECT sector_id FROM yard) WHERE name = 'ship_sale_v3' RETURNING player_id, ship_id), active AS (UPDATE ships SET sector_id = (SELECT sector_id FROM yard), ported = (SELECT port_id FROM yard), ore = 1, shields=0, installed_shields=0, mines = 1, limpets = 1, probes = 1, photons = 1, beacons = 1 WHERE ship_id = (SELECT ship_id FROM moved) RETURNING ship_id, type_id, sector_id), replacement AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) SELECT 'Sale replacement V3', type_id, sector_id, 10, 0, 0 FROM active RETURNING ship_id), ownership AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT replacement.ship_id, moved.player_id, 1, TRUE FROM replacement CROSS JOIN moved RETURNING ship_id) SELECT yard.port_id, active.ship_id, ownership.ship_id FROM yard CROSS JOIN active CROSS JOIN ownership;"
+        "sql": "WITH yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players SET sector_id = (SELECT sector_id FROM yard) WHERE name = 'ship_sale_v3' RETURNING player_id, ship_id), active AS (UPDATE ships SET sector_id = (SELECT sector_id FROM yard), ported = (SELECT port_id FROM yard), hull=73, ore = 1, shields=0, installed_shields=0, mines = 1, limpets = 1, probes = 1, photons = 1, beacons = 1 WHERE ship_id = (SELECT ship_id FROM moved) RETURNING ship_id, type_id, sector_id), replacement AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) SELECT 'Sale replacement V3', type_id, sector_id, 10, 0, 0 FROM active RETURNING ship_id), ownership AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT replacement.ship_id, moved.player_id, 1, TRUE FROM replacement CROSS JOIN moved RETURNING ship_id) SELECT yard.port_id, active.ship_id, ownership.ship_id FROM yard CROSS JOIN active CROSS JOIN ownership;"
       },
       "expect": { "status": "ok" },
       "save": {
@@ -174,6 +174,85 @@
       "expect": { "status": "refused" }
     },
     {
+      "name": "Confirm used resale factor defaults to 80 percent",
+      "command": "sysop.config.get", "user": "admin",
+      "data": { "key": "shipyard_used_resale_factor_bp" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.value", "op": "==", "value": 8000 } ]
+    },
+    {
+      "name": "Fund ordinary used-hull buyer fixture",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET credits=100000000 WHERE name='ship_sale_v3';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock the ordinary used-hull buyer at the inventory StarDock",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "WITH buyer AS (SELECT player_id,ship_id,sector_id FROM players WHERE name='ship_sale_v3'), yard AS (SELECT port_id,sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id=p.porttype_id WHERE pt.is_stardock=TRUE ORDER BY port_id LIMIT 1) UPDATE ships SET sector_id=(SELECT sector_id FROM yard),ported=(SELECT port_id FROM yard) WHERE ship_id=(SELECT ship_id FROM buyer) AND (SELECT sector_id FROM yard)=(SELECT sector_id FROM buyer);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List used hull and verify price includes retained equipment at 80 percent",
+      "command": "shipyard.list", "user": "ship_sale_v3", "data": {},
+      "expect": { "status": "ok", "type": "shipyard.list_v1" },
+      "save": {
+        "sale_test_used_inventory_id": "data.used_available.0.used_inventory_id",
+        "sale_test_used_ship_id": "data.used_available.0.ship_id",
+        "sale_test_used_price": "data.used_available.0.price"
+      },
+      "asserts": [
+        { "path": "data.used_available.0.ship_id", "op": "==", "value": "@{sale_test_active_ship_id}" },
+        { "path": "data.used_available.0.hull_value", "op": ">", "value": 0 },
+        { "path": "data.used_available.0.installed_equipment_value", "op": "==", "value": 54200 },
+        { "path": "data.used_available.0.price", "op": "==", "value": { "sql_int": "SELECT ((hull_valuation + equipment_valuation) * 8000) / 10000 FROM ship_sale_audit WHERE sale_id=@{sale_test_sale_id};" } }
+      ]
+    },
+    {
+      "name": "Capture credits before used-hull purchase",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT credits FROM players WHERE name='ship_sale_v3';" },
+      "expect": { "status": "ok" },
+      "save": { "sale_test_used_credits_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Purchase listed used hull through ordinary shipyard workflow",
+      "command": "shipyard.upgrade", "user": "ship_sale_v3",
+      "data": { "used_inventory_id": "@sale_test_used_inventory_id" },
+      "expect": { "status": "ok", "type": "shipyard.upgraded_v1" },
+      "asserts": [
+        { "path": "data.ship_id", "op": "==", "value": "@{sale_test_active_ship_id}" },
+        { "path": "data.used_inventory_id", "op": "==", "value": "@{sale_test_used_inventory_id}" },
+        { "path": "data.credits_spent", "op": "==", "value": "@{sale_test_used_price}" }
+      ]
+    },
+    {
+      "name": "Used purchase preserves original ID condition equipment and atomically changes ownership and credits",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.ship_id=@{sale_test_active_ship_id} THEN 1 ELSE 0 END, (SELECT COUNT(*) FROM ships WHERE ship_id=@{sale_test_active_ship_id}), s.hull, s.mines, s.limpets, s.probes, s.photons, s.beacons, (SELECT COUNT(*) FROM shipyard_used_inventory WHERE ship_id=@{sale_test_active_ship_id}), (SELECT COUNT(*) FROM ship_ownership WHERE ship_id=@{sale_test_active_ship_id} AND player_id=p.player_id AND role_id=1 AND is_primary=TRUE), (SELECT COUNT(*) FROM ship_ownership WHERE ship_id=@{sale_test_replacement_ship_id} AND player_id=p.player_id AND role_id=1 AND is_primary=FALSE), CASE WHEN p.credits = @{sale_test_used_credits_before} - @{sale_test_used_price} THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=@{sale_test_active_ship_id} WHERE p.name='ship_sale_v3';" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 73 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 1 },
+        { "path": "data.rows.0.5", "op": "==", "value": 1 },
+        { "path": "data.rows.0.6", "op": "==", "value": 1 },
+        { "path": "data.rows.0.7", "op": "==", "value": 1 },
+        { "path": "data.rows.0.8", "op": "==", "value": 0 },
+        { "path": "data.rows.0.9", "op": "==", "value": 1 },
+        { "path": "data.rows.0.10", "op": "==", "value": 1 },
+        { "path": "data.rows.0.11", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Used inventory retry cannot transfer or charge the same hull twice",
+      "command": "shipyard.upgrade", "user": "ship_sale_v3",
+      "data": { "used_inventory_id": "@sale_test_used_inventory_id" },
+      "expect": { "status": "error" }
+    },
+    {
       "name": "Create second hull for shipyard.sell alias",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -189,12 +268,12 @@
       "user": "ship_sale_v3",
       "data": {
         "ship_id": "@sale_test_alias_ship_id",
-        "replacement_ship_id": "@sale_test_replacement_ship_id"
+        "replacement_ship_id": "@sale_test_active_ship_id"
       },
       "expect": { "status": "ok", "type": "ship.sold_v1" },
       "asserts": [
         { "path": "data.ship_id", "op": "==", "value": "@sale_test_alias_ship_id" },
-        { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_replacement_ship_id" },
+        { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_active_ship_id" },
         { "path": "data.cargo_forfeited", "op": "==", "value": true },
         { "path": "data.insurance_terminated", "op": "==", "value": true },
         { "path": "data.used_inventory_id", "op": ">", "value": 0 }

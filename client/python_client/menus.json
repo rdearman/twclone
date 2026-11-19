@@ -771,6 +771,13 @@
           }
         },
         {
+          "key": "b",
+          "label": "(B) Buy Used Hull",
+          "action": {
+            "pycall": "shipyard_used_purchase_flow"
+          }
+        },
+        {
           "key": "r",
           "label": "(R) Repair Ship",
           "action": {

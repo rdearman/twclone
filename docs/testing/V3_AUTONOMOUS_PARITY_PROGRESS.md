@@ -127,6 +127,33 @@ These are candidate selections, not verified results. Existing evidence will
 be reused only if it exercises each mandatory clause. No deployment,
 production or release work is in scope.
 
+## Batch 8 — SHIP-05 used-hull purchase
+
+`SHIP-05` is VERIFIED. The live disposable-PostgreSQL
+`suite_ship_sale_v3.json` passed **35/35**. It confirmed the default 8000-bp
+used resale factor, formula over hull plus retained-equipment valuations,
+ordinary-player list and purchase, exact credit deduction, original ship ID,
+hull condition and installed equipment retention, ownership/active-ship
+transfer, inventory removal, and refusal of a duplicate purchase. It also
+confirmed the separate 6000-bp standalone-sale payout and its exact ledger/audit
+valuation.
+
+The live test exposed a server defect: purchase transferred primary ownership
+but left `players.ship_id` pointing at the old hull. The deferred active-owner
+constraint rolled the transaction back. `repo_stardock_purchase_used_ship`
+now updates the active ship in the same transaction. After this fix the full
+sale suite passed. Python workflow/menu regressions passed **71/71**; the
+Godot command-menu suite passed **231 checks**; `make -j4` and
+`tests.v2/test_planetary_server_contract.py` passed (**54/54**). A first live
+attempt before the server fix failed at the invariant and is recorded as defect
+discovery, not acceptance evidence.
+
+Classification moved from 43 VERIFIED / 16 IMPLEMENTED_UNVERIFIED / 7 PARTIAL
+/ 1 BLOCKED to **44 VERIFIED / 15 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1
+BLOCKED**. No database migration was needed. Python and Godot both expose the
+used inventory at the shipyard, require player confirmation, submit the
+inventory identifier, and rely on an authoritative matching server receipt.
+
 ## Batch 3 — NPC population and Ferengi fleet acceptance
 
 The live repository already recorded completion of batches 1 and 2. The

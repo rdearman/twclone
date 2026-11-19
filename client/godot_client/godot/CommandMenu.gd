@@ -1044,7 +1044,45 @@ func show_shipyard(data: Dictionary, current_ship_name: String = "") -> void:
 			button.disabled = not eligible or not hull.has("type_id")
 			button.pressed.connect(_choose_shipyard_hull.bind(int(hull.get("type_id", 0)), current_ship_name))
 			_shipyard_rows.add_child(button)
+	var used_available: Variant = data.get("used_available", [])
+	var used_header := Label.new()
+	used_header.text = "USED HULLS · existing identity and installed equipment are retained"
+	used_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_shipyard_rows.add_child(used_header)
+	if used_available is Array and not used_available.is_empty():
+		for used in used_available:
+			if not (used is Dictionary):
+				continue
+			var inventory_id: Variant = used.get("used_inventory_id", null)
+			var used_ship_id: Variant = used.get("ship_id", null)
+			var used_price: Variant = used.get("price", null)
+			var valid := typeof(inventory_id) == TYPE_INT and int(inventory_id) > 0 and typeof(used_ship_id) == TYPE_INT and int(used_ship_id) > 0 and typeof(used_price) == TYPE_INT and int(used_price) >= 0
+			var used_button := Button.new()
+			used_button.text = "%s [%s] · ship %s · %s CR · hull %s + equipment %s" % [str(used.get("name", "Used hull")), str(used.get("ship_type", "Unknown")), str(used_ship_id), str(used_price), str(used.get("hull_value", "?")), str(used.get("installed_equipment_value", "?"))]
+			used_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			used_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			used_button.disabled = not valid
+			used_button.tooltip_text = "The server will recalculate the price and recheck the listing before purchase." if valid else "This listing omitted authoritative purchase identifiers or price."
+			if valid:
+				used_button.pressed.connect(_choose_used_ship.bind(int(inventory_id), int(used_ship_id), int(used_price), str(used.get("name", "Used hull"))))
+			_shipyard_rows.add_child(used_button)
+	else:
+		var no_used := Label.new()
+		no_used.text = "No used hulls are listed at this facility."
+		_shipyard_rows.add_child(no_used)
 	DialogLayout.popup(_shipyard_dialog, Vector2i(580, 450))
+
+func _choose_used_ship(inventory_id: int, ship_id: int, price: int, ship_name: String) -> void:
+	if inventory_id <= 0 or ship_id <= 0 or price < 0:
+		return
+	_shipyard_dialog.hide()
+	_choose_action({
+		"label": "Buy used %s · ship %d · %d CR" % [ship_name, ship_id, price],
+		"command": "shipyard.upgrade",
+		"fixed": {"used_inventory_id": inventory_id},
+		"mutating": true,
+		"form_notice": "The server rechecks the listing and price. The existing ship ID, condition, and equipment are retained.",
+	})
 
 func show_hardware_catalogue(data: Dictionary) -> void:
 	_shipyard_dialog.title = "Hardware catalogue · server-authoritative"

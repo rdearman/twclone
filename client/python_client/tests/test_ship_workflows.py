@@ -478,6 +478,42 @@ def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
     assert "displayed sector may be stale" in output
 
 
+def test_used_shipyard_purchase_uses_listed_identity_price_and_refreshes(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 7, "port": {"id": 3}})
+    fake_conn.queue("shipyard.list", {
+        "status": "ok", "type": "shipyard.list_v1", "data": {
+            "used_available": [{"used_inventory_id": 91, "ship_id": 42,
+                                "name": "Retained Scout", "ship_type": "Scout",
+                                "price": 12345, "hull_value": 10000,
+                                "installed_equipment_value": 5431}],
+        },
+    })
+    fake_conn.queue("shipyard.upgrade", {
+        "status": "ok", "type": "shipyard.upgraded_v1",
+        "data": {"ship_id": 42, "new_type_id": 2,
+                 "new_ship_name": "Retained Scout", "credits_spent": 12345,
+                 "used_inventory_id": 91},
+    })
+    fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info", "data": {"player": {"credits": 9000}}})
+    fake_conn.queue("ship.status", {"status": "ok", "type": "ship.status", "data": {"ship": {"id": 42, "hull": 73}}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"sector_id": 7, "name": "Shipyard"}})
+    answers = iter(["1", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.shipyard_used_purchase_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == [
+        "shipyard.list", "shipyard.upgrade", "player.my_info", "ship.status",
+        "move.describe_sector",
+    ]
+    assert fake_conn.calls[1]["data"] == {"used_inventory_id": 91}
+    assert ctx.last_sector_desc["id"] == 7
+    output = capsys.readouterr().out
+    assert "existing ship 42" in output
+
+
 def test_shipyard_upgrade_rejects_untyped_success_and_refreshes_authoritative_state(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):

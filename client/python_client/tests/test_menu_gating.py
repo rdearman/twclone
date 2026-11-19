@@ -114,6 +114,13 @@ def test_landed_surface_exposes_public_and_detailed_planet_reads(ctx_factory, me
     assert "planet_overview_flow" in workflows
 
 
+def test_shipyard_menu_exposes_used_hull_purchase(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    workflows = {option.get("action", {}).get("pycall")
+                 for option in _visible_options(menus["SHIPYARD_MAIN"], ctx)}
+    assert "shipyard_used_purchase_flow" in workflows
+
+
 def test_corporation_member_can_reach_leave_workflow(ctx_factory, menus):
     ctx = ctx_factory()
     ctx.state["in_corporation"] = True
