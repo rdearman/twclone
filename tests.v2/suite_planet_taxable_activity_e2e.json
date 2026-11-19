@@ -217,6 +217,14 @@
       "save": { "exchange_port_order_id": "data.rows.0.0" }
     },
     {
+      "name": "Capture physical ship count and state before virtual delivery settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COUNT(*),md5(COALESCE(string_agg(ship_id::text||':'||sector_id::text||':'||ore::text||':'||holds::text||':'||COALESCE(ported,0)::text||':'||COALESCE(fighters,0)::text||':'||COALESCE(shields,0)::text||':'||COALESCE(onplanet,FALSE)::text,',' ORDER BY ship_id),'')) FROM ships;" },
+      "expect": { "status": "ok" },
+      "save": { "exchange_ship_count_before_delivery": "data.rows.0.0", "exchange_ship_state_before_delivery": "data.rows.0.1" }
+    },
+    {
       "name": "Enable deterministic scheduler only in disposable acceptance database",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -250,7 +258,7 @@
       "name": "Verify Exchange-to-port commodity and credit conservation",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type = 'planet' AND entity_id = @{test_planet_id} AND commodity_code = 'ORE'), COALESCE((SELECT quantity FROM entity_stock WHERE entity_type = 'exchange' AND entity_id = 1 AND commodity_code = 'ORE'), 0) - @{exchange_ore_stock_before}, (SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = @{exchange_test_port_id} AND commodity_code = 'ORE'), (SELECT CASE WHEN status IN ('open','filled') AND filled_quantity = 10 THEN 1 ELSE 0 END FROM commodity_orders WHERE commodity_orders_id = @{exchange_port_order_id}), (SELECT COUNT(*) FROM commodity_trades ct JOIN bank_transactions b ON b.bank_transactions_id = ct.settlement_tx_buy JOIN bank_transactions s ON s.bank_transactions_id = ct.settlement_tx_sell WHERE ct.id > @{exchange_trade_id_before} AND ct.buyer_actor_type = 'port' AND ct.buyer_actor_id = @{exchange_test_port_id} AND ct.seller_actor_type = 'exchange' AND ct.seller_location_type = 'exchange' AND ct.seller_location_id = 1 AND ct.quantity = 10 AND b.direction = 'DEBIT' AND s.direction = 'CREDIT' AND b.amount = s.amount), (SELECT CASE WHEN balance = @{exchange_port_balance_before} - (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE), (SELECT CASE WHEN balance = @{exchange_balance_before_port_purchase} + (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'system' AND owner_id = 70000001 AND currency = 'CRD' AND is_active = TRUE);" },
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type = 'planet' AND entity_id = @{test_planet_id} AND commodity_code = 'ORE'), COALESCE((SELECT quantity FROM entity_stock WHERE entity_type = 'exchange' AND entity_id = 1 AND commodity_code = 'ORE'), 0) - @{exchange_ore_stock_before}, (SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = @{exchange_test_port_id} AND commodity_code = 'ORE'), (SELECT CASE WHEN status IN ('open','filled') AND filled_quantity = 10 THEN 1 ELSE 0 END FROM commodity_orders WHERE commodity_orders_id = @{exchange_port_order_id}), (SELECT COUNT(*) FROM commodity_trades ct JOIN bank_transactions b ON b.bank_transactions_id = ct.settlement_tx_buy JOIN bank_transactions s ON s.bank_transactions_id = ct.settlement_tx_sell WHERE ct.id > @{exchange_trade_id_before} AND ct.buyer_actor_type = 'port' AND ct.buyer_actor_id = @{exchange_test_port_id} AND ct.seller_actor_type = 'exchange' AND ct.seller_location_type = 'exchange' AND ct.seller_location_id = 1 AND ct.quantity = 10 AND b.direction = 'DEBIT' AND s.direction = 'CREDIT' AND b.amount = s.amount), (SELECT CASE WHEN balance = @{exchange_port_balance_before} - (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE), (SELECT CASE WHEN balance = @{exchange_balance_before_port_purchase} + (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'system' AND owner_id = 70000001 AND currency = 'CRD' AND is_active = TRUE), (SELECT CASE WHEN COUNT(*) = @{exchange_ship_count_before_delivery} THEN 1 ELSE 0 END FROM ships), (SELECT CASE WHEN md5(COALESCE(string_agg(ship_id::text||':'||sector_id::text||':'||ore::text||':'||holds::text||':'||COALESCE(ported,0)::text||':'||COALESCE(fighters,0)::text||':'||COALESCE(shields,0)::text||':'||COALESCE(onplanet,FALSE)::text,',' ORDER BY ship_id),'')) = '@{exchange_ship_state_before_delivery}' THEN 1 ELSE 0 END FROM ships);" },
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 90 },
@@ -259,7 +267,9 @@
         { "path": "data.rows.0.3", "op": "==", "value": 1 },
         { "path": "data.rows.0.4", "op": "==", "value": 1 },
         { "path": "data.rows.0.5", "op": "==", "value": 1 },
-        { "path": "data.rows.0.6", "op": "==", "value": 1 }
+        { "path": "data.rows.0.6", "op": "==", "value": 1 },
+        { "path": "data.rows.0.7", "op": "==", "value": 1 },
+        { "path": "data.rows.0.8", "op": "==", "value": 1 }
       ]
     },
     {

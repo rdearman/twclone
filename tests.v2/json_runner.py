@@ -717,6 +717,13 @@ class JsonSuiteRunner:
                 passed = expected in actual
             else:
                 passed = False
+        elif op == "not_contains":
+            if isinstance(actual, list):
+                passed = not any(expected == item or str(expected) in str(item) for item in actual)
+            elif isinstance(actual, (tuple, dict, str)):
+                passed = expected not in actual
+            else:
+                passed = False
         elif op == "keys_eq":
             passed = isinstance(actual, dict) and set(actual) == set(expected)
         elif op == "is_string_array":

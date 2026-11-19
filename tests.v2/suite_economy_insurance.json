@@ -46,6 +46,58 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Capture bank and insurer balances before hull-only settlement",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{econ_trader_player_id} AND currency='CRD' AND is_active=TRUE),(SELECT balance FROM insurance_funds WHERE fund_id=1),(SELECT subject_type FROM insurance_policies WHERE insurance_policies_id=@{policy_id}),(SELECT COUNT(*) FROM insurance_policies WHERE holder_type='player' AND holder_id=@{econ_trader_player_id});" },
+      "user": "admin",
+      "save": { "insurance_bank_before_claim": "data.rows.0.0", "insurance_fund_before_claim": "data.rows.0.1", "insurance_policy_count_before_fault": "data.rows.0.3" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.2", "op": "==", "value": "ship" } ]
+    },
+    {
+      "name": "Create controlled bank-ledger fault function",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "CREATE OR REPLACE FUNCTION v3_insurance_fail_premium_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.idempotency_key LIKE 'insurance-policy-premium-%' THEN RAISE EXCEPTION 'controlled insurance rollback'; END IF; RETURN NEW; END $$;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Install controlled bank-ledger failure trigger",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "CREATE TRIGGER v3_insurance_fail_premium BEFORE INSERT ON bank_transactions FOR EACH ROW EXECUTE FUNCTION v3_insurance_fail_premium_insert();" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Premium transaction failure is surfaced to the player",
+      "command": "insurance.policies.buy",
+      "data": { "subject_type": "ship", "subject_id": "@econ_trader_ship_id", "duration": 3600, "premium": 10, "payout": 50, "fund_id": 1 },
+      "user": "econ_trader",
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Verify policy insert, bank debit, fund credit and ledger all rolled back",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{econ_trader_player_id} AND currency='CRD' AND is_active=TRUE)=@{insurance_bank_before_claim} AND (SELECT balance FROM insurance_funds WHERE fund_id=1)=@{insurance_fund_before_claim} AND (SELECT COUNT(*) FROM insurance_policies WHERE holder_type='player' AND holder_id=@{econ_trader_player_id})=@{insurance_policy_count_before_fault} AND (SELECT COUNT(*) FROM bank_transactions WHERE tx_type='FEE' AND direction='DEBIT' AND description='insurance premium')=1 THEN 1 ELSE 0 END;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Remove controlled insurance fault trigger",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DROP TRIGGER v3_insurance_fail_premium ON bank_transactions;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove controlled insurance fault function",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DROP FUNCTION v3_insurance_fail_premium_insert();" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Negative: Buy Policy Missing Auth",
       "command": "insurance.policies.buy",
       "data": { "policy_type": "standard", "ship_id": 1005 },
@@ -57,6 +109,29 @@
       "data": { "claim_id": "@claim_id", "event_id": "insurance-regression-event", "amount": 25 },
       "user": "econ_trader",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify exact hull claim is credited to the player bank and funded once",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{econ_trader_player_id} AND currency='CRD' AND is_active=TRUE)=@{insurance_bank_before_claim}+25 AND (SELECT balance FROM insurance_funds WHERE fund_id=1)=@{insurance_fund_before_claim}-25 AND (SELECT status='paid' FROM insurance_claims WHERE insurance_claims_id=@{claim_id}) AND (SELECT COUNT(*)=1 FROM bank_transactions WHERE tx_group_id='insurance-claim-'||@{claim_id} AND direction='CREDIT' AND amount=25 AND currency='CRD') THEN 1 ELSE 0 END;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Retry paid hull claim without duplicating bank payout",
+      "command": "insurance.claim.file",
+      "data": { "claim_id": "@claim_id", "event_id": "insurance-regression-event", "amount": 25 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify retry retained one payout ledger row",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{econ_trader_player_id} AND currency='CRD' AND is_active=TRUE)=@{insurance_bank_before_claim}+25 AND (SELECT COUNT(*)=1 FROM bank_transactions WHERE tx_group_id='insurance-claim-'||@{claim_id} AND direction='CREDIT' AND amount=25 AND currency='CRD') THEN 1 ELSE 0 END;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
     },
     {
       "name": "Negative: File Claim Missing Auth",

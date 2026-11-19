@@ -17,7 +17,8 @@
       "user": "admin",
       "data": { "key": "shipyard_sale_factor_bp" },
       "expect": { "status": "ok" },
-      "save": { "sale_factor_original": "data.value" }
+      "save": { "sale_factor_original": "data.value" },
+      "asserts": [ { "path": "data.value", "op": "==", "value": 6000 } ]
     },
     {
       "name": "Accept configured 60 percent standalone sale factor",
@@ -25,6 +26,14 @@
       "user": "admin",
       "data": { "key": "shipyard_sale_factor_bp", "value": 6000, "confirm": true },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Confirm standalone sale factor is independent from trade-in factor",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "shipyard_trade_in_factor_bp" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.value", "op": "==", "value": 5000 } ]
     },
     {
       "name": "Reject sale factor above the allowed range",

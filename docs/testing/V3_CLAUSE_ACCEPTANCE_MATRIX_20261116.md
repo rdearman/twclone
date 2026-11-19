@@ -2,12 +2,12 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 18 November 2026, after parity closure batch 3 focused PostgreSQL acceptance.
+Reviewed: 19 November 2026, after autonomous parity batch 1.
 
 ## Current measures
 
-- Parent requirements: 67 (27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Batch 3 verified `HARV-02`, `HARV-03`, `BANK-04`, `TRADE-01`, and `NPC-FER-01`. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
-- Base clause rows: 227 (79 VERIFIED, 148 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Base clause rows: 227 (89 VERIFIED, 138 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -112,6 +112,45 @@ Additional population acceptance slices executed in the same work batch:
 
 ## Clause ledger
 
+## Autonomous parity batch 1 — 19 November 2026
+
+Five complete parents were verified through focused disposable-PostgreSQL
+acceptance. `suite_ship_sale_v3.json` passed 19/19 and confirmed the standalone
+sale factor defaults to 6000 basis points, is range-checked, and remains
+separate from the trade-in factor. `manual_acceptance/slave_unrest_production_prepare.json`
+and `slave_unrest_production_verify.json` passed 15/15 and 8/8: fixed slave
+output is absent from the configurable settings, colonist and slave production
+use the approved 50% result (integer floor), the zero-unrest slave control
+matches, and retry preserves population/output. `suite_economy_insurance.json`
+passed 22/22, including hull-only coverage, bank payout, exact accounting,
+duplicate-claim idempotency, and injected rollback. `suite_planet_taxable_activity_e2e.json`
+passed 44/44 with Exchange virtual delivery as an immediate economic transfer;
+before/after SQL snapshots confirmed no physical ship was created, moved, or
+modified. `suite_photon_duration_acceptance.json` passed 15/15: migrated
+default 600 seconds, configurable 1-second minimum, rejection of zero and
+over-maximum settings, exact persisted expiry, and one ammunition debit per
+launch. Godot 4.5.1 parser regressions passed 8/8 and 117/117 after an explicit
+boolean annotation fixed type inference in the sale-receipt UI path.
+
+The focused server cases total 123 passing assertions across the latest
+acceptance artifacts (the separately rerun insurance rollback and Exchange
+state-snapshot suites supersede their earlier 16/16 and 43/43 snapshots).
+Client regression: Python 810/810; Godot 106 passed, 0 failed, 6 skipped
+(live-server-only scripts). The restart-between-suites runner also exposed an
+AddressSanitizer startup crash in `load_bootstrap_config` after its restart;
+this is retained as an unresolved harness/server-startup acceptance issue and
+is not counted as a passing restart case. Existing explicit restart evidence
+for photon expiry remains in the prior photon acceptance record.
+
+The documentary evidence policy question for `POP-07` remains open: its final
+clause excludes an inferred corporation-capture rule but does not define a
+runtime prohibition. The matrix's current VERIFIED policy requires runtime
+evidence, so the row is not promoted and no behavior-inventing negative test
+was added. A minimal policy proposal is to permit traceable approved-contract
+evidence for explicit scope-exclusion clauses while labeling the evidence
+`CONTRACT` rather than `RUNTIME`; until that policy is approved, POP-07 remains
+unverified.
+
 | Requirement | Clause | Acceptance condition | Clause status | Evidence / next action |
 |---|---|---|---|---|
 | `POP-01` | clause 1 | A planet is `COLONIST`, `SLAVE`, or `UNPOPULATED` | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` ran against disposable PostgreSQL; assertions exercised all three classifications and passed. |
@@ -161,8 +200,8 @@ Additional population acceptance slices executed in the same work batch:
 | `EXC-02` | clause 1 | Validate source stock and destination funds/capacity, transfer inventory and credits, record durable transaction atomically | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus PostgreSQL ledger settlement assertions cited by the parity closure. |
 | `EXC-02` | clause 2 | completed goods arrive immediately | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus PostgreSQL ledger settlement assertions cited by the parity closure. |
 | `EXC-03` | clause 1 | Sold goods leave seller ownership and cannot be harvested, resold, built with, consumed or counted twice | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus second-tick stock readback cited by the parity closure. |
-| `EXC-04` | clause 1 | Deliveries are immediate economic transfers | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `EXC-04` | clause 2 | no physical NPC ships, movement, fuel, holds, docking or delay | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `EXC-04` | clause 1 | Deliveries are immediate economic transfers | VERIFIED | `suite_planet_taxable_activity_e2e.json::case-0035`–`case-0040`, 44/44 live disposable-PostgreSQL cases; actual scheduler settlement transfers goods/credits once and retry is idempotent. |
+| `EXC-04` | clause 2 | no physical NPC ships, movement, fuel, holds, docking or delay | VERIFIED | `suite_planet_taxable_activity_e2e.json::case-0031`, `case-0036`–`case-0040`; database snapshot compares physical ship count and ship state before/after settlement. |
 | `EXC-05` | clause 1 | Keep placement, reservation, execution and settlement distinct | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `EXC-05` | clause 2 | Open orders wait for matches | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `EXC-05` | clause 3 | partial fills preserve remainder | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -312,8 +351,8 @@ Additional population acceptance slices executed in the same work batch:
 | `V3-PLANET-RATE-01` | clause 8 | Integer remainder carries per planet and commodity | VERIFIED | `planet_rate_remainder_prepare.json` + `planet_rate_remainder_restart_verify.json`, actual `planet_growth` handler, disposable PostgreSQL, 17/17 cases, real server restart; ORE/ORG/EQU each carry 1 then 2 assigned workers, then create one unit and clear remainder. Existing `suite_planet_production_rate_values.json` verifies all 21 migrated defaults. |
 | `V3-TOLL-RATE-01` | clause 1 | Default 1 credit per deployed toll fighter, charged once per attempted sector entry | VERIFIED | Three deployed toll fighters produced a 3-credit offer and single payment: `suite_movement_transwarp_tolls.json::case-0012`–`case-0015`. Noncanonical twclone default. |
 | `V3-TOLL-RATE-01` | clause 2 | configurable integer credits per fighter, minimum 0 | VERIFIED | `manual_acceptance/toll_rate_configurable.json::case-0002`–`case-0003`, `case-0019`–`case-0022`, and `case-0023`–`case-0031`: configure 7 credits/fighter, ordinary transwarp payer settles a 21-credit offer for three fighters once; zero is accepted and allows toll-free arrival; original setting restored. 31/31 passed against disposable PostgreSQL. Configurable value remains a noncanonical twclone default. |
-| `V3-PHOTON-DURATION-01` | clause 1 | Default 600 seconds from successful launch | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PHOTON-DURATION-01` | clause 2 | configurable duration in seconds, minimum 1 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-PHOTON-DURATION-01` | clause 1 | Default 600 seconds from successful launch | VERIFIED | `suite_photon_duration_acceptance.json::case-0003`, `case-0006`, `case-0011`; disposable PostgreSQL migration/config/fire result records exact expiry from successful request creation. Noncanonical twclone default; not a TWGS parity claim. |
+| `V3-PHOTON-DURATION-01` | clause 2 | configurable duration in seconds, minimum 1 | VERIFIED | `suite_photon_duration_acceptance.json::case-0007`–`case-0011`; one-second duration accepted, zero and above-maximum rejected, exact expiry and one ammunition debit asserted. Noncanonical twclone setting. |
 | `V3-PORT-BUILD-01` | clause 1 | Initial construction: 100,000 credits plus 1,000 each ORE/ORG/EQU | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `V3-PORT-BUILD-01` | clause 2 | three daily deliveries of 100 each commodity (1,300 total of each material) | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `V3-PORT-BUILD-01` | clause 3 | class-specific exchange directions fixed at completion | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -332,15 +371,15 @@ Additional population acceptance slices executed in the same work batch:
 | `CORP-XFER-01` | clause 4 | no turn/credit fee | VERIFIED | `tests.v2/suite_corp_member_asset_transfers.json`. |
 | `SYS-07` | clause 1 | `sysop.player.kick` must invalidate every durable session for the target and disconnect active connections | VERIFIED | `tests.v2/test_sysop_players.json`: disposable PostgreSQL, target session count zero and forced connection closed; 15/15 cases. |
 | `SYS-07` | clause 2 | a subsequent request using an old token must be unauthenticated | VERIFIED | `tests.v2/test_sysop_players.json`: runner reconnects without reauthentication and replays the cached token; server returns 401; 15/15 cases. |
-| `CFG-01` | clause 1 | `shipyard_sale_factor_bp`, integer 0–10000, default 6000 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-01` | clause 2 | distinct from trade-in | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-02` | clause 1 | Fixed 50% | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-02` | clause 2 | not an adjustable setting under current policy | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `CFG-01` | clause 1 | `shipyard_sale_factor_bp`, integer 0–10000, default 6000 | VERIFIED | `suite_ship_sale_v3.json::case-0003`–`case-0006`, 19/19; live setting reads 6000, accepts valid value and rejects out-of-range input. |
+| `CFG-01` | clause 2 | distinct from trade-in | VERIFIED | `suite_ship_sale_v3.json::case-0004`–`case-0005`, 19/19; changing standalone factor leaves trade-in factor at 5000. |
+| `CFG-02` | clause 1 | Fixed 50% | VERIFIED | `manual_acceptance/slave_unrest_production_prepare.json::case-0007`–`case-0013` and `slave_unrest_production_verify.json::case-0001`–`case-0004`; actual production scheduler comparison confirms floor(normal output × 50/100). |
+| `CFG-02` | clause 2 | not an adjustable setting under current policy | VERIFIED | `slave_unrest_production_prepare.json::case-0002` asserts the authenticated SysOp config listing does not expose a slave-output setting; 15/15 preparation and 8/8 verification cases passed. |
 | `CFG-03` | clause 1 | `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `CFG-03` | clause 2 | zero is an unset/disabled sentinel | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `CFG-03` | clause 3 | no active gameplay defaults | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-04` | clause 1 | Existing eligibility and coverage parameters retained | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-04` | clause 2 | hull-only payout to bank | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `CFG-04` | clause 1 | Existing eligibility and coverage parameters retained | VERIFIED | `suite_economy_insurance.json::case-0001`–`case-0006`, `case-0014`–`case-0015`, 22/22; ordinary authenticated purchase, cargo exclusion and eligibility path exercised. |
+| `CFG-04` | clause 2 | hull-only payout to bank | VERIFIED | `suite_economy_insurance.json::case-0007`–`case-0018`, 22/22; exact hull payout credited to bank once, retry does not duplicate, injected ledger failure rolls policy/bank/fund/ledger state back. |
 
 
 ## Clause-level findings beyond the ten unit clauses

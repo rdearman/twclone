@@ -1,6 +1,6 @@
 # V3 final gameplay parity closure
 
-Reviewed: 18 November 2026
+Reviewed: 19 November 2026
 Starting review baseline: `4e60f9966b363529b20ab34bcb49b05b1d160a53`
 Parity status refresh: 18 November 2026, after parity closure batch 3.
 
@@ -20,7 +20,11 @@ The next five small-gap parents are now verified: `HARV-02`, `HARV-03`, `BANK-04
 
 The executed focused acceptance results were: HARV-02 40/40; HARV-03 27/27 plus restart 8/8; BANK-04 17/17 plus post-restart 11/11; TRADE-01 no-haggle 9/9, dynamic market shock 12/12, and deterministic market settlement 43/43; Ferengi attack/pursuit/reward 45/45 plus post-restart 6/6. Python planet workflow tests passed 79/79 and the Godot command menu passed 212 checks. No full 166-suite run was requested.
 
-`POP-07` stays IMPLEMENTED_UNVERIFIED: its final corporation-capture statement is a documentary scope constraint, not a behavior prohibition; the matrix's runtime-only verification policy still applies. `SHIP-01` stays VERIFIED; its earlier Python and Godot menu tests cover the required sale access. The updated parent total is **27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**.
+`POP-07` stays IMPLEMENTED_UNVERIFIED: its final corporation-capture statement is a documentary scope constraint, not a behavior prohibition; the matrix's runtime-only verification policy still applies. `SHIP-01` stays VERIFIED; its earlier Python and Godot menu tests cover the required sale access. The batch-3 total was 27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED.
+
+## Autonomous parity batch 1 — 19 November 2026
+
+`CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01` are now VERIFIED. Exact clauses, test cases, PostgreSQL evidence, limits and Godot parser regression results are recorded in the clause matrix. The new parent total is **32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**. `POP-07` remains unverified pending an evidence-policy decision; documentary scope constraints should be labeled as contract evidence rather than represented as runtime evidence.
 
 ## Requirement status
 
@@ -44,7 +48,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | EXC-01 | Exchange participants | VERIFIED |
 | EXC-02 | Exchange settlement | VERIFIED |
 | EXC-03 | Exchange ring-fencing | VERIFIED |
-| EXC-04 | No virtual vessel entities | IMPLEMENTED_UNVERIFIED |
+| EXC-04 | No virtual vessel entities | VERIFIED |
 | EXC-05 | Exchange order locking | IMPLEMENTED_UNVERIFIED |
 | EXC-06 | Port demand and settlement | VERIFIED |
 | EXC-07 | Exchange quantity conservation | VERIFIED |
@@ -89,17 +93,17 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | MOVE-05 | Transwarp fuel debit | VERIFIED |
 | V3-PLANET-RATE-01 | Configured planet-class production ratios | VERIFIED |
 | V3-TOLL-RATE-01 | Noncanonical toll rate | VERIFIED |
-| V3-PHOTON-DURATION-01 | Noncanonical photon duration | IMPLEMENTED_UNVERIFIED |
+| V3-PHOTON-DURATION-01 | Noncanonical photon duration | VERIFIED |
 | V3-PORT-BUILD-01 | Noncanonical port build/upgrade costs | IMPLEMENTED_UNVERIFIED |
 | V3-PORT-COMBAT-01 | Noncanonical port durability/defence | IMPLEMENTED_UNVERIFIED |
 | CORP-XFER-01 | Corporation member asset transfers | VERIFIED |
 | SYS-07 | Session invalidation on player kick | VERIFIED |
-| CFG-01 | Ship-sale factor configuration | IMPLEMENTED_UNVERIFIED |
-| CFG-02 | Fixed slave output multiplier | IMPLEMENTED_UNVERIFIED |
+| CFG-01 | Ship-sale factor configuration | VERIFIED |
+| CFG-02 | Fixed slave output multiplier | VERIFIED |
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
-| CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
+| CFG-04 | Insurance configuration | VERIFIED |
 
-**Count (updated 18 November 2026, parity closure batch 3):** 27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 19 November 2026, autonomous parity batch 1):** 32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 

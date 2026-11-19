@@ -1,0 +1,81 @@
+{
+  "name": "V3 configurable photon duration acceptance",
+  "version": "1.0.0",
+  "tests": [
+    { "name": "Bootstrap SysOp", "setup": "macro_bootstrap_admin" },
+    { "name": "Create ordinary photon player", "setup": "macro_auth_user", "username": "photon_duration_qa", "password": "qa-password" },
+    {
+      "name": "Read migration default photon duration",
+      "command": "sysop.config.get", "user": "admin",
+      "data": { "key": "combat.photon_effect_duration_seconds" },
+      "expect": { "status": "ok" },
+      "save": { "photon_duration_original": "data.value" },
+      "asserts": [ { "path": "data.value", "op": "==", "value": 600 } ]
+    },
+    {
+      "name": "Select two adjacent unshielded target sectors",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT w.to_sector FROM players p JOIN sector_warps w ON w.from_sector=p.sector_id WHERE p.name='photon_duration_qa' AND NOT EXISTS (SELECT 1 FROM planets pl JOIN citadels c USING(planet_id) WHERE pl.sector_id=w.to_sector AND COALESCE(c.planetaryShields,0)>0) ORDER BY w.to_sector LIMIT 2;" },
+      "expect": { "status": "ok" },
+      "save": { "photon_target_600": "data.rows.0.0", "photon_target_1": "data.rows.1.0" },
+      "asserts": [ { "path": "data.rows.1.0", "op": ">", "value": 0 } ]
+    },
+    {
+      "name": "Prepare eligible ship and exact ammunition",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=3,destroyed=FALSE,onplanet=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_duration_qa');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fire with the configured default duration",
+      "command": "combat.fire_photon", "user": "photon_duration_qa",
+      "data": { "sector_id": "@photon_target_600" },
+      "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "asserts": [
+        { "path": "data.duration_seconds", "op": "==", "value": 600 },
+        { "path": "data.ammo_remaining", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "Accept and persist the minimum one-second duration",
+      "command": "sysop.config.set", "user": "admin",
+      "data": { "key": "combat.photon_effect_duration_seconds", "value": 1, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fire with the configured minimum duration",
+      "command": "combat.fire_photon", "user": "photon_duration_qa",
+      "data": { "sector_id": "@photon_target_1" },
+      "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "asserts": [
+        { "path": "data.duration_seconds", "op": "==", "value": 1 },
+        { "path": "data.ammo_remaining", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Reject zero duration",
+      "command": "sysop.config.set", "user": "admin",
+      "data": { "key": "combat.photon_effect_duration_seconds", "value": 0, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Reject duration above the configured maximum",
+      "command": "sysop.config.set", "user": "admin",
+      "data": { "key": "combat.photon_effect_duration_seconds", "value": 86401, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Verify persisted exact expiries and one debit per firing",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN s.photons=1 AND (SELECT COUNT(*) FROM photon_fire_requests r WHERE r.player_id=p.player_id)=2 AND EXISTS (SELECT 1 FROM photon_fire_requests r WHERE r.player_id=p.player_id AND r.sector_id=@{photon_target_600} AND ABS(r.expires_at-FLOOR(EXTRACT(EPOCH FROM r.created_at))::bigint-600)<=1) AND EXISTS (SELECT 1 FROM photon_fire_requests r WHERE r.player_id=p.player_id AND r.sector_id=@{photon_target_1} AND ABS(r.expires_at-FLOOR(EXTRACT(EPOCH FROM r.created_at))::bigint-1)<=1) AND (SELECT COUNT(*) FROM sector_photon_effects e WHERE e.sector_id IN (@{photon_target_600},@{photon_target_1}))=2 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_duration_qa';" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Restore the prior configured duration",
+      "command": "sysop.config.set", "user": "admin",
+      "data": { "key": "combat.photon_effect_duration_seconds", "value": "@photon_duration_original", "confirm": true },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

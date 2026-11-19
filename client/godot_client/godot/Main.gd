@@ -1727,7 +1727,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			var sale_planet_id := _authoritative_positive_id(sale_request.get("planet_id", 0)) if sale_request is Dictionary else 0
 			var sale_quantity: Variant = sale_request.get("quantity", null) if sale_request is Dictionary else null
 			var sale_commodity := str(sale_request.get("commodity", "")) if sale_request is Dictionary else ""
-			var sale_receipt_valid := response.get("type", null) == "planet.market.sell" and data is Dictionary \
+			var sale_receipt_valid: bool = response.get("type", null) == "planet.market.sell" and data is Dictionary \
 				and sale_planet_id != 0 and data.get("planet_id", null) == sale_planet_id \
 				and data.get("commodity", null) == sale_commodity \
 				and typeof(sale_quantity) == TYPE_INT and data.get("quantity_sold", null) == sale_quantity \

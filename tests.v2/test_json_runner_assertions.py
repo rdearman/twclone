@@ -39,6 +39,7 @@ def test_supported_assertion_operators_are_evaluated():
         ("<=", 3, 3, True),
         ("greater_than", 4, 3, True),
         ("contains", ["ore", "org"], "ore", True),
+        ("not_contains", ["ore", "org"], "shipyard", True),
         ("is_array", [], None, True),
         ("is_empty", [], None, True),
         ("len_gt", [1], 0, True),
@@ -50,6 +51,7 @@ def test_supported_assertion_operators_are_evaluated():
     for op, actual, expected, found in cases:
         passed, _ = evaluate(op, actual, expected, found)
         assert passed is (found if op == "exists" else not found if op == "not_exists" else True)
+    assert evaluate("not_contains", ["ore", "org"], "ore", True)[0] is False
 
 
 def test_missing_paths_and_unknown_operators_fail_closed():

@@ -1,11 +1,20 @@
 # V3 gameplay and acceptance status
 
-Reviewed: 18 November 2026. This is a concise current summary; detailed test
+Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 18 November 2026:** 27 VERIFIED, 32
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Batch 3 promoted
+**Parity refresh — 19 November 2026:** 32 VERIFIED, 27
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 1 promoted
+`CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01` from
+focused disposable-PostgreSQL acceptance. The clause matrix records exact
+case references; test evidence includes ship-sale configuration separation,
+fixed slave-output policy and production, insurance hull payout/rollback,
+Exchange settlement without physical ships, and persisted photon expiry.
+Godot 4.5.1 parser failures in `persisted_planet_restore_test.gd` and
+`planet_command_response_test.gd` were traced to an uninferred Boolean in
+`Main.gd`; after explicit typing they passed 8/8 and 117/117 checks.
+Batch 3 promoted
 `HARV-02`, `HARV-03`, `BANK-04`, `TRADE-01`, and `NPC-FER-01` from focused
 disposable-PostgreSQL acceptance. Batch 2 promoted
 `POP-03`, `SHIP-03`, `BANK-02` and `V3-TOLL-RATE-01` from executed disposable
@@ -65,9 +74,9 @@ The latest recorded gates are:
 | Area | Result | Scope |
 |---|---:|---|
 | Server protocol regression | 2,625 passed, 0 failed, 0 skipped | All 166 suites; disposable PostgreSQL; TLS suite separately configured and run |
-| Python client | 809 passed | `python3 -m pytest -q tests` in `client/python_client` |
+| Python client | 810 passed | `python3 -m pytest -q tests` in `client/python_client` |
 | `tests.v2` | 274 passed, 7 skipped, 227 subtests passed | `python3 -m pytest -q tests.v2` |
-| Godot 4.5.1 | 106 passed, 0 failed, 6 skipped | 112 scripts discovered by `suite_client_regressions.py`; skipped scripts require live acceptance mode |
+| Godot 4.5.1 | 106 passed, 0 failed, 6 skipped | 112 scripts discovered by `suite_client_regressions.py`; skipped scripts require live acceptance mode; includes explicit typing repair |
 | Godot command menu | 206 checks passed | Menu regression |
 | Planet response | 117 checks passed | Response, planet and sector identity regression |
 
