@@ -236,6 +236,10 @@ def main(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=12483)
     parser.add_argument("--s2s-port", type=int, default=43218)
+    parser.add_argument("--second-server-port", type=int,
+                        help="start a second isolated server against the same disposable database")
+    parser.add_argument("--second-s2s-port", type=int,
+                        help="S2S listener for --second-server-port (defaults to --s2s-port + 1)")
     parser.add_argument("--pg-host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
     parser.add_argument("--pg-port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
     parser.add_argument("--pg-user", default=os.environ.get("QA_PGUSER", QA_DEFAULT_PGUSER))
@@ -280,6 +284,9 @@ def main(argv=None):
     artifact_dir = Path(tempfile.mkdtemp(prefix="twclone-v3-regression-"))
     config_path = artifact_dir / "bigbang.json"
     server_log = artifact_dir / "server.log"
+    second_artifact_dir = artifact_dir / "server-two"
+    second_config_path = second_artifact_dir / "bigbang.json"
+    second_server_log = second_artifact_dir / "server.log"
     report_path = Path(args.report).resolve()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     capture_path = Path(args.capture_responses).resolve() if args.capture_responses else artifact_dir / "responses.jsonl"
@@ -300,6 +307,18 @@ def main(argv=None):
         "include_v3_migrations": True,
     })
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    second_s2s_port = args.second_s2s_port or (args.s2s_port + 1)
+    if args.second_server_port is not None:
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("--second-server-port requires a loopback serving host")
+        if args.second_server_port == args.port or second_s2s_port == args.s2s_port:
+            parser.error("the second server must use distinct game and S2S ports")
+        second_artifact_dir.mkdir(parents=True, exist_ok=True)
+        second_config = dict(config)
+        second_config["server_port"] = args.second_server_port
+        second_config["s2s_port"] = second_s2s_port
+        second_config_path.write_text(json.dumps(second_config, indent=2) + "\n",
+                                      encoding="utf-8")
 
     env = os.environ.copy()
     if password:
@@ -309,6 +328,8 @@ def main(argv=None):
         env.pop("PGPASSWORD", None)
 
     server = None
+    second_server = None
+    second_log = None
     result_code = 2
     qa_identity_verified = False
     psql_path = direct_psql_path()
@@ -327,6 +348,30 @@ def main(argv=None):
         env["PATH"] = str(Path(psql_path).parent) + os.pathsep + env.get("PATH", "")
         print(f"QA CLUSTER VERIFIED: loopback port {args.pg_port}, dedicated QA role, "
               "QA database namespace present")
+
+        def set_disposable_ports(game_port, s2s_port):
+            if args.second_server_port is None:
+                return
+            result = subprocess.run(
+                [psql_path, "-X", "-w", qa_app_conn.replace("%DB%", dbname),
+                 "-v", "ON_ERROR_STOP=1",
+                 "-qAt", "-c",
+                 "INSERT INTO config(key,value,type) VALUES "
+                 f"('server_port','{int(game_port)}','int'),"
+                 f"('s2s_port','{int(s2s_port)}','int') "
+                 "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,"
+                 "type='int' RETURNING value;"],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, timeout=10, check=False,
+            )
+            returned = set(result.stdout.split())
+            if (result.returncode != 0
+                    or str(game_port) not in returned
+                    or str(s2s_port) not in returned):
+                raise RuntimeError(
+                    "could not set disposable game/S2S ports for the "
+                    f"second server: {result.stderr.strip()}"
+                )
 
         bigbang_log = artifact_dir / "bigbang.log"
         with open(bigbang_log, "w", encoding="utf-8") as output:
@@ -359,11 +404,21 @@ def main(argv=None):
             )
 
         log = open(server_log, "w", encoding="utf-8")
+        set_disposable_ports(args.port, args.s2s_port)
         server = subprocess.Popen(
             [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
         )
         wait_for_port(args.host, args.port, server)
+        if args.second_server_port is not None:
+            set_disposable_ports(args.second_server_port, second_s2s_port)
+            second_log = open(second_server_log, "w", encoding="utf-8")
+            second_server = subprocess.Popen(
+                [str(ROOT / "bin" / "server")], cwd=second_artifact_dir,
+                env=env, stdout=second_log, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            wait_for_port(args.host, args.second_server_port, second_server)
 
         runner = [
             sys.executable, str(ROOT / "tests.v2" / "run_suites_all.py"),
@@ -401,14 +456,31 @@ def main(argv=None):
                     break
                 terminate_process(server)
                 server = None
+                if second_server is not None:
+                    terminate_process(second_server)
+                    second_server = None
+                if second_log is not None:
+                    second_log.close()
                 log.close()
                 log = open(server_log, "a", encoding="utf-8")
+                set_disposable_ports(args.port, args.s2s_port)
                 server = subprocess.Popen(
                     [str(ROOT / "bin" / "server")], cwd=artifact_dir,
                     env=env, stdout=log, stderr=subprocess.STDOUT,
                     start_new_session=True,
                 )
                 wait_for_port(args.host, args.port, server)
+                if args.second_server_port is not None:
+                    set_disposable_ports(args.second_server_port,
+                                         second_s2s_port)
+                    second_log = open(second_server_log, "a", encoding="utf-8")
+                    second_server = subprocess.Popen(
+                        [str(ROOT / "bin" / "server")], cwd=second_artifact_dir,
+                        env=env, stdout=second_log, stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                    wait_for_port(args.host, args.second_server_port,
+                                  second_server)
         else:
             for suite_path in selected_suite_paths:
                 runner.extend(("--suite", str(suite_path)))
@@ -426,6 +498,9 @@ def main(argv=None):
         result_code = 2
     finally:
         terminate_process(server)
+        terminate_process(second_server)
+        if second_log is not None:
+            second_log.close()
         try:
             if qa_identity_verified:
                 cleanup = subprocess.run([psql_path, "-X", "-w", admin_conn,

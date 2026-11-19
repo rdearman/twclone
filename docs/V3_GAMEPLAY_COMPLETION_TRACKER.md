@@ -4,7 +4,7 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 39 VERIFIED, 20
+**Parity refresh — 19 November 2026:** 40 VERIFIED, 19
 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 3
 verified Ferengi and Orion NPC population reconciliation and the Ferengi fleet
 catalogue (`NPC-POP-01` through `NPC-POP-03`) against disposable PostgreSQL,
@@ -21,8 +21,12 @@ Partial fill, insufficient-credit cancellation and retry idempotency passed.
 Ship valuation/catalogue and last-ship checks passed; injected sale-audit
 failure confirmed atomic switch/sale rollback. POP-04 detail responses and
 production preserve LOW slave morale, the 50% output rule, and no invented
-colonist morale. EXC-05 remains IMPLEMENTED_UNVERIFIED until concurrent
-settlement/order-lock acceptance is executed. Exact evidence is in the matrix.
+colonist morale. Autonomous batch 4 verified EXC-05 by concurrently running
+the actual market settlement handler on two isolated game-server processes
+against one disposable PostgreSQL database. Both selected the same due orders;
+row-lock revalidation committed one trade, with exact stock, credit and order
+state assertions. The live acceptance passed 53/53 cases. Exact evidence is in
+the matrix and progress log.
 Autonomous batch 1 promoted
 `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01` from
 focused disposable-PostgreSQL acceptance. The clause matrix records exact

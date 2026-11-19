@@ -6,6 +6,7 @@ import time
 import sys
 import uuid
 import argparse
+import threading
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -438,7 +439,101 @@ class JsonSuiteRunner:
             # A fixture is setup for this case, not the case itself.  Continue
             # so the command, response assertions and save mappings on the
             # same test object are executed as authored.
-        
+
+        # Run independent requests from separate TCP connections at the same
+        # barrier.  This is used for server/database concurrency acceptance;
+        # normal JSON cases remain sequential and retain their existing shape.
+        parallel_requests = test.get("parallel_requests")
+        if parallel_requests is not None:
+            if not isinstance(parallel_requests, list) or len(parallel_requests) < 2:
+                print("FAIL (parallel_requests must contain at least two requests)")
+                self._current_failure_reason = "parallel_requests must contain at least two requests"
+                return False
+            clients = []
+            for request in parallel_requests:
+                if not isinstance(request, dict) or not isinstance(request.get("command"), str):
+                    print("FAIL (each parallel request requires a command)")
+                    self._current_failure_reason = "invalid parallel request"
+                    return False
+                user = request.get("user")
+                if user == "admin":
+                    session = self._get_admin_client().session_token
+                elif user:
+                    session = self._get_user_client(user).session_token
+                else:
+                    session = None
+                client = TWClient(
+                    request.get("host", self.host),
+                    int(request.get("port", self.port)),
+                    timeout=int(request.get("timeout", self.timeout)),
+                    use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify,
+                )
+                client.session_token = session
+                clients.append((client, request))
+
+            barrier = threading.Barrier(len(clients))
+            responses = [None] * len(clients)
+            errors = [None] * len(clients)
+
+            def execute_parallel(index, client, request):
+                try:
+                    client.connect()
+                    request_timeout = int(request.get("timeout", self.timeout))
+                    barrier.wait(timeout=request_timeout)
+                    delay_ms = int(request.get("delay_before_send_ms", 0))
+                    if delay_ms > 0:
+                        client.close()
+                        time.sleep(delay_ms / 1000.0)
+                        client.connect()
+                    command = {"command": request["command"]}
+                    if "data" in request:
+                        command["data"] = request["data"]
+                    client.send_json(command)
+                    responses[index] = client.recv_next_non_notice()
+                except Exception as error:
+                    errors[index] = f"{type(error).__name__}: {error}"
+                finally:
+                    client.close()
+
+            threads = [
+                threading.Thread(target=execute_parallel,
+                                 args=(index, client, request), daemon=True)
+                for index, (client, request) in enumerate(clients)
+            ]
+            for thread in threads:
+                thread.start()
+            join_timeout = max(
+                int(request.get("timeout", self.timeout))
+                for _, request in clients
+            ) + 2
+            for thread in threads:
+                thread.join(join_timeout)
+            if any(thread.is_alive() for thread in threads):
+                errors = [error or "concurrent request thread did not finish"
+                          for error in errors]
+            expected_each = test.get("expect_each", {"status": "ok"})
+            statuses_ok = all(
+                isinstance(response, dict)
+                and response.get("status") == expected_each.get("status", "ok")
+                and ("error_code" not in expected_each
+                     or (response.get("error") or {}).get("code")
+                     == expected_each["error_code"])
+                for response in responses
+            )
+            self._current_response = {
+                "id": "test-concurrent",
+                "status": "ok" if statuses_ok and not any(errors) else "error",
+                "type": "test.concurrent_requests",
+                "data": {"responses": responses, "errors": errors},
+            }
+            self._capture_response(name, "parallel_requests", self._current_response)
+            if not statuses_ok or any(errors):
+                print("FAIL (one or more concurrent requests failed)")
+                self._current_failure_reason = str(errors)
+                return False
+            print(f"PASS ({len(responses)} concurrent requests)")
+            return True
+
         if "command" not in test:
             if "comment" in test:
                 pass # Just a documentation step

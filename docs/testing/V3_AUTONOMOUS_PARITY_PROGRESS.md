@@ -180,3 +180,34 @@ clauses are recorded in the matrix and decision register. The next candidates
 are `EXC-05` concurrent settlement, then the smallest outstanding bank/economy
 and NPC behavior clauses; the separate Orion safe-zone/protected-player,
 removal-race, and concurrent-arrival clauses remain open.
+
+## Batch 4 — EXC-05 concurrent market settlement
+
+`EXC-05` is now VERIFIED. Its existing sequential acceptance covered distinct
+placement/reservation/execution, open orders, partial fills, conservation and
+retry idempotency. The new acceptance runs two real V3 server processes on
+separate loopback ports against one fresh disposable PostgreSQL database. A
+controlled trigger holds the first settlement transaction after candidate
+selection; the second server enters the same scheduler path while that
+transaction is open. Both logs selected the same due buy/sell orders. Final
+authoritative SQL checks confirmed exactly one trade, one fill, the expected
+order completion, port/planet quantities and credit balances.
+
+Evidence: `suite_planet_market_buy_order_lifecycle.json` passed **53/53**
+cases, including the two-server race and final SQL assertions. Focused Python
+runner tests passed **31/31**; `py_compile`, `jq empty`, and `git diff --check`
+passed. The ordinary sandbox attempt to start disposable loopback PostgreSQL
+was denied before cluster identity verification; the same isolated acceptance
+was then run with the authorized local-test access and passed. No persistent
+server changes were required.
+
+The batch adds opt-in `parallel_requests` support to the JSON acceptance runner
+and optional second isolated server startup to `run_regression_instance.py`.
+Default single-server test behavior is unchanged. Parent classification after
+the batch is **40 VERIFIED, 19 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**.
+
+The next candidates are the smallest remaining runtime evidence gaps visible
+in the matrix: `POP-06` slave-to-colonist conversion/access/accounting, then
+`PLAYER-01` pagination and privacy, followed by other small behavior slices.
+`BANK-05` order-execution/cancel concurrency and Orion safe-zone/protected,
+removal-race, and concurrent-arrival clauses remain larger targeted items.

@@ -2,11 +2,11 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 19 November 2026, after autonomous parity batch 3.
+Reviewed: 19 November 2026, after autonomous parity batch 4.
 
 ## Current measures
 
-- Parent requirements: 67 (39 VERIFIED, 20 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`; batch 3 verified `NPC-POP-01`, `NPC-POP-02`, and `NPC-POP-03`. EXC-05's placement/fill/retry clauses passed, but its separate concurrent settlement acceptance is still outstanding. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Parent requirements: 67 (40 VERIFIED, 19 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`; batch 3 verified `NPC-POP-01`, `NPC-POP-02`, and `NPC-POP-03`; batch 4 verified `EXC-05`, including concurrent settlement across two live servers and PostgreSQL order-lock/accounting assertions. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
 - Base clause rows: 227 (116 VERIFIED, 111 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
@@ -147,7 +147,15 @@ wall-clock delay and unrelated-order dependency were removed.
 
 Parent status after batch 2: **36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7
 PARTIAL, 1 BLOCKED**. The 18 touched base clauses are verified; additional
-EXC-05 concurrent settlement evidence remains required to promote its parent.
+EXC-05 concurrent settlement evidence is complete: two actual V3 server
+processes shared one disposable PostgreSQL database and simultaneously entered
+the scheduler settlement path for the same due orders. Both selected the same
+candidate buy/sell rows; PostgreSQL row locking and in-transaction state
+revalidation allowed exactly one trade to commit. Final SQL assertions proved
+single settlement and exact order, planet/port stock and credit conservation.
+`suite_planet_market_buy_order_lifecycle.json` passed 53/53 cases using the
+cross-server runner. The parent is promoted only after this concurrency case
+was added to the earlier placement, fill, retry and conservation evidence.
 
 ## Autonomous parity batch 1 — 19 November 2026
 
@@ -242,7 +250,7 @@ unverified.
 | `EXC-05` | clause 1 | Keep placement, reservation, execution and settlement distinct | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0016`–`case-0027`: zero-balance/full-storage order is accepted unreserved, remains open until matching; real scheduler later settles after funding/storage. |
 | `EXC-05` | clause 2 | Open orders wait for matches | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0018`–`case-0025`: unfilled order remains open until matching inventory and eligible sell order exist. |
 | `EXC-05` | clause 3 | partial fills preserve remainder | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0030`–`case-0031`: two of ten fill; eight remain and the unfunded remainder is cancelled with `insufficient_credits`; balances and stock conserve. |
-| `EXC-05` | clause 4 | no duplicate settlement | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0032`–`case-0036`: rearmed deterministic scheduler retry leaves one trade record, one partial fill and exact unchanged inventory/credits; 36/36 passed. |
+| `EXC-05` | clause 4 | no duplicate settlement | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0032`–`case-0036` proves rearmed scheduler retry idempotency; new concurrent case runs actual settlement on two live servers against one disposable database, verifies both selected the same due orders, then asserts one trade and exact stock/credit/order conservation. Full focused suite: 53/53. |
 | `EXC-06` | clause 1 | Port demand follows current target/pricing/capacity rules | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |
 | `EXC-06` | clause 2 | ports purchase Exchange goods to replenish | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |
 | `EXC-06` | clause 3 | Do not bypass Exchange with artificial supply unless a separate source is documented | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |

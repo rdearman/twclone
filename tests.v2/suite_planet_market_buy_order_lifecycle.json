@@ -248,6 +248,145 @@
         { "path": "data.rows.0.2", "op": "==", "value": 1 },
         { "path": "data.rows.0.3", "op": "==", "value": 1 }
       ]
+    },
+    {
+      "name": "Reset funds and inventory for concurrent settlement acceptance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance=400 WHERE owner_type='player' AND owner_id=@{planet_market_buyer_v3_player_id} AND currency='CRD' AND is_active=TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear planet ORE inventory for concurrent settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE entity_stock SET quantity=0 WHERE entity_type='planet' AND entity_id=@{market_planet_id} AND commodity_code='ORE';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set concurrent seller stock and account",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity) VALUES('port',@{market_seller_port_id},'ORE',4) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=4;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset seller settlement account",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance=0 WHERE owner_type='port' AND owner_id=@{market_seller_port_id} AND currency='CRD' AND is_active=TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear prior open ORE orders before creating the concurrent match",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE commodity_orders SET status='cancelled',cancellation_reason='isolated concurrent settlement fixture' WHERE commodity_id=(SELECT commodities_id FROM commodities WHERE code='ORE') AND status='open';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create concurrent eligible buy order through player workflow",
+      "command": "planet.market.buy_order",
+      "user": "planet_market_buyer_v3",
+      "data": { "planet_id": "@{market_planet_id}", "commodity": "ORE", "quantity_total": 4, "max_price": 100 },
+      "expect": { "status": "ok", "data": { "status": "open", "remaining_quantity": 4 } },
+      "save": { "concurrent_buy_order_id": "data.order_id" }
+    },
+    {
+      "name": "Create concurrent eligible sell order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO commodity_orders(actor_type,actor_id,location_type,location_id,commodity_id,side,quantity,filled_quantity,price,status,ts,expires_at,cancellation_reason) SELECT 'port',@{market_seller_port_id},'port',@{market_seller_port_id},commodities_id,'sell',4,0,100,'open',CURRENT_TIMESTAMP,NULL,NULL FROM commodities WHERE code='ORE' RETURNING commodity_orders_id;" },
+      "expect": { "status": "ok" },
+      "save": { "concurrent_sell_order_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Install a controlled delay inside the real trade settlement transaction",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "CREATE OR REPLACE FUNCTION qa_delay_market_settlement() RETURNS trigger LANGUAGE plpgsql AS $qa$ BEGIN IF NEW.quantity=4 AND NEW.buyer_actor_id=@{planet_market_buyer_v3_player_id} THEN PERFORM pg_sleep(8); END IF; RETURN NEW; END; $qa$;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Attach controlled delay to settlement record insertion",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "CREATE TRIGGER qa_delay_market_settlement BEFORE INSERT ON commodity_trades FOR EACH ROW EXECUTE FUNCTION qa_delay_market_settlement();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Enable isolated scheduler and select one future settlement timestamp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Choose concurrent settlement timestamp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint+600;" },
+      "expect": { "status": "ok" },
+      "save": { "concurrent_settlement_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Choose a second scheduler timestamp for concurrent order-lock revalidation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT @{concurrent_settlement_at}+3;" },
+      "expect": { "status": "ok" },
+      "save": { "concurrent_settlement_retry_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Make only daily settlement due for both server instances",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=(name='daily_market_settlement'),next_due_at=CASE WHEN name='daily_market_settlement' THEN to_timestamp(@{concurrent_settlement_at}) ELSE next_due_at END;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Overlap two settlement handlers after expiring only the disposable scheduler lock",
+      "parallel_requests": [
+        { "command": "sys.cron.advance_to", "user": "admin", "host": "127.0.0.1", "port": 12530, "timeout": 20, "data": { "now_s": "@{concurrent_settlement_at}", "confirm": true } },
+        { "command": "sys.raw_sql_exec", "user": "admin", "host": "127.0.0.1", "port": 12531, "timeout": 20, "delay_before_send_ms": 1500, "data": { "sql": "UPDATE locks SET until_ms=0 WHERE lock_name='daily_market_settlement';" } },
+        { "command": "sys.cron.advance_to", "user": "admin", "host": "127.0.0.1", "port": 12531, "timeout": 20, "delay_before_send_ms": 3000, "data": { "now_s": "@{concurrent_settlement_retry_at}", "confirm": true } }
+      ],
+      "expect_each": { "status": "ok" },
+      "expect": { "status": "ok", "type": "test.concurrent_requests" },
+      "asserts": [
+        { "path": "data.responses.0.data.tasks_run", "op": ">", "value": 0 },
+        { "path": "data.responses.2.data.tasks_run", "op": ">", "value": 0 }
+      ]
+    },
+    {
+      "name": "Verify concurrent settlement commits exactly once with conserved assets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT COUNT(*) FROM commodity_trades WHERE buyer_actor_type='player' AND buyer_actor_id=@{planet_market_buyer_v3_player_id} AND buyer_location_id=@{market_planet_id} AND seller_location_id=@{market_seller_port_id} AND quantity=4), (SELECT status='filled' AND filled_quantity=4 FROM commodity_orders WHERE commodity_orders_id=@{concurrent_buy_order_id})::int, (SELECT status='filled' AND filled_quantity=4 FROM commodity_orders WHERE commodity_orders_id=@{concurrent_sell_order_id})::int, (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=@{market_planet_id} AND commodity_code='ORE'), (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{planet_market_buyer_v3_player_id} AND currency='CRD' AND is_active=TRUE), (SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{market_seller_port_id} AND commodity_code='ORE'), (SELECT balance FROM bank_accounts WHERE owner_type='port' AND owner_id=@{market_seller_port_id} AND currency='CRD' AND is_active=TRUE);" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": 4 },
+        { "path": "data.rows.0.4", "op": "==", "value": 0 },
+        { "path": "data.rows.0.5", "op": "==", "value": 0 },
+        { "path": "data.rows.0.6", "op": "==", "value": 400 }
+      ]
+    },
+    {
+      "name": "Remove test-only settlement delay trigger and function",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DROP TRIGGER qa_delay_market_settlement ON commodity_trades;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove test-only settlement delay function",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DROP FUNCTION qa_delay_market_settlement();" },
+      "expect": { "status": "ok" }
     }
   ]
 }
