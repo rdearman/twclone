@@ -389,15 +389,21 @@ s2s_tcp_client_connect (const char *host, uint16_t port, int total_timeout_ms)
 
 
 void
+s2s_shutdown (s2s_conn_t *c)
+{
+  if (c && c->fd >= 0)
+    shutdown (c->fd, SHUT_RDWR);
+}
+
+
+void
 s2s_close (s2s_conn_t *c)
 {
   if (!c)
-    {
-      return;
-    }
+    return;
   if (c->fd >= 0)
     {
-      shutdown (c->fd, SHUT_RDWR);
+      s2s_shutdown (c);
       close (c->fd);
     }
   free (c);

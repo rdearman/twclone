@@ -40,6 +40,7 @@ s2s_conn_t *s2s_tcp_server_accept (int listen_fd, int timeout_ms);
 s2s_conn_t *s2s_tcp_client_connect (const char *host, uint16_t port,
 				    int total_timeout_ms);
 /* Close (idempotent) */
+void s2s_shutdown (s2s_conn_t * c);
 void s2s_close (s2s_conn_t * c);
 /* Install a key ring (required for TCP). keys may be NULL/0 to clear. */
 void s2s_set_keyring (const s2s_key_t * keys, size_t n);

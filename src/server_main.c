@@ -556,12 +556,17 @@ main (void)
      - request engine shutdown & reap
    */
   g_s2s_run = 0;
+  /* The control thread borrows g_s2s_conn until it exits.  Closing and
+   * freeing it here races its next s2s_recv_env() (especially when the
+   * public listener failed to bind and server_loop returned immediately).
+   * Shutdown the socket to unblock recv, join the borrower, then free it. */
+  s2s_shutdown (g_s2s_conn);
+  pthread_join (g_s2s_thr, NULL);
   if (g_s2s_conn)
     {
       s2s_close (g_s2s_conn);
       g_s2s_conn = NULL;
-    }				// unblocks thread
-  pthread_join (g_s2s_thr, NULL);
+    }
   if (s2s_listen_fd >= 0)
     {
       close (s2s_listen_fd);
