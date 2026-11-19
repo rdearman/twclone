@@ -1,0 +1,71 @@
+{
+  "test_suite_name": "V3 photon fire transaction rollback and retry",
+  "tests": [
+    { "name": "Bootstrap SysOp", "setup": "macro_bootstrap_admin" },
+    { "name": "Create ordinary photon player", "setup": "macro_auth_user", "username": "photon_atomic_qa", "password": "qa-password" },
+    {
+      "name": "Select a clean adjacent photon sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT w.to_sector FROM players p JOIN sector_warps w ON w.from_sector=p.sector_id WHERE p.name='photon_atomic_qa' AND NOT EXISTS (SELECT 1 FROM planets pl JOIN citadels c USING(planet_id) WHERE pl.sector_id=w.to_sector AND COALESCE(c.planetaryShields,0)>0) AND NOT EXISTS (SELECT 1 FROM sector_photon_effects e WHERE e.sector_id=w.to_sector) ORDER BY w.to_sector LIMIT 1;" },
+      "expect": { "status": "ok" }, "save": { "photon_rollback_target": "data.rows.0.0" },
+      "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }]
+    },
+    {
+      "name": "Prepare eligible ship and exact ammunition",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=3,destroyed=FALSE,onplanet=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_atomic_qa');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Install a controlled failure after ammo/effect updates",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE OR REPLACE FUNCTION v3_qa_fail_photon_request() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'controlled photon rollback'; END $$;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Attach failure to durable request insert",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE TRIGGER v3_qa_fail_photon_request BEFORE INSERT ON photon_fire_requests FOR EACH ROW EXECUTE FUNCTION v3_qa_fail_photon_request();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Injected request insert failure returns an error",
+      "command": "combat.fire_photon", "user": "photon_atomic_qa",
+      "data": { "sector_id": "@photon_rollback_target" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Ammo, sector effect, request and event all roll back",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN s.photons=3 AND NOT EXISTS (SELECT 1 FROM sector_photon_effects WHERE sector_id=@{photon_rollback_target}) AND NOT EXISTS (SELECT 1 FROM photon_fire_requests WHERE player_id=p.player_id) AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type='combat.photon_fired.v1' AND actor_player_id=p.player_id) THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Remove controlled photon failure trigger",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP TRIGGER v3_qa_fail_photon_request ON photon_fire_requests;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove controlled photon failure function",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP FUNCTION v3_qa_fail_photon_request();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Retry firing after rollback succeeds once",
+      "command": "combat.fire_photon", "user": "photon_atomic_qa",
+      "data": { "sector_id": "@photon_rollback_target" },
+      "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "asserts": [{ "path": "data.ammo_remaining", "op": "==", "value": 2 }]
+    },
+    {
+      "name": "Retry leaves one durable debit/effect/request/event",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN s.photons=2 AND (SELECT COUNT(*) FROM photon_fire_requests r WHERE r.player_id=p.player_id AND r.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM sector_photon_effects e WHERE e.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM engine_events e WHERE e.type='combat.photon_fired.v1' AND e.actor_player_id=p.player_id)=1 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    }
+  ]
+}

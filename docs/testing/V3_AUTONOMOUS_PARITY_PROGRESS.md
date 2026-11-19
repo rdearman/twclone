@@ -905,3 +905,27 @@ with **7 skipped** and **227 subtests passed**. Godot 4.5.1 client regressions
 passed **106**, failed **0**, with **7 live-server-only scripts skipped** by
 the non-live runner. The two historical planet scripts passed again as noted
 above. The full server was built with `make -j4`; `git diff --check` passed.
+
+### Batch 24 — Photon rollback acceptance
+
+Added `suite_photon_atomic_rollback.json` with a controlled PostgreSQL
+failure on `photon_fire_requests` insertion, after the transaction has debited
+ammunition and upserted the temporary sector effect. The duration, defense,
+and new rollback suites passed **67/67** against a disposable PostgreSQL
+database and the actual V3 server. The injected failure left ammunition
+unchanged and created no effect, request, or event; after removing the fault,
+the action succeeded with one debit and one durable effect/request/event.
+This closes the transaction rollback evidence gap for photon firing. Together
+with the prior 175-suite contextual regression result, the newly added photon
+rollback suite brings distinct coverage to **176/176 suites and 2,927 passing
+cases, zero failures or skips**; its two existing photon suites were rerun as
+part of the same 67-case acceptance.
+
+`PARITY-PHOTON-01` remains PARTIAL because the historical manual's ship-shield
+protection statement lacks a corresponding V3 targeting contract: the
+published `combat.fire_photon` request selects an adjacent sector and does not
+identify a ship to hit. No ship-targeting behavior was invented. The exact
+limitation is recorded in the clause matrix; no parent status changed. The
+specified first batch is already VERIFIED, and the unresolved `POP-07` and
+`FED-03` parent statuses remain scope-evidence and protocol-contract questions,
+respectively, rather than safe implementation tasks.
