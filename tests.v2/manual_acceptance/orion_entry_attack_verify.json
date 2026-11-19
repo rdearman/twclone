@@ -136,28 +136,21 @@
       }
     },
     {
-      "name": "Orion member enters through normal warp and is protected from its blockader",
-      "command": "move.warp",
-      "user": "orion_arrival_allied",
-      "data": {
-        "to_sector_id": "@{orion_arrival_home}"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "move.result"
-      }
-    },
-    {
-      "name": "Non-allied player enters through transwarp",
-      "command": "move.transwarp",
-      "user": "orion_arrival_hostile",
-      "data": {
-        "to_sector_id": "@{orion_arrival_home}"
-      },
-      "expect": {
-        "status": "ok",
-        "type": "move.transwarp"
-      }
+      "name": "Allied normal warp and hostile transwarp arrive concurrently",
+      "parallel_requests": [
+        {
+          "command": "move.warp",
+          "user": "orion_arrival_allied",
+          "data": { "to_sector_id": "@{orion_arrival_home}" }
+        },
+        {
+          "command": "move.transwarp",
+          "user": "orion_arrival_hostile",
+          "data": { "to_sector_id": "@{orion_arrival_home}" }
+        }
+      ],
+      "expect_each": { "status": "ok" },
+      "expect": { "status": "ok", "type": "test.concurrent_requests" }
     },
     {
       "name": "Both travel mechanisms reach Orion-controlled sector",

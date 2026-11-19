@@ -224,9 +224,13 @@ The same run passed the slave production-cycle unrest suites (20/20), POP-05
 daily stoppage/loss/recovery and rollback suites (30/30 across a serving-server
 restart), Ferengi destruction reward and restart suites (41/41), Orion
 arrival/restart suites (60/60), and deterministic black-market restock
-acceptance (34/34). POP-05 concurrent scheduler invocation remains untested. The
-30-day actual-scheduler simulation passed 64/64 invariant checks; it does not
-establish a quantitative economy balance result.
+acceptance (34/34). An additional concurrent POP-05 scheduler acceptance passed
+30/30 across preparation and post-restart verification: two authenticated
+handler calls produced one durable loss event, with proportional population
+accounting, replay protection and rollback still intact. Its parent remains
+BLOCKED by the three unset daily policy values. The 30-day actual-scheduler
+simulation passed 64/64 invariant checks; it does not establish a quantitative
+economy balance result.
 
 ## Player-facing acceptance
 

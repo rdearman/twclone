@@ -744,8 +744,41 @@ passed, 7 skipped, 227 subtests passed**; Godot 4.5.1 **106 passed, 0 failed,
 7 skipped** across 113 scripts. The seven Godot skips require a live acceptance
 fixture, not the mock/unit regression command. `git diff --check` passed.
 
-No parent classification changed. The new photon test adds three verified
-base clauses; current matrix totals are 172 VERIFIED / 55
+No parent classification changed. The photon test adds three verified base
+clauses and this batch verifies one POP-05 clause; current matrix totals are
+173 VERIFIED / 54
 IMPLEMENTED_UNTESTED. Remaining photon gaps are ship-shield impact semantics
-and injected firing rollback. The S2S shutdown fix and photon suite are ready
-for separate bounded commits.
+and injected firing rollback. The S2S shutdown fix and photon suite were
+committed separately as `97efd7fa` and `10004f56`.
+
+### Batch 20 — Orion arrival and POP-05 scheduler concurrency
+
+The two named Godot scripts had no associated active processes at the start of
+the session. Their prior traces were not current failures: the full Godot
+regression passed them again (`persisted_planet_restore_test.gd` 8/8 and
+`planet_command_response_test.gd` 117 checks).
+
+Expanded the Orion arrival acceptance so an allied player's ordinary warp and
+a hostile player's transwarp execute concurrently through the serving V3
+server. On a fresh disposable PostgreSQL database, the prepare/verify pair
+passed **59/59 cases**. SQL readback confirmed both arrived, the eligible
+hostile player received one 10-point hull loss, the allied player received no
+damage, one blockade attack receipt completed, and retry in the same window
+caused no second hit. The suites include authenticated re-login after a real
+server restart. Safe-zone arrival, the precise scope of any additional
+protected-player exclusion, and removal during combat settlement remain
+unresolved; no new protection mechanic was inferred.
+
+Expanded POP-05 daily acceptance to invoke `sys.cron.slave_unrest_once`
+simultaneously from two authenticated sessions. The prepare and post-restart
+verification suites passed **30/30 cases** on a fresh disposable PostgreSQL
+database. SQL assertions confirmed one event, one four-person population
+loss, proportional allocation conservation, idempotent replay, injected
+rollback, and recovery after the serving server restarted. Clause
+`POP-05`/2 is now VERIFIED; the parent remains BLOCKED by its still-unspecified
+recurrence interval, stoppage duration, and population-loss policy values.
+
+No server implementation defect was exposed and no gameplay code changed in
+this batch. Clause evidence was updated without changing parent counts. The
+Orion and POP-05 test/evidence edits are pending their own commit. Unrelated
+worktree modifications remain untouched.
