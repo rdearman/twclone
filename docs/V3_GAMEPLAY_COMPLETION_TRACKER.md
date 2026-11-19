@@ -4,8 +4,12 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 61 VERIFIED, 1
-IMPLEMENTED_UNVERIFIED, 4 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 26
+**Parity refresh — 19 November 2026:** 62 VERIFIED, 1
+IMPLEMENTED_UNVERIFIED, 3 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 27
+verified `PARITY-TOLL-01`: ordinary warp toll offer, exact payment, refusal
+combat, and the actual Python `MOVE` menu workflow passed against disposable
+PostgreSQL; the existing Godot transwarp journey covers both choices, damage
+and reconnect. Batch 26
 verified `COMBAT-02` using live ordinary-player planet-capture workflows in
 both Python and Godot against disposable PostgreSQL. The acceptance covered
 capture rollback, population and asset conservation, unrelated personal and

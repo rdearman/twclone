@@ -1,0 +1,20 @@
+{
+  "test_suite_name": "V3 Python ordinary-warp toll menu acceptance",
+  "description": "Prepare an ordinary-player toll passage, pause for the real Python navigation menu, and verify exact settlement in PostgreSQL.",
+  "tests": [
+    {"name":"Register Python toll owner","setup":"macro_auth_user","username":"python_toll_owner","password":"qa-password"},
+    {"name":"Register Python toll payer","setup":"macro_auth_user","username":"python_toll_payer","password":"qa-password"},
+    {"name":"Create ordinary warp route","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO sector_warps(from_sector,to_sector) VALUES(1,2),(2,1) ON CONFLICT DO NOTHING;"},"expect":{"status":"ok"}},
+    {"name":"Remove unrelated destination defenses","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM sector_assets WHERE sector_id=2;"},"expect":{"status":"ok"}},
+    {"name":"Set deterministic ordinary-player balances and locations","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE players SET credits=2000,sector_id=1 WHERE name='python_toll_owner';"},"expect":{"status":"ok"}},
+    {"name":"Set payer funds and origin","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE players SET credits=1000,sector_id=1 WHERE name='python_toll_payer';"},"expect":{"status":"ok"}},
+    {"name":"Set exact payer turns","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE turns SET turns_remaining=20 WHERE player_id=(SELECT player_id FROM players WHERE name='python_toll_payer');"},"expect":{"status":"ok"}},
+    {"name":"Pause daily turn reset during the live client window","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE cron_tasks SET enabled=FALSE WHERE name='daily_turn_reset';"},"expect":{"status":"ok"}},
+    {"name":"Place payer ship at route origin","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE name='python_toll_payer');"},"expect":{"status":"ok"}},
+    {"name":"Deploy exactly three ordinary toll fighters at destination","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,deployed_at) SELECT 2,player_id,0,2,3,3,now() FROM players WHERE name='python_toll_owner';"},"expect":{"status":"ok"}},
+    {"name":"Save initial turns","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT turns_remaining FROM turns WHERE player_id=(SELECT player_id FROM players WHERE name='python_toll_payer');"},"expect":{"status":"ok"},"save":{"python_toll_turns":"data.rows.0.0"}},
+    {"name":"Wait for actual Python MOVE menu journey","command":"delay","data":{"seconds":75}},
+    {"name":"Python menu toll payment and authoritative settlement snapshot","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT payer.sector_id,payer.credits,owner.credits,t.turns_remaining,o.state,o.fighter_count,o.amount,o.unit_rate,(SELECT COUNT(*) FROM toll_passage_payees q WHERE q.offer_id=o.offer_id AND q.owner_player_id=owner.player_id AND q.fighter_count=3 AND q.amount=3) FROM players payer JOIN players owner ON owner.name='python_toll_owner' JOIN turns t ON t.player_id=payer.player_id JOIN toll_passage_offers o ON o.player_id=payer.player_id WHERE payer.name='python_toll_payer';"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":2},{"path":"data.rows.0.1","op":"==","value":997},{"path":"data.rows.0.2","op":"==","value":2003},{"path":"data.rows.0.3","op":"==","value":19},{"path":"data.rows.0.4","op":"==","value":"accepted"},{"path":"data.rows.0.5","op":"==","value":3},{"path":"data.rows.0.6","op":"==","value":3},{"path":"data.rows.0.7","op":"==","value":1},{"path":"data.rows.0.8","op":"==","value":1}]},
+    {"name":"Python toll payer logs out","command":"auth.logout","user":"python_toll_payer","expect":{"status":"ok"}}
+  ]
+}

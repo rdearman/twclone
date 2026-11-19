@@ -999,3 +999,41 @@ actionable partial requirement: inspect the photon combat-protection gap and
 its approved protocol targeting contract; do not invent ship-targeting
 semantics. Remaining requirements include four PARTIAL, `POP-07`
 IMPLEMENTED_UNVERIFIED, and one BLOCKED.
+
+### Batch 27 — Toll fighters through normal warp and Python menu
+
+Starting classification: **61 VERIFIED, 1 IMPLEMENTED_UNVERIFIED, 4 PARTIAL,
+1 BLOCKED**. Ending classification: **62 VERIFIED, 1
+IMPLEMENTED_UNVERIFIED, 3 PARTIAL, 1 BLOCKED**. `PARITY-TOLL-01` is promoted
+after its final ordinary-warp acceptance clause was exercised.
+
+The updated `suite_combat_toll_fighters.json` passed **21/21** cases against a
+fresh disposable PostgreSQL database. A normal warp displayed a 30-credit offer
+for 30 toll fighters, acceptance transferred exactly 30 credits and allowed
+passage, and a second normal-warp refusal applied one durable fighter hit,
+consumed one turn and did not charge the payer again. `manual_acceptance/
+toll_python_prepare.json` passed **20/20** cases. An ordinary Python player
+authenticated, used the real `MOVE` menu's `(W) Warp to Sector` choice and the
+production `warp_flow`, accepted the server's three-credit offer, and received
+the authoritative sector refresh; this client journey passed **5/5** checks.
+PostgreSQL readback confirmed payer 1000→997 credits, owner 2000→2003, 20→19
+turns, an accepted 3-fighter/3-credit offer, one 3-credit payee row and sector
+2. Existing Godot live transwarp toll acceptance covers offer display, accept,
+refuse, damage and two reconnects; the mixed-owner/refusal/restart suite covers
+atomic resource accounting and recovery.
+
+The first normal-refusal test run destroyed its low-resource test ship; the
+test fixture was raised to a durable but schema-valid shield/fighter loadout,
+without relaxing the combat checks. A subsequent attempt exceeded the ship's
+allowed hull constraint and was corrected by leaving its hull at the valid
+default. The Python acceptance's initial 75-second pause allowed the real
+`daily_turn_reset` cron to restore turns, making an exact fixture turn check
+invalid. The fixture now disables that scheduler before its live-client window.
+The temporary Python harness output check was also corrected to capture the
+interactive prompt separately from printed client text. Final normal-warp and
+Python acceptance runs passed; no gameplay server defect was found.
+
+Evidence is in the clause matrix and decision register. The four remaining
+PARTIAL parents and next independent gaps are to be reconciled from the live
+matrix; `POP-07` remains documentary `IMPLEMENTED_UNVERIFIED`, and POP-05's
+unset daily numeric policy remains BLOCKED.

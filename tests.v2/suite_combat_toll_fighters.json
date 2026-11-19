@@ -103,6 +103,50 @@
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 1000000030 }
       ]
+    },
+    {
+      "name": "Rig victim back to the source sector for a normal-warp refusal",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH p AS (UPDATE players SET sector_id=1 WHERE name='toll_victim' RETURNING player_id,ship_id), s AS (UPDATE ships SET sector_id=1,shields=1000,fighters=1000 FROM p WHERE ships.ship_id=p.ship_id RETURNING ships.ship_id), t AS (UPDATE turns SET turns_remaining=10 FROM p WHERE turns.player_id=p.player_id RETURNING turns.player_id) SELECT ((SELECT COUNT(*) FROM p)=1 AND (SELECT COUNT(*) FROM s)=1 AND (SELECT COUNT(*) FROM t)=1)::int;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Normal warp again offers the deployed fighter quantity",
+      "command": "move.warp",
+      "data": { "to_sector_id": 2 },
+      "user": "toll_victim",
+      "expect": { "status": "ok", "type": "move.toll_offer_v1" },
+      "asserts": [
+        { "path": "data.fighter_count", "op": "==", "value": 30 },
+        { "path": "data.amount", "op": "==", "value": 30 }
+      ],
+      "save": { "normal_warp_refusal_offer": "data.offer_id" }
+    },
+    {
+      "name": "Refusing normal-warp toll proceeds through the hostile encounter",
+      "command": "move.warp",
+      "data": { "to_sector_id": 2, "toll_offer_id": "@{normal_warp_refusal_offer}", "toll_accept": false },
+      "user": "toll_victim",
+      "expect": { "status": "ok", "type": "move.result" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "Normal-warp refusal charges no second toll and records one fighter encounter",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN p.sector_id=2 AND p.credits=99970 AND t.turns_remaining=9 AND s.destroyed=FALSE AND (s.shields<1000 OR s.fighters<1000) AND o.state='refused' AND (SELECT COUNT(*) FROM engine_events WHERE actor_player_id=p.player_id AND type='combat.hit.fighters')=1 AND (SELECT credits FROM players WHERE name='toll_collector')=1000000030 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id JOIN turns t ON t.player_id=p.player_id JOIN toll_passage_offers o ON o.offer_id='@{normal_warp_refusal_offer}' WHERE p.name='toll_victim';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
     }
   ]
 }
