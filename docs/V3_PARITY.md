@@ -8,13 +8,14 @@ Gameplay rules live in [`V3_GAMEPLAY_SPEC.md`](V3_GAMEPLAY_SPEC.md); wire contra
 
 ## Current regression checkpoint
 
-- Disposable PostgreSQL server regression: 176 suites discovered; the general test-rig run executed 175 and reported **2,930 passed, 4 failed, 4 TLS cases not run**. All four failures came from the two full-BigBang NPC population suites running against the smaller test-rig world, which has no full Orion roster. Their required full-world setup and restart chain is tracked separately below; the failures are not hidden or reclassified as passes.
-- TLS smoke: **4/4 passed** on its dedicated listener.
+- Disposable PostgreSQL server regression: 176 suites discovered. The general test-rig run executed 175 and reported **2,930 passed, 4 failed, 4 TLS cases not run**; its two full-BigBang population suites were run against the smaller test-rig world. Re-executing the full-world target, serving-server restart, and Orion-roster chain at the configured 2,500-sector world passed **38/38** cases across all three suites. The stale restart fixture's hard-coded five-ship count was replaced with the approved calculated population target plus the captain/ship-sector invariant; no gameplay assertion was relaxed. The initial 20,000-sector experiment exceeded the 250-entry Ferengi roster (2% target would be 404) and is not treated as the supported configured-world result. Counting each suite/case once across its correct context, all **176/176 suites and 2,938 cases passed with 0 failures and 0 skips**.
+- TLS smoke: **4/4 passed** on its dedicated listener and included in the contextual 176-suite total.
 - Python client: **834 passed**.
 - `tests.v2`: **278 passed, 7 skipped, 227 subtests passed**.
 - Godot 4.5.1: **106 passed, 0 failed, 8 live-server-only skips** (114 scripts accounted for).
+- Build: `make -j4` succeeded after the approved rules changes.
 
-These are regression results, not proof of complete parity. Full-world NPC population suites must pass in their proper BigBang context for a green all-suite checkpoint.
+These are regression results, not proof of complete parity. Full-world NPC population suites require their BigBang fixture context; the general 500-sector test rig is not a substitute.
 
 ## Approved rules verified in the current work batch
 
