@@ -338,3 +338,17 @@ Use `VERIFIED` only for the operation and conditions recorded in an executed
 acceptance report. Keep implementation, test-fixture, focused runtime and
 deployment claims separate. The report date and commit identify the source
 baseline; newer source changes require relevant tests to be rerun.
+
+## Additional executable evidence — 19 November 2026
+
+`PARITY-PHOTON-01` remains PARTIAL. The new live PostgreSQL
+`suite_photon_defense_suppression.json` passed **37/37** and verifies both
+approved firing classes, ineligible-class refusal, planetary shield refusal
+without ammo debit, mine/fighter suppression through an active effect,
+citadel reaction suppression without mutating its stored setting, and defense
+re-engagement after expiry. Ship-shield impact semantics and fault-injected
+photon firing rollback remain unverified. Full server regressions passed
+175/175 suites (2,913 passed, 0 failed, 0 skipped), Python passed 834/834,
+`tests.v2` passed 277 with 7 skipped and 227 subtests, and Godot 4.5.1 passed
+106 with 7 live-mode scripts skipped. See the clause matrix and autonomous
+progress log for suite identifiers and exact limits.

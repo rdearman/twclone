@@ -690,3 +690,62 @@ passed **106**, failed **0**, skipped **6** live-server scripts. The live
 StarPort event assertion was not run against a serving server in this batch,
 so the relevant `PARITY-PORT-ATTACK-01` event clause remains
 IMPLEMENTED_UNTESTED. Parent and base-clause counts are unchanged from batch 16.
+
+## Batch 19 — S2S shutdown safety and photon effect acceptance
+
+Starting commit: `cd533c1168195df627abbdfc80ebe807f74a753b`.
+Parent classification remains **58 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 6
+PARTIAL, 1 BLOCKED**. The five first-batch IDs (`CFG-01`, `CFG-02`, `CFG-04`,
+`EXC-04`, and `V3-PHOTON-DURATION-01`) were already VERIFIED in the committed
+matrix; no duplicate work was counted.
+
+The two named Godot test processes were absent. `persisted_planet_restore_test.gd`
+passed 8/8 and `planet_command_response_test.gd` passed 117 checks; their prior
+backtrace is not a current failing test.
+
+The first focused-server invocation used the runner's default game port, which
+was already occupied. The server's game listener failed to bind and ASan
+exposed a genuine shutdown use-after-free: `s2s_close` freed a connection
+still borrowed by the S2S reader thread. `server_main` now shuts down the
+socket, joins its reader, then frees the connection; `s2s_transport` exposes
+the shutdown-only operation for this ordered teardown. A controlled
+disposable-PostgreSQL reproduction with an intentionally occupied, unique
+loopback game port passed its lifecycle check: expected bind failure, normal
+engine reap and no ASan/UBSan report. Five focused gameplay suites then passed
+154/154 on unique loopback ports with no sanitizer report:
+`suite_combat_advanced.json` 47/47, `suite_combat_citadel.json` 15/15,
+`suite_combat_mines.json` 14/14, `suite_photon_duration_acceptance.json`
+15/15, and `suite_planet_landing_defense.json` 63/63.
+
+Added `suite_photon_defense_suppression.json`; it passed **37/37** against a
+fresh disposable PostgreSQL server. It verifies both approved photon-firing
+ship classes, refusal of an ineligible class without ammunition/effect
+mutation, refusal against a planetary shield without ammunition debit,
+temporary sector mine/fighter suppression, re-engagement after the persisted
+effect expires, and citadel military-reaction suppression during an active
+effect without mutating stored citadel configuration. The matrix now marks
+clauses 1, 3 and 4 VERIFIED; clause 2 remains unverified as a whole because its
+separate ship-shield impact behavior has not been established. The photon
+parent remains PARTIAL; no parent was promoted.
+
+The all-general-suite disposable PostgreSQL regression passed **171/171
+suites, 2,871/2,871 cases**, with zero failures or skips using two isolated
+game servers and distinct loopback game/S2S ports. Contextual acceptance also
+passed: BigBang roster 2/2, NPC population plus real serving-server restart
+36/36, and TLS 4/4. Combined server result: **175/175 discovered suites,
+2,913 passed, 0 failed, 0 skipped**. Neither game-server log reported
+ASan/UBSan errors. The test runner's first concurrent-server port selection
+collided because its derived second S2S port equalled the second game port;
+the corrected rerun used explicit distinct ports and passed. No gameplay
+assertion or fixture expectation was changed.
+
+Client regressions passed: Python **834/834**; `pytest -q tests.v2` **277
+passed, 7 skipped, 227 subtests passed**; Godot 4.5.1 **106 passed, 0 failed,
+7 skipped** across 113 scripts. The seven Godot skips require a live acceptance
+fixture, not the mock/unit regression command. `git diff --check` passed.
+
+No parent classification changed. The new photon test adds three verified
+base clauses; current matrix totals are 172 VERIFIED / 55
+IMPLEMENTED_UNTESTED. Remaining photon gaps are ship-shield impact semantics
+and injected firing rollback. The S2S shutdown fix and photon suite are ready
+for separate bounded commits.

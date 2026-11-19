@@ -1,0 +1,80 @@
+{
+  "name": "Photon target protection and temporary sector defense suppression",
+  "version": "1.0.0",
+  "protocol_category": "23_Combat",
+  "tests": [
+    { "name": "Create ordinary photon shooter", "setup": "macro_auth_user", "username": "photon_suppression_shooter", "password": "qa-password" },
+    { "name": "Create ordinary sector entrant", "setup": "macro_auth_user", "username": "photon_suppression_victim", "password": "qa-password" },
+    {
+      "name": "Rig adjacent sectors",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES(1,679),(679,1),(1,680),(680,1) ON CONFLICT DO NOTHING;" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Position photon participants", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=1 WHERE player_id IN (@{photon_suppression_shooter_player_id},@{photon_suppression_victim_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Prepare eligible photon ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=0,photons=2,type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Prepare ordinary entering ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=12 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_victim_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Clear old sector assets", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=679;" }, "expect": { "status": "ok" } },
+    { "name": "Place hostile Armid mine and fighter", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES(679,@{photon_suppression_shooter_player_id},0,1,1,0,0),(679,@{photon_suppression_shooter_player_id},0,2,1,1,0);" }, "expect": { "status": "ok" } },
+    { "name": "Create planet with active citadel reaction", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,created_by,population,population_type,colonists_unassigned,fighters) VALUES(987655,679,'Photon Suppression Citadel',@{photon_suppression_shooter_player_id},'player',@{photon_suppression_shooter_player_id},100,'COLONIST',100,10);" }, "expect": { "status": "ok" } },
+    { "name": "Configure citadel reaction multiplier", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO citadels(planet_id,level,militaryReactionLevel,planetaryShields) VALUES(987655,2,2,0);" }, "expect": { "status": "ok" } },
+    { "name": "Create shielded planet", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,created_by,population) VALUES(987654,680,'Photon Shield Test',@{photon_suppression_shooter_player_id},'player',@{photon_suppression_shooter_player_id},0);" }, "expect": { "status": "ok" } },
+    { "name": "Create planetary shield", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO citadels(planet_id,level,planetaryShields) VALUES(987654,5,1);" }, "expect": { "status": "ok" } },
+    { "name": "Prepare second approved photon ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Imperial Starship') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Imperial Starship passes class check but shield blocks impact", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 680 }, "expect": { "status": "refused", "message": "Planetary shields protect this target" } },
+    { "name": "Second eligible class shield refusal does not spend photon", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=2 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=680) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Temporarily equip an ineligible ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Merchant Cruiser') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Ineligible ship class cannot fire photons", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 679 }, "expect": { "status": "refused" } },
+    { "name": "Ineligible attempt preserves ammo and effect state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=2 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Restore eligible photon ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    {
+      "name": "Planetary shield refuses photon impact",
+      "command": "combat.fire_photon", "user": "photon_suppression_shooter",
+      "data": { "sector_id": 680 }, "expect": { "status": "refused" }
+    },
+    {
+      "name": "Shield refusal preserves ammunition and creates no effect",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT s.photons=2 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=680) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" },
+      "expect": { "status": "ok", "data": { "rows": [["t"]] } }
+    },
+    {
+      "name": "Eligible ordinary player fires photon at armed adjacent sector",
+      "command": "combat.fire_photon", "user": "photon_suppression_shooter",
+      "data": { "sector_id": 679 }, "expect": { "status": "ok", "type": "combat.photon_fired_v1" }
+    },
+    {
+      "name": "Entrant has undamaged baseline",
+      "command": "combat.status", "user": "photon_suppression_victim",
+      "expect": { "status": "ok" }, "asserts": [{ "path": "data.hull", "op": "==", "value": 100 }]
+    },
+    {
+      "name": "Active photon permits arrival without resolving armed fighter",
+      "command": "move.warp", "user": "photon_suppression_victim",
+      "data": { "to_sector_id": 679 }, "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.sector_id", "op": "==", "value": 679 }]
+    },
+    {
+      "name": "Suppressed arrival preserves hull and defense asset",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT s.hull=100 AND (SELECT COUNT(*) FROM sector_assets WHERE sector_id=679 AND owner_id=@{photon_suppression_shooter_player_id} AND asset_type IN (1,2))=2 AND EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679 AND expires_at>EXTRACT(EPOCH FROM NOW())::bigint) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_victim_player_id};" },
+      "expect": { "status": "ok", "data": { "rows": [["t"]] } }
+    },
+    { "name": "Attack citadel during photon effect", "command": "combat.attack_planet", "user": "photon_suppression_victim", "data": { "planet_id": 987655, "enslave_colonists": false }, "expect": { "status": "ok" } },
+    { "name": "Photon suppresses reaction without changing stored citadel configuration", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT p.owner_id=@{photon_suppression_victim_player_id} AND c.militaryReactionLevel=2 AND EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679 AND expires_at>EXTRACT(EPOCH FROM NOW())::bigint) FROM planets p JOIN citadels c USING(planet_id) WHERE p.planet_id=987655;" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    {
+      "name": "Expire the persisted effect through disposable test fixture",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE sector_photon_effects SET expires_at=EXTRACT(EPOCH FROM NOW())::bigint-1 WHERE sector_id=679;" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Entrant leaves after suppression expiry", "command": "move.warp", "user": "photon_suppression_victim", "data": { "to_sector_id": 1 }, "expect": { "status": "ok" } },
+    { "name": "Expired effect no longer suppresses armed defense", "command": "move.warp", "user": "photon_suppression_victim", "data": { "to_sector_id": 679 }, "expect": { "status": "ok" } },
+    {
+      "name": "Post-expiry defense engages and consumes its one fighter asset",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT s.hull<100 AND NOT EXISTS(SELECT 1 FROM sector_assets WHERE sector_id=679 AND owner_id=@{photon_suppression_shooter_player_id} AND asset_type IN (1,2)) AND EXISTS(SELECT 1 FROM engine_events WHERE actor_player_id=@{photon_suppression_victim_player_id} AND type='combat.hit.fighters') FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_victim_player_id};" },
+      "expect": { "status": "ok", "data": { "rows": [["t"]] } }
+    }
+  ]
+}
