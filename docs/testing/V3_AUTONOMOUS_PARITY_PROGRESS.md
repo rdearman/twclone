@@ -929,3 +929,26 @@ limitation is recorded in the clause matrix; no parent status changed. The
 specified first batch is already VERIFIED, and the unresolved `POP-07` and
 `FED-03` parent statuses remain scope-evidence and protocol-contract questions,
 respectively, rather than safe implementation tasks.
+
+### Batch 25 — Ferengi retaliation and reward parent verification
+
+The decision register disagreed with both the clause matrix and completion
+tracker: it still marked wanted-list/pursuit as untested although the prior
+acceptance claimed those clauses passed. Reran the ordinary-player acceptance
+against a fresh disposable PostgreSQL database: `ferengi_destruction_reward.json`
+passed **45/45**, and after restarting the serving game server,
+`ferengi_destruction_reward_restart.json` passed **6/6**. The live cases
+demonstrated one wanted bounty on a nonlethal hostile attack, strongest-captain
+hunt intelligence, no duplicate bounty/action on retry, exact 5,000-credit
+system-generated reward to the authenticated eligible player, exclusion of a
+human-owned Ferengi-corporation hull, and persisted once-only settlement after
+restart. The existing Python/Godot full client runs include the ordinary
+combat attack workflows.
+
+The stale decision-register status is corrected and `NPC-FER-01` is promoted
+from IMPLEMENTED_UNVERIFIED to VERIFIED. Current parent classification:
+**60 VERIFIED, 1 IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED**. The only
+IMPLEMENTED_UNVERIFIED parent is `POP-07`; its remaining item is a documentary
+scope constraint with no runtime rule, so the matrix retains the proposed
+contract-evidence policy distinction and does not promote it without that
+policy being accepted.

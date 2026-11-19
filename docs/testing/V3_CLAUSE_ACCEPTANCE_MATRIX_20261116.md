@@ -2,11 +2,11 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 19 November 2026, after autonomous parity batches 21–23.
+Reviewed: 19 November 2026, after autonomous parity batches 21–25.
 
 ## Current measures
 
-- Parent requirements: 67 (59 VERIFIED, 2 IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED). Autonomous batch 21 closed both mandatory `NPC-ORI-01` clauses with arrival/protection and runtime personality acceptance.
+- Parent requirements: 67 (60 VERIFIED, 1 IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED). Autonomous batch 24 reran the complete Ferengi wanted-list/pursuit/reward journey and restart verification; `NPC-FER-01` is now VERIFIED. `POP-07` remains the only IMPLEMENTED_UNVERIFIED parent due its documentary scope clause.
 - Base clause rows: 227 (175 VERIFIED, 52 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - Batch 23 added executable subclause evidence for all seven `COMBAT-01` destruction/recovery clauses without changing the 67-parent or 227-base-clause arithmetic. The acceptance was ordinary-player combat against disposable PostgreSQL, followed by an actual serving-server restart and authenticated recovery.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
