@@ -4,8 +4,17 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 40 VERIFIED, 19
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 3
+**Parity refresh — 19 November 2026:** 41 VERIFIED, 18
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 5
+verified `POP-06` after exposing the already implemented emancipation command
+through landed-planet workflows in Python and Godot. Disposable PostgreSQL
+acceptance covered player ownership, corporation Leader/Officer access, Member
+refusal, whole-population and allocation conservation, zero turn/credit cost,
+and injected after-update rollback (67/67 suite cases). Python workflow tests
+passed 82/82 and Godot command-menu tests passed 218 checks. Exact evidence is
+in the clause matrix and autonomous progress log. Autonomous batch 4 verified
+concurrent Exchange settlement (`EXC-05`) with two live servers sharing a
+disposable PostgreSQL database. Autonomous batch 3
 verified Ferengi and Orion NPC population reconciliation and the Ferengi fleet
 catalogue (`NPC-POP-01` through `NPC-POP-03`) against disposable PostgreSQL,
 including full BigBang roster evidence and serving-server restart. The focused

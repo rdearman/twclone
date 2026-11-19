@@ -6,6 +6,7 @@
   "tests": [
     { "name": "Create owner", "setup": "macro_auth_user", "username": "planet_fighter_owner", "password": "qa-password" },
     { "name": "Create visitor", "setup": "macro_auth_user", "username": "planet_fighter_visitor", "password": "qa-password" },
+    { "name": "Create corporate officer", "setup": "macro_auth_user", "username": "planet_emancipate_officer", "password": "qa-password" },
     {
       "name": "Fixture planet and citadel",
       "command": "sys.raw_sql_exec", "user": "admin",
@@ -224,6 +225,91 @@
       "data": { "sql": "SELECT population=1000 AND population_type='COLONIST' AND colonists_unassigned=400 AND colonists_ore=300 AND colonists_org=200 AND colonists_eq=100 FROM planets WHERE planet_id=977701;" },
       "expect": { "status": "ok" },
       "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Create emancipation QA corporation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO corporations(corporation_id,name,owner_id,tag) VALUES (977703,'Emancipation QA Corporation',@{planet_fighter_owner_player_id},'EQA') ON CONFLICT (corporation_id) DO UPDATE SET owner_id=EXCLUDED.owner_id;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Leader, Officer, and Member roles for emancipation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO corp_members(corporation_id,player_id,role) VALUES (977703,@{planet_emancipate_officer_player_id},'Officer'),(977703,@{planet_fighter_visitor_player_id},'Member') ON CONFLICT (corporation_id,player_id) DO UPDATE SET role=EXCLUDED.role;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create slave populations owned by the corporation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,class,type,created_by,population,population_type,colonists_unassigned,colonists_ore,colonists_org,colonists_eq) VALUES (977703,1,'Corp Emancipation QA',977703,'corp','M',1,@{admin_player_id},400,'SLAVE',100,100,100,100),(977704,1,'Officer Emancipation QA',977703,'corp','M',1,@{admin_player_id},300,'SLAVE',75,75,75,75),(977705,1,'Rollback Emancipation QA',977703,'corp','M',1,@{admin_player_id},200,'SLAVE',50,50,50,50) ON CONFLICT(planet_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,owner_type='corp',population=EXCLUDED.population,population_type='SLAVE',colonists_unassigned=EXCLUDED.colonists_unassigned,colonists_ore=EXCLUDED.colonists_ore,colonists_org=EXCLUDED.colonists_org,colonists_eq=EXCLUDED.colonists_eq;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Corporation Member cannot emancipate a corporation planet",
+      "command": "planet.emancipate", "user": "planet_fighter_visitor",
+      "data": { "planet_id": 977703 }, "expect": { "status": "error" }
+    },
+    {
+      "name": "Member refusal leaves population and allocations unchanged",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT population=400 AND population_type='SLAVE' AND colonists_unassigned=100 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 FROM planets WHERE planet_id=977703;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Corporation Officer emancipates all slaves without cost",
+      "command": "planet.emancipate", "user": "planet_emancipate_officer",
+      "data": { "planet_id": 977704 }, "expect": { "status": "ok", "type": "planet.emancipated_v1" },
+      "asserts": [ { "path": "data.population", "op": "==", "value": 300 }, { "path": "data.population_type", "op": "==", "value": "COLONIST" }, { "path": "data.turns_charged", "op": "==", "value": 0 }, { "path": "data.credits_charged", "op": "==", "value": 0 } ]
+    },
+    {
+      "name": "Corporation Leader emancipates a separate colony",
+      "command": "planet.emancipate", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977703 }, "expect": { "status": "ok", "type": "planet.emancipated_v1" },
+      "asserts": [ { "path": "data.population", "op": "==", "value": 400 }, { "path": "data.population_type", "op": "==", "value": "COLONIST" } ]
+    },
+    {
+      "name": "Corporation emancipation preserves population and every allocation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT population=400 AND population_type='COLONIST' AND colonists_unassigned=100 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 FROM planets WHERE planet_id=977703) AND (SELECT population=300 AND population_type='COLONIST' AND colonists_unassigned=75 AND colonists_ore=75 AND colonists_org=75 AND colonists_eq=75 FROM planets WHERE planet_id=977704);" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Create injected failure for emancipation after row update",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE FUNCTION v3_qa_fail_emancipation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.planet_id=977705 AND OLD.population_type='SLAVE' AND NEW.population_type='COLONIST' THEN RAISE EXCEPTION 'injected emancipation rollback'; END IF; RETURN NEW; END; $$;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Install AFTER UPDATE failure trigger for emancipation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE TRIGGER v3_qa_fail_emancipation AFTER UPDATE OF population_type ON planets FOR EACH ROW EXECUTE FUNCTION v3_qa_fail_emancipation();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Injected failure refuses emancipation instead of partially committing",
+      "command": "planet.emancipate", "user": "planet_emancipate_officer",
+      "data": { "planet_id": 977705 }, "expect": { "status": "error" }
+    },
+    {
+      "name": "Emancipation rollback preserves type, population, and allocations",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN population=200 AND population_type='SLAVE' AND colonists_unassigned=50 AND colonists_ore=50 AND colonists_org=50 AND colonists_eq=50 THEN 'true' ELSE 'false' END FROM planets WHERE planet_id=977705;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "true" } ]
+    },
+    {
+      "name": "Remove emancipation rollback trigger",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP TRIGGER v3_qa_fail_emancipation ON planets;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove emancipation rollback function",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP FUNCTION v3_qa_fail_emancipation();" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Landed visitor cannot transfer planet fighters",

@@ -7176,6 +7176,33 @@ def planet_harvest_flow(ctx: Context):
     _refresh_planet_overview(ctx, planet_id)
 
 
+@register("planet_emancipate_flow")
+def planet_emancipate_flow(ctx: Context):
+    """Convert the landed planet's complete slave population as authorized."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Emancipation requires a server-confirmed landing on the planet.")
+        return
+    if input(f"Convert all slaves on planet {planet_id} to colonists? [y/N]: ").strip().lower() != "y":
+        print("Emancipation cancelled.")
+        return
+    response = ctx.conn.rpc("planet.emancipate", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet emancipation refused: {_planet_error(response)}")
+        return
+    if response.get("type") != "planet.emancipated_v1":
+        print("[Error] Emancipation response type was unexpected; refresh the planet before continuing.")
+        return
+    data = get_data(response)
+    if not isinstance(data, dict) or data.get("planet_id") != planet_id:
+        print("[Error] Emancipation response did not identify the landed planet; refresh before continuing.")
+        return
+    print(f"Planet {planet_id}: {data.get('population', 'unknown')} population is now COLONIST.")
+    print(f"  Turns charged: {data.get('turns_charged', 'not reported')}; credits charged: {data.get('credits_charged', 'not reported')}")
+    _refresh_planet_overview(ctx, planet_id)
+
+
 @register("planet_market_sell_flow")
 def planet_market_sell_flow(ctx: Context):
     """Sell controlled planetary surplus to the Galactic Exchange."""

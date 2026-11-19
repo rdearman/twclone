@@ -100,6 +100,62 @@ def test_planet_info_does_not_display_a_different_authoritative_planet(
     assert "planet.info identified planet 88" in capsys.readouterr().out
 
 
+def test_emancipation_requires_landing_and_refreshes_confirmed_planet(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 17})
+    ctx.state.update(on_planet=True, current_planet_id=77)
+    fake_conn.queue("planet.emancipate", {
+        "status": "ok", "type": "planet.emancipated_v1",
+        "data": {"planet_id": 77, "population": 100, "population_type": "COLONIST",
+                 "turns_charged": 0, "credits_charged": 0},
+    })
+    fake_conn.queue("planet.info", {
+        "status": "ok", "type": "planet.info",
+        "data": {"planet_id": 77, "population": 100, "population_type": "COLONIST"},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+
+    client.planet_emancipate_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["planet.emancipate", "planet.info"]
+    assert fake_conn.calls[0]["data"] == {"planet_id": 77}
+    assert "100 population is now COLONIST" in capsys.readouterr().out
+
+
+def test_emancipation_cancel_and_missing_landing_do_not_mutate(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 17})
+    client.planet_emancipate_flow(ctx)
+    assert fake_conn.calls == []
+    assert "server-confirmed landing" in capsys.readouterr().out
+
+    ctx.state.update(on_planet=True, current_planet_id=77)
+    monkeypatch.setattr("builtins.input", lambda *_: "n")
+    client.planet_emancipate_flow(ctx)
+    assert fake_conn.calls == []
+    assert "cancelled" in capsys.readouterr().out
+
+
+def test_emancipation_refusal_does_not_claim_conversion(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 17})
+    ctx.state.update(on_planet=True, current_planet_id=77)
+    fake_conn.queue("planet.emancipate", {
+        "status": "error", "error": {"message": "Not authorized"},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+
+    client.planet_emancipate_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["planet.emancipate"]
+    output = capsys.readouterr().out
+    assert "Not authorized" in output
+    assert "is now COLONIST" not in output
+
+
 def test_landing_success_with_mismatched_player_refresh_stays_non_actionable(
     ctx_factory, fake_conn, capsys
 ):

@@ -1266,6 +1266,7 @@ func _render_actions() -> void:
 			actions.append({"label": "Planet colonist status", "command": "planet.colonists.get", "context_id": "planet_id"})
 			actions.append({"label": "Allocate planet colonists", "command": "planet.colonists.allocate", "context_id": "planet_id", "fields": [["ore", FIELD_INT, "Ore colonists", "0"], ["organics", FIELD_INT, "Organics colonists", "0"], ["equipment", FIELD_INT, "Equipment colonists", "0"]], "mutating": true})
 			actions.append({"label": "Harvest planet production", "command": "planet.harvest", "context_id": "planet_id", "mutating": true})
+			actions.append({"label": "Emancipate planet slaves", "command": "planet.emancipate", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Sell planet surplus to Exchange", "command": "planet.market.sell", "context_id": "planet_id", "fields": [["commodity", FIELD_TEXT, "Commodity (ORE, ORG, EQU)", "ORE"], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true})
 			actions.append({"label": "Build planet citadel", "command": "citadel.build", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Upgrade planet citadel", "command": "citadel.upgrade", "context_id": "planet_id", "mutating": true})

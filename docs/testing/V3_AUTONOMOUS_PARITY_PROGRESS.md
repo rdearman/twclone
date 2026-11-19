@@ -211,3 +211,33 @@ in the matrix: `POP-06` slave-to-colonist conversion/access/accounting, then
 `PLAYER-01` pagination and privacy, followed by other small behavior slices.
 `BANK-05` order-execution/cancel concurrency and Orion safe-zone/protected,
 removal-race, and concurrent-arrival clauses remain larger targeted items.
+
+## Batch 5 — POP-06 emancipation and player-facing workflows
+
+The server already implemented the approved owner/Leader/Officer emancipation
+transaction, but neither client exposed the action. Added a confirmation-based
+Python surface menu workflow and a Godot landed-planet action. Both bind only
+the current server-confirmed planet; Python validates the response type and
+planet identity and refreshes authoritative planet state after success.
+
+Disposable PostgreSQL acceptance: `suite_planet_fighter_transfers.json`
+passed **67/67**, including owner, corporation Leader and Officer success,
+Member and visitor refusal, full population/allocation conservation, zero turns
+and credits, and an AFTER UPDATE injected failure that rolled the population
+type and allocations back. Python planetary workflow tests passed **82/82**.
+Godot 4.5.1 command-menu regression passed **218 checks**, including confirmed
+emancipation dispatch with the selected planet ID. An initial attempt to drive
+multiple DDL commands in one prepared SQL request failed because PostgreSQL
+rejects multiple commands in a prepared statement; the fixture was corrected
+to execute each setup statement separately. A subsequent fixture attempt
+violated the corporation's single-Leader constraint; the test now preserves
+the corporation-created Leader and seeds only Officer/Member roles. The final
+run is fully green; no server defect was found.
+
+POP-06 was promoted, moving the count from 40 VERIFIED / 19
+IMPLEMENTED_UNVERIFIED to **41 VERIFIED / 18 IMPLEMENTED_UNVERIFIED**, with 7
+PARTIAL and 1 BLOCKED. The base clause ledger is now 119 VERIFIED / 108
+IMPLEMENTED_UNTESTED. Next I am checking the small online-player listing
+requirement (`PLAYER-01`); prior regression notes record conflicting page/limit
+and offset/fields schemas, so promotion depends on reconciling that published
+contract rather than assuming the old fixture or implementing a guess.

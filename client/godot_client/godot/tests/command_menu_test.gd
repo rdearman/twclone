@@ -192,6 +192,20 @@ func _run() -> void:
 	# Keep the surrounding legacy command-count assertions independent of this
 	# focused harvest dispatch check.
 	captured.resize(before_harvest)
+	var emancipate_button := _action_button(menu, "Emancipate planet slaves")
+	_check(emancipate_button != null and not emancipate_button.disabled, "landed planet emancipation workflow was unavailable")
+	var before_emancipate := captured.size()
+	if emancipate_button != null:
+		emancipate_button.pressed.emit()
+		_check(menu._form_dialog.visible, "planet emancipation did not require confirmation")
+		if menu._form_dialog.visible:
+			(menu._form_dialog.get_ok_button() as Button).pressed.emit()
+	_check(captured.size() == before_emancipate + 1, "confirmed emancipation did not dispatch the server command")
+	if captured.size() > before_emancipate:
+		_check(captured[before_emancipate]["command"] == "planet.emancipate", "emancipation dispatched the wrong command")
+		_check(captured[before_emancipate]["data"] == {"planet_id": 19}, "emancipation did not bind the selected planet ID")
+		_check(captured[before_emancipate]["mutating"], "emancipation was not marked as a server mutation")
+	captured.resize(before_emancipate)
 	var exchange_sale_button := _action_button(menu, "Sell planet surplus to Exchange")
 	_check(exchange_sale_button != null and not exchange_sale_button.disabled, "landed planet Exchange sale workflow was unavailable")
 	var before_exchange_sale := captured.size()

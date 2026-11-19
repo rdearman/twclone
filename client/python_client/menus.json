@@ -334,6 +334,16 @@
           }
         },
         {
+          "key": "m",
+          "label": "(M) Emancipate Planet Slaves",
+          "action": {
+            "pycall": "planet_emancipate_flow"
+          },
+          "show_if": [
+            "on_planet"
+          ]
+        },
+        {
           "key": "p",
           "label": "(P) Planetary Trade Agreement",
           "action": {
