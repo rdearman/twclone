@@ -35,15 +35,6 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Deploy the required homing fighter at the destination",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) SELECT 10, player_id, 0, 2, 1, 2, now() FROM players WHERE name = 'mover_transwarp'"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Rig: Set mover_transwarp Fuel Ore cargo to two",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -138,6 +129,46 @@
       "user": "admin",
       "data": {
         "sql": "UPDATE ships SET ore = 3 WHERE ship_id = (SELECT ship_id FROM players WHERE name='mover_transwarp')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Capture state before missing homing reference",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining,p.sector_id,c.quantity FROM turns t JOIN players p ON p.player_id=t.player_id JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "transwarp_no_homing_turns": "data.rows.0.0", "transwarp_no_homing_sector": "data.rows.0.1", "transwarp_no_homing_fuel": "data.rows.0.2" }
+    },
+    {
+      "name": "Negative: Missing destination homing fighter is refused",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 10 },
+      "user": "mover_transwarp",
+      "expect": { "status": "refused", "error_code": 1458 }
+    },
+    {
+      "name": "Missing homing reference preserves fuel turns and location",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining,p.sector_id,c.quantity FROM turns t JOIN players p ON p.player_id=t.player_id JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@{transwarp_no_homing_turns}" },
+        { "path": "data.rows.0.1", "op": "==", "value": "@{transwarp_no_homing_sector}" },
+        { "path": "data.rows.0.2", "op": "==", "value": "@{transwarp_no_homing_fuel}" }
+      ]
+    },
+    {
+      "name": "Rig: Deploy required homing fighter after missing-reference refusal",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) SELECT 10, player_id, 0, 2, 1, 2, now() FROM players WHERE name = 'mover_transwarp'"
       },
       "expect": { "status": "ok" }
     },

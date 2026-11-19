@@ -56,9 +56,27 @@ class TranswarpServerContractTests(unittest.TestCase):
             if t.get("name") == "Negative: Out-of-universe transwarp destination is refused"
         )
         self.assertEqual(invalid["expect"], {"status": "refused", "error_code": 1700})
-
         nav_names = [t.get("name") for t in self.nav_suite["tests"]]
         self.assertIn("Missing transwarp equipment preserves turns", nav_names)
+
+    def test_missing_homing_reference_is_refused_before_state_mutation(self):
+        names = [test.get("name") for test in self.suite["tests"]]
+        self.assertIn(
+            "Negative: Missing destination homing fighter is refused", names
+        )
+        self.assertIn(
+            "Missing homing reference preserves fuel turns and location", names
+        )
+        refusal = next(
+            test for test in self.suite["tests"]
+            if test.get("name") == "Negative: Missing destination homing fighter is refused"
+        )
+        self.assertEqual(refusal["expect"], {"status": "refused", "error_code": 1458})
+        mutation_check = next(
+            test for test in self.suite["tests"]
+            if test.get("name") == "Missing homing reference preserves fuel turns and location"
+        )
+        self.assertEqual(len(mutation_check["asserts"]), 3)
 
     def test_transwarp_is_synchronous_and_commits_movement_with_entry_hazards(self):
         tx_begin = self.handler.index("db_tx_begin")

@@ -4,9 +4,16 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 47 VERIFIED, 12
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 10
-verified `MOVE-01` and `MOVE-02`. Three live disposable-PostgreSQL suites
+**Parity refresh — 19 November 2026:** 48 VERIFIED, 11
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 11
+verified `PARITY-TW-HOMING-01`. Live disposable PostgreSQL acceptance passed
+23/23 cases: absent destination fighter refusal left fuel, turns and location
+unchanged; transwarp succeeded after a destination fighter was deployed, with
+the exact 3 ORE debit and persisted arrival. Python navigation/server tests
+passed 30/30 and Godot's command-menu regression passed 238 checks. The
+transaction-order contract test confirms the reference lock precedes fuel,
+turn and location mutation. Exact case references are in the clause matrix.
+Autonomous batch 10 verified `MOVE-01` and `MOVE-02`. Three live disposable-PostgreSQL suites
 passed 91 cases across normal warp, transwarp and arrival hazards. The expanded
 hazard suite verifies hostile mine/fighter/limpet damage and event persistence,
 friendly-asset exclusion, immediate turn/state effects and lethal escape-pod

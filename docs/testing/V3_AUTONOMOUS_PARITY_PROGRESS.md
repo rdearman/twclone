@@ -374,3 +374,28 @@ BLOCKED**. `MOVE-03` and `MOVE-04` remain unverified because their remaining
 mandatory clauses describe future interruption/scope policy rather than
 independent runtime gameplay actions; source inspection alone does not promote
 them.
+
+## Batch 11 — transwarp homing reference
+
+`PARITY-TW-HOMING-01` is VERIFIED. The transwarp suite was extended to begin
+with a valid destination and fuel but no homing fighter. The ordinary player
+was refused with error 1458; PostgreSQL readback confirmed that ORE, turns and
+sector were unchanged. After deterministic fixture setup deployed a fighter
+at the destination, the same player's one-hop transwarp succeeded and consumed
+exactly 3 ORE. The expanded disposable-PostgreSQL suite passed **23/23**.
+`tests.v2/test_transwarp_server_contract.py` and Python navigation workflows
+passed **30/30**; the Godot 4.5.1 command-menu suite passed **238 checks**,
+including transwarp action dispatch. The contract assertion verifies the
+reference is locked before fuel, turn and location mutations. No gameplay
+server defect was found.
+
+The insurance suite was also executed (**22/22**), but this evidence is not
+enough to promote INS-01/02/03: it uses a fixture-inserted claim rather than a
+qualifying hull destruction and does not establish complete client-accessible
+insurance purchase/claim workflows. Those parents remain unverified pending
+the missing acceptance, rather than being promoted from a partial scenario.
+
+Classification moved from **47 VERIFIED / 12 IMPLEMENTED_UNVERIFIED / 7
+PARTIAL / 1 BLOCKED** to **48 VERIFIED / 11 IMPLEMENTED_UNVERIFIED / 7
+PARTIAL / 1 BLOCKED**. Clause totals are **129 VERIFIED / 98
+IMPLEMENTED_UNTESTED**. No unrelated files were staged.
