@@ -845,6 +845,18 @@ func _run() -> void:
 		var before_daily_order := captured.size()
 		menu._submit_form()
 		_check(captured.size() == before_daily_order + 1 and captured.back()["data"] == {"recipient_player_id": 43, "amount": 250, "frequency": "daily", "time_utc": "08:15"}, "daily form included conditional schedule fields or omitted required V3 fields")
+	menu._snapshot["freshness"] = {"sector": "fresh"}
+	var transwarp_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("NAVIGATION", []):
+		if str(candidate.get("command", "")) == "move.transwarp":
+			transwarp_action = candidate
+	_check(not transwarp_action.is_empty(), "navigation menu does not expose transwarp")
+	if not transwarp_action.is_empty():
+		menu._choose_action(transwarp_action)
+		menu._form_fields["to_sector_id"].text = "10"
+		var before_transwarp := captured.size()
+		menu._submit_form()
+		_check(captured.size() == before_transwarp + 1 and captured.back()["command"] == "move.transwarp" and captured.back()["data"] == {"to_sector_id": 10}, "Godot transwarp UI did not send the documented destination request")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

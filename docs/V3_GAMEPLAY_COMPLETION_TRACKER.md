@@ -4,8 +4,20 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 45 VERIFIED, 14
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 9
+**Parity refresh — 19 November 2026:** 47 VERIFIED, 12
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 10
+verified `MOVE-01` and `MOVE-02`. Three live disposable-PostgreSQL suites
+passed 91 cases across normal warp, transwarp and arrival hazards. The expanded
+hazard suite verifies hostile mine/fighter/limpet damage and event persistence,
+friendly-asset exclusion, immediate turn/state effects and lethal escape-pod
+recovery. A controlled database fault during transwarp arrival proves that
+location, turn, fuel, hull and hostile assets roll back together. Python
+navigation/hazard tests passed 36/36; the Godot command menu passed 238 checks
+for warp and transwarp dispatch; the transwarp contract suite passed 4/4. The
+acceptance exposed only a fixture limitation: raw SQL permits one prepared
+statement per request, so the rollback fixture was split into separate setup
+actions. No gameplay assertion was relaxed. Exact evidence is in the matrix
+and autonomous progress log. Autonomous batch 9
 verified `BANK-01`. A 41-case live PostgreSQL suite demonstrated daily,
 weekly and monthly schedule persistence at their specified UTC times, existing
 player recipients, ISO weekday endpoints/rejection, and monthly day-31

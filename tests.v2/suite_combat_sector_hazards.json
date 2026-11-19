@@ -442,6 +442,74 @@
       ]
     },
     {
+      "name": "Rig: Add rollback test destination and hostile mine",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_warps (from_sector,to_sector) VALUES (679,680) ON CONFLICT DO NOTHING;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear prior assets at rollback test destination",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=680;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Deploy controlled hostile mine at rollback destination",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_assets (sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES (680,@{hazard_master_player_id},0,1,1,0,0);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Add the required friendly homing fighter at rollback destination",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO sector_assets (sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES (680,@{hazard_victim_player_id},0,2,1,2,0);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Capture movement turn hull and defense state before injected failure",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT p.sector_id,t.turns_remaining,s.hull,(SELECT COUNT(*) FROM sector_assets WHERE sector_id=680),COALESCE(c.quantity,0) FROM players p JOIN turns t ON t.player_id=p.player_id JOIN ships s ON s.ship_id=p.ship_id LEFT JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.player_id=@{hazard_victim_player_id};" },
+      "expect": { "status": "ok" },
+      "save": { "rollback_sector": "data.rows.0.0", "rollback_turns": "data.rows.0.1", "rollback_hull": "data.rows.0.2", "rollback_assets": "data.rows.0.3", "rollback_fuel": "data.rows.0.4" }
+    },
+    {
+      "name": "Create controlled failure after movement when mine damage is applied",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE OR REPLACE FUNCTION v3_hazard_fail_hull_update() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.sector_id=680 AND NEW.hull<OLD.hull THEN RAISE EXCEPTION 'controlled movement hazard rollback'; END IF; RETURN NEW; END $$;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Install fault on arriving ship damage",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE TRIGGER v3_hazard_fail_hull BEFORE UPDATE OF hull ON ships FOR EACH ROW EXECUTE FUNCTION v3_hazard_fail_hull_update();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Transwarp surfaces the controlled entry-hazard failure",
+      "command": "move.transwarp", "user": "hazard_victim",
+      "data": { "to_sector_id": 680 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Transwarp transaction rolls back location turns fuel hull and hostile asset consumption",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.sector_id=@{rollback_sector} AND t.turns_remaining=@{rollback_turns} AND s.hull=@{rollback_hull} AND COALESCE(c.quantity,0)=@{rollback_fuel} AND (SELECT COUNT(*) FROM sector_assets WHERE sector_id=680)=@{rollback_assets} THEN 1 ELSE 0 END FROM players p JOIN turns t ON t.player_id=p.player_id JOIN ships s ON s.ship_id=p.ship_id LEFT JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.player_id=@{hazard_victim_player_id};" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Remove controlled movement hazard failure trigger",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP TRIGGER v3_hazard_fail_hull ON ships;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove controlled movement hazard failure function",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DROP FUNCTION v3_hazard_fail_hull_update();" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Clear friendly-owner asset rows",
       "command": "sys.raw_sql_exec",
       "user": "admin",

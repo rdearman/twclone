@@ -347,3 +347,30 @@ production server change.
 IMPLEMENTED_UNTESTED. Next I am selecting another minimal gap from the matrix;
 candidate `SHIP-05` covers used-hull identity/equipment and pricing, with
 `INS-01`/`INS-02` settlement clauses also available for focused acceptance.
+
+## Batch 10 — synchronous movement and arrival hazards
+
+`MOVE-01` and `MOVE-02` are VERIFIED. Live disposable-PostgreSQL acceptance
+passed `suite_movement_move_warp.json` **13/13**,
+`suite_movement_move_transwarp.json` **20/20**, and the expanded
+`suite_combat_sector_hazards.json` **58/58**. It demonstrated pre-movement
+destination/fuel refusals, exact one-hop transwarp fuel and turn accounting,
+arrival at destination, normal and transwarp entry mine/fighter/limpet effects,
+persistent combat events, hostile asset consumption, friendly/owner exclusion,
+and lethal transwarp escape-pod lifecycle.
+
+The rollback case injects a database error during transwarp mine damage and
+asserts location, turns, ORE fuel, hull and destination assets all remain at
+their pre-request values. Python navigation/hazard tests passed **36/36**;
+Godot `command_menu_test.gd` passed **238 checks**, including warp and
+transwarp dispatch; `test_transwarp_server_contract.py` passed **4/4**. The
+first rollback-fixture attempt sent multiple SQL statements through one
+prepared request; it was split into single-statement setup actions and rerun
+green. This was a fixture correction, not a gameplay change.
+
+Classification moved from 45 VERIFIED / 14 IMPLEMENTED_UNVERIFIED / 7 PARTIAL
+/ 1 BLOCKED to **47 VERIFIED / 12 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1
+BLOCKED**. `MOVE-03` and `MOVE-04` remain unverified because their remaining
+mandatory clauses describe future interruption/scope policy rather than
+independent runtime gameplay actions; source inspection alone does not promote
+them.
