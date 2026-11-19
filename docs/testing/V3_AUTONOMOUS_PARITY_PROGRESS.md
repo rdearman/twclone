@@ -543,3 +543,48 @@ evidence; clause 3 remains unverified because the approved decision register
 excludes ISS pursuit from this bounded work while Protocol V3 and the running
 implementation explicitly define pursuit. No rule was changed or inferred.
 Parent classifications are unchanged.
+
+### Reconciled existing StarPort acceptance evidence
+
+The already executed StarPort reports were mapped to clause rows instead of
+rerunning unchanged gameplay. `PARITY-PORT-ATTACK-01` clause 2 is VERIFIED:
+the live PostgreSQL checks separate capacity upgrades from port durability.
+Clause 1 remains open because the preserved live transcript contains the
+canonical request and response but not delivery of `player.port_strike.v1`.
+The parent remains IMPLEMENTED_UNVERIFIED.
+
+`V3-PORT-BUILD-01` clauses 1, 2, 4, 5 and 6 now cite existing live PostgreSQL
+evidence for initial costs, scheduled material deliveries, capacity upgrades,
+planet source materials, ship cargo deductions and port credit receipts. Its
+class-specific exchange-direction-at-completion clause remains unverified, so
+the parent is not promoted.
+
+`V3-PORT-COMBAT-01` now has evidence for the 10,000 initial durability,
+destruction stock clearing/inactive history, and FedSpace Captain Z enforcement.
+The detailed default defence/damage and exact 1,000 retaliation clauses remain
+open. The previous concurrent report recorded a 100 retaliation value for the
+test port, while the current approved ruleset says 1,000; this may be an
+explicit fixture override, but the acceptance evidence does not establish
+that. No rule was changed and the parent remains unverified.
+
+Classification remains **55 VERIFIED / 5
+IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED**; clause coverage advances to
+**164 VERIFIED / 63 IMPLEMENTED_UNTESTED**.
+
+## Batch 17 — StarPort strike event presentation
+
+Fixed a client integration defect in the `player.port_strike.v1` event path.
+Python and Godot had no event-category mapping for the server's `player.*`
+StarPort strike event; Godot therefore discarded the event from its typed
+event presentation path. Both clients now classify it as combat, and Godot
+shows only authoritative damage, retaliation, remaining durability and the
+server's destroyed flag. The live Godot acceptance script now also requires
+the resulting activity-feed entry.
+
+Focused Python protocol-event tests passed **11/11**; Godot event-presenter
+regression passed **25 checks**; Godot 4.5.1 project import completed without
+errors. Full Python client regression passed **834/834**. Full Godot regression
+passed **106**, failed **0**, skipped **6** live-server scripts. The live
+StarPort event assertion was not run against a serving server in this batch,
+so the relevant `PARITY-PORT-ATTACK-01` event clause remains
+IMPLEMENTED_UNTESTED. Parent and base-clause counts are unchanged from batch 16.

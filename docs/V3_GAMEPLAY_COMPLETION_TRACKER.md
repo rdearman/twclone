@@ -5,7 +5,15 @@ logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
 **Parity refresh — 19 November 2026:** 55 VERIFIED, 5
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 15
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 16
+verified two `FED-03` child clauses and reconciled existing StarPort acceptance
+at clause level; no incomplete parent was promoted. A focused fresh PostgreSQL
+run passed `suite_fedspace_aggression_captainz.json` 49/49
+after adding exact ISS protected-asset/jurisdiction and Captain Z no-duplicate
+assertions, plus `suite_port_operations.json` 9/9. Federation clauses 1 and 2
+have executable evidence; the parent remains IMPLEMENTED_UNVERIFIED because
+clause 3 conflicts with Protocol V3's implemented pursuit behavior. Autonomous
+batch 15
 verified `INS-01`, `INS-02`, and `INS-03`. Disposable PostgreSQL acceptance
 passed 22/22 for policy eligibility, insured ship destruction, guaranteed
 underinsured settlement capped at hull replacement value, escape-pod
