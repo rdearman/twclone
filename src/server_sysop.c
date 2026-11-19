@@ -54,9 +54,9 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"planet_market.buy_order_expiry_seconds", CFG_INT, "Planet buy-order lifetime in seconds (60-604800)", CFG_OFF(planet_market_buy_order_expiry_seconds)},
     {"combat.photon_effect_duration_seconds", CFG_INT, "Photon sector/citadel suppression duration in seconds (1-86400)", CFG_OFF(photon_effect_duration_seconds)},
     {"combat.toll_credits_per_fighter", CFG_INT, "Credits demanded per hostile toll fighter (0-1000000)", CFG_OFF(toll_fighter_rate)},
-    {"planet.slave_unrest_interval_days", CFG_INT64, "Slave unrest recurrence interval in days; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_interval_days)},
-    {"planet.slave_unrest_stoppage_cycles", CFG_INT64, "Production cycles stopped per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_stoppage_cycles)},
-    {"planet.slave_unrest_population_loss", CFG_INT64, "Fixed slave population loss per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_population_loss)},
+    {"planet.slave_unrest_interval_days", CFG_INT64, "Slave unrest recurrence interval in game-days (approved default: 1)", CFG_OFF(planet_slave_unrest_interval_days)},
+    {"planet.slave_unrest_stoppage_cycles", CFG_INT64, "Production cycles stopped per unrest event (approved default: 1)", CFG_OFF(planet_slave_unrest_stoppage_cycles)},
+    {"planet.slave_unrest_population_loss_percent", CFG_INT64, "Percentage of slave population lost per daily unrest event (0-100; approved default: 1)", CFG_OFF(planet_slave_unrest_population_loss_percent)},
 
     {"shipyard_enabled", CFG_INT, "Enable shipyard features", CFG_OFF(shipyard_enabled)},
     {"shipyard_trade_in_factor_bp", CFG_INT, "Trade-in value factor (bp)", CFG_OFF(shipyard_trade_in_factor_bp)},
@@ -267,13 +267,15 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     }
     if (strcmp(key, "planet.slave_unrest_interval_days") == 0
         || strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0
-        || strcmp(key, "planet.slave_unrest_population_loss") == 0) {
+        || strcmp(key, "planet.slave_unrest_population_loss_percent") == 0) {
         char *end = NULL;
         errno = 0;
         long long value = strtoll(val_str, &end, 10);
-        if (errno == ERANGE || end == val_str || *end != '\0' || value < 0) {
+        int is_percent = strcmp(key, "planet.slave_unrest_population_loss_percent") == 0;
+        if (errno == ERANGE || end == val_str || *end != '\0' || value < 0
+            || (is_percent && value > 100)) {
             send_response_refused(ctx, root, 1407,
-                                  "Refused: unrest policy values must be nonnegative integers; 0 disables the unset policy", NULL);
+                                  "Refused: unrest values must be nonnegative integers and population loss percent must be 0-100", NULL);
             return 0;
         }
     }
@@ -287,7 +289,7 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     int old_used_resale_factor = g_cfg.shipyard_used_resale_factor_bp;
     int64_t old_slave_unrest_interval = g_cfg.planet_slave_unrest_interval_days;
     int64_t old_slave_unrest_stoppage = g_cfg.planet_slave_unrest_stoppage_cycles;
-    int64_t old_slave_unrest_loss = g_cfg.planet_slave_unrest_population_loss;
+    int64_t old_slave_unrest_loss_percent = g_cfg.planet_slave_unrest_population_loss_percent;
     char old_val_buf[128];
     json_t *j_old = get_config_value_json(def);
     char *j_old_dump = json_dumps(j_old, JSON_ENCODE_ANY);
@@ -336,8 +338,8 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             g_cfg.planet_slave_unrest_interval_days = old_slave_unrest_interval;
         if (strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0)
             g_cfg.planet_slave_unrest_stoppage_cycles = old_slave_unrest_stoppage;
-        if (strcmp(key, "planet.slave_unrest_population_loss") == 0)
-            g_cfg.planet_slave_unrest_population_loss = old_slave_unrest_loss;
+        if (strcmp(key, "planet.slave_unrest_population_loss_percent") == 0)
+            g_cfg.planet_slave_unrest_population_loss_percent = old_slave_unrest_loss_percent;
         send_response_error(ctx, root, 1503, "Database Error: could not save config");
         return 0;
     }

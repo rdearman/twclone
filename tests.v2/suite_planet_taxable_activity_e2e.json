@@ -89,7 +89,7 @@
       "name": "Choose an empty sector for this taxable planet",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id > 10 AND NOT EXISTS (SELECT 1 FROM planets p WHERE p.sector_id = s.sector_id) ORDER BY s.sector_id LIMIT 1;" },
+      "data": { "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id > 10 AND NOT EXISTS (SELECT 1 FROM msl_sectors m WHERE m.sector_id=s.sector_id) AND NOT EXISTS (SELECT 1 FROM planets p WHERE p.sector_id = s.sector_id) ORDER BY s.sector_id LIMIT 1;" },
       "expect": { "status": "ok" },
       "save": { "taxable_activity_sector_id": "data.rows.0.0" }
     },

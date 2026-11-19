@@ -1036,12 +1036,24 @@ engine_main_loop (int shutdown_fd)
 
       uint64_t now_ms = monotonic_millis ();
 
+      static uint64_t last_npc_clock_mode_check_ms = 0;
+      static bool deterministic_npc_clock = false;
+      if (now_ms - last_npc_clock_mode_check_ms >= 1000)
+	{
+	  int deterministic_clock = 0;
+	  deterministic_npc_clock = repo_engine_get_config_int
+	    (db_handle, "test.deterministic_scheduler_enabled",
+	     &deterministic_clock) == 0 && deterministic_clock == 1;
+	  last_npc_clock_mode_check_ms = now_ms;
+	}
 
-      if (iss_ok)
+      /* Deterministic acceptance advances NPCs only through the registered
+       * scheduler handler, whose epoch time is controlled by the test clock. */
+      if (!deterministic_npc_clock && iss_ok)
 	{
 	  iss_tick (db_handle, now_ms);
 	}
-      if (fer_ok)
+      if (!deterministic_npc_clock && fer_ok)
 	{
 	  fer_tick (game_db_get_handle (), now_ms);
 	}

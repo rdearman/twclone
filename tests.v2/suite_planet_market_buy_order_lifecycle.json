@@ -7,6 +7,28 @@
       "setup": "macro_bootstrap_admin"
     },
     {
+      "name": "Save Exchange ORE before isolating the buy-order scenario",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0);" },
+      "expect": { "status": "ok" },
+      "save": { "market_exchange_ore_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Disable background market settlement before placing the test order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=FALSE WHERE name='daily_market_settlement';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove Exchange ORE before exposing the test buy order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE entity_stock SET quantity=0 WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE';" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Setup: Planet market buyer",
       "setup": "macro_auth_user",
       "username": "planet_market_buyer_v3",
@@ -63,10 +85,18 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Select an empty planet-eligible sector outside MSL",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id>10 AND NOT EXISTS (SELECT 1 FROM msl_sectors m WHERE m.sector_id=s.sector_id) AND NOT EXISTS (SELECT 1 FROM planets p WHERE p.sector_id=s.sector_id) ORDER BY s.sector_id LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "market_planet_sector_id": "data.rows.0.0" }
+    },
+    {
       "name": "Create buyer-owned planet",
       "command": "planet.create",
       "user": "planet_market_buyer_v3",
-      "data": { "sector_id": 11, "name": "Best Effort Market", "owner_entity_type": "player" },
+      "data": { "sector_id": "@{market_planet_sector_id}", "name": "Best Effort Market", "owner_entity_type": "player" },
       "expect": { "status": "ok" },
       "save": { "market_planet_id": "data.planet_id" }
     },
@@ -163,21 +193,6 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Save Exchange ORE before isolating the test order book",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": { "sql": "SELECT COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0);" },
-      "expect": { "status": "ok" },
-      "save": { "market_exchange_ore_before": "data.rows.0.0" }
-    },
-    {
-      "name": "Disable ring-fenced Exchange ORE while asserting the port seller",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": { "sql": "UPDATE entity_stock SET quantity=0 WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE';" },
       "expect": { "status": "ok" }
     },
     {

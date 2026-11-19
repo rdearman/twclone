@@ -814,6 +814,13 @@
       "required": true,
       "v3_only": true,
       "diagnostic": false
+    },
+    {
+      "name": "192_v3_approved_slave_unrest_rules.sql",
+      "subsystem": "planets",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
     }
   ]
 }

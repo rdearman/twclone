@@ -1,10 +1,10 @@
 {
   "name": "V3 slave unrest policy configuration groundwork",
-  "description": "Tests SysOp persistence and numeric validation only; these settings do not activate unrest processing.",
+  "description": "Tests SysOp persistence and validation for approved daily unrest settings.",
   "tests": [
     { "name": "Setup: Admin", "setup": "macro_bootstrap_admin" },
     {
-      "name": "Read unset interval sentinel",
+      "name": "Read approved interval",
       "command": "sysop.config.get",
       "user": "admin",
       "data": { "key": "planet.slave_unrest_interval_days" },
@@ -23,7 +23,7 @@
       "name": "Read unset population-loss sentinel",
       "command": "sysop.config.get",
       "user": "admin",
-      "data": { "key": "planet.slave_unrest_population_loss" },
+      "data": { "key": "planet.slave_unrest_population_loss_percent" },
       "expect": { "status": "ok", "data": { "type": "int" } },
       "save": { "old_unrest_loss": "data.value" }
     },
@@ -42,10 +42,10 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Persist configured fixed population loss",
+      "name": "Persist configured population loss percentage",
       "command": "sysop.config.set",
       "user": "admin",
-      "data": { "key": "planet.slave_unrest_population_loss", "value": 1, "confirm": true },
+      "data": { "key": "planet.slave_unrest_population_loss_percent", "value": 1, "confirm": true },
       "expect": { "status": "ok" }
     },
     {
@@ -70,10 +70,10 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Restore population-loss sentinel",
+      "name": "Restore population-loss percentage",
       "command": "sysop.config.set",
       "user": "admin",
-      "data": { "key": "planet.slave_unrest_population_loss", "value": "@old_unrest_loss", "confirm": true },
+      "data": { "key": "planet.slave_unrest_population_loss_percent", "value": "@old_unrest_loss", "confirm": true },
       "expect": { "status": "ok" }
     }
   ]

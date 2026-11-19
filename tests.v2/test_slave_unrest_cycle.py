@@ -52,6 +52,19 @@ class SlaveUnrestCycleTests(unittest.TestCase):
         self.assertIn("190_v3_slave_unrest_production_cycles.sql",
                       manifest["fresh_install"]["v3_runtime"])
 
+    def test_approved_daily_policy_is_migrated_on_both_sql_backends(self):
+        pg = (ROOT / "sql/pg/192_v3_approved_slave_unrest_rules.sql").read_text()
+        mysql = (ROOT / "sql/my/134_v3_approved_slave_unrest_rules.sql").read_text()
+        for migration in (pg, mysql):
+            self.assertIn("configured_population_loss_percent", migration)
+            self.assertIn("BETWEEN 0 AND 100", migration)
+            self.assertIn("planet.slave_unrest_interval_days", migration)
+            self.assertIn("planet.slave_unrest_stoppage_cycles", migration)
+            self.assertIn("planet.slave_unrest_population_loss_percent", migration)
+            self.assertIn("'1'", migration)
+        self.assertIn("legacy_configured_population_loss", pg)
+        self.assertIn("legacy_configured_population_loss", mysql)
+
 
 if __name__ == "__main__":
     unittest.main()

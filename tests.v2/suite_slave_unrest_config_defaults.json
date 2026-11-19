@@ -1,33 +1,33 @@
 {
-  "name": "POP-05 unrest disabled configuration defaults",
+  "name": "POP-05 approved daily unrest configuration defaults",
   "tests": [
     { "name": "Bootstrap disposable SysOp session", "setup": "macro_bootstrap_admin" },
     {
-      "name": "Read unset daily unrest interval",
+      "name": "Read approved daily unrest interval",
       "command": "sysop.config.get",
       "user": "admin",
       "data": { "key": "planet.slave_unrest_interval_days" },
       "expect": { "status": "ok" },
-      "asserts": [ { "path": "data.value", "op": "==", "value": 0 } ]
+      "asserts": [ { "path": "data.value", "op": "==", "value": 1 } ]
     },
     {
-      "name": "Read unset stoppage duration",
+      "name": "Read approved stoppage duration",
       "command": "sysop.config.get",
       "user": "admin",
       "data": { "key": "planet.slave_unrest_stoppage_cycles" },
       "expect": { "status": "ok" },
-      "asserts": [ { "path": "data.value", "op": "==", "value": 0 } ]
+      "asserts": [ { "path": "data.value", "op": "==", "value": 1 } ]
     },
     {
-      "name": "Read unset population loss amount",
+      "name": "Read approved population loss percentage",
       "command": "sysop.config.get",
       "user": "admin",
-      "data": { "key": "planet.slave_unrest_population_loss" },
+      "data": { "key": "planet.slave_unrest_population_loss_percent" },
       "expect": { "status": "ok" },
-      "asserts": [ { "path": "data.value", "op": "==", "value": 0 } ]
+      "asserts": [ { "path": "data.value", "op": "==", "value": 1 } ]
     },
     {
-      "name": "Remove prior disabled-default planet fixture",
+      "name": "Remove prior small-population planet fixture",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "DELETE FROM planets WHERE name='v3_cfg03_disabled_qa';" },
@@ -41,31 +41,31 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Create isolated slave planet type",
+      "name": "Create isolated slave planet type for the small-population floor case",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO planettypes(code,typeName,typeDescription) VALUES('V3_CFG03_QA','CFG03 acceptance','Disposable zero-default test type');" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Create due slave planet with allocated population",
+      "name": "Create due low-population slave planet with allocated population",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO planets(sector_id,name,owner_id,owner_type,class,population,population_type,type,created_by,colonists_unassigned,colonists_ore,colonists_org,colonists_eq,colonists_weapons,slave_unrest_next_at,slave_unrest_stopped,slave_unrest_stoppage_until) SELECT 1,'v3_cfg03_disabled_qa',player_id,'player','M',20,'SLAVE',pt.planettypes_id,player_id,0,10,5,3,2,EXTRACT(EPOCH FROM NOW())::bigint-1,FALSE,NULL FROM players CROSS JOIN planettypes pt WHERE players.name='System' AND pt.code='V3_CFG03_QA';" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Run authoritative unrest handler with zero-valued defaults",
+      "name": "Run authoritative unrest handler with approved default settings",
       "command": "sys.cron.slave_unrest_once",
       "user": "admin",
       "data": {},
       "expect": { "status": "ok" }
     },
     {
-      "name": "Zero defaults produce no active stoppage or population-loss event",
+      "name": "One-percent floor still applies the approved one-cycle stoppage",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT (population=20 AND population_type='SLAVE' AND NOT slave_unrest_stopped AND colonists_unassigned=0 AND colonists_ore=10 AND colonists_org=5 AND colonists_eq=3 AND colonists_weapons=2)::int,(SELECT COUNT(*)=0 FROM planet_slave_unrest_events e WHERE e.planet_id=p.planet_id)::int FROM planets p WHERE name='v3_cfg03_disabled_qa';" },
+      "data": { "sql": "SELECT (population=20 AND population_type='SLAVE' AND slave_unrest_stopped AND colonists_unassigned=0 AND colonists_ore=10 AND colonists_org=5 AND colonists_eq=3 AND colonists_weapons=2)::int,(SELECT COUNT(*)=1 AND MAX(applied_population_loss)=0 FROM planet_slave_unrest_events e WHERE e.planet_id=p.planet_id)::int FROM planets p WHERE name='v3_cfg03_disabled_qa';" },
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 1 },

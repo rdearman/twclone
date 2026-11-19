@@ -1303,8 +1303,11 @@ h_traps_process (db_t *db, int64_t now_s)
 int
 h_npc_step (db_t *db, int64_t now_s)
 {
-  (void) now_s;
-  int64_t now_ms = (int64_t) monotonic_millis ();
+  /* Cron passes the scheduler's authoritative time.  Keeping the epoch in
+   * milliseconds lets NPC actions participate in deterministic QA advances;
+   * the live scheduler still passes current wall-clock time. */
+  int64_t now_ms = now_s > 0 && now_s <= INT64_MAX / 1000
+    ? now_s * 1000 : 0;
 
 
   if (iss_init_once () == 1)
@@ -2150,7 +2153,7 @@ h_daily_slave_unrest (db_t *db, int64_t now_s)
   int rc = db_cron_apply_slave_unrest (
     db, now_s, g_cfg.planet_slave_unrest_interval_days,
     g_cfg.planet_slave_unrest_stoppage_cycles,
-    g_cfg.planet_slave_unrest_population_loss);
+    g_cfg.planet_slave_unrest_population_loss_percent);
   if (rc != 0)
     LOGE ("daily_slave_unrest: evaluation failed: %d", rc);
   unlock (db, "daily_slave_unrest");

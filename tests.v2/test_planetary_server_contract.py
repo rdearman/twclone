@@ -118,8 +118,11 @@ class PlanetaryServerContractTests(unittest.TestCase):
                       (ROOT / "sql/pg/171_v3_planet_population_state.sql").read_text())
         self.assertIn("daily@04:15Z",
                       (ROOT / "sql/pg/176_slave_unrest_daily_scheduler.sql").read_text())
-        self.assertIn("interval_days == 0 || stoppage_cycles == 0 || population_loss == 0",
+        # The approved daily rule uses a percentage parameter. Keep the
+        # unset/disabled sentinel checks tied to the authoritative names.
+        self.assertIn("interval_days == 0 || stoppage_cycles == 0",
                       self.cron_repo)
+        self.assertIn("|| population_loss_percent == 0", self.cron_repo)
 
     def test_used_shipyard_inventory_preserves_and_sells_existing_hulls(self):
         listing = self.stardock.split("cmd_shipyard_list", 1)[1].split(

@@ -3,8 +3,8 @@
   "tests": [
     {"name":"Bootstrap SysOp","setup":"macro_bootstrap_admin"},
     {"name":"Set deterministic daily policy","command":"sysop.config.set","user":"admin","data":{"key":"planet.slave_unrest_interval_days","value":1,"confirm":true},"expect":{"status":"ok"}},
-    {"name":"Set deterministic stoppage length","command":"sysop.config.set","user":"admin","data":{"key":"planet.slave_unrest_stoppage_cycles","value":2,"confirm":true},"expect":{"status":"ok"}},
-    {"name":"Set deterministic population loss","command":"sysop.config.set","user":"admin","data":{"key":"planet.slave_unrest_population_loss","value":4,"confirm":true},"expect":{"status":"ok"}},
+    {"name":"Set one-cycle approved stoppage","command":"sysop.config.set","user":"admin","data":{"key":"planet.slave_unrest_stoppage_cycles","value":1,"confirm":true},"expect":{"status":"ok"}},
+    {"name":"Set deterministic population loss percentage for allocation fixture","command":"sysop.config.set","user":"admin","data":{"key":"planet.slave_unrest_population_loss_percent","value":20,"confirm":true},"expect":{"status":"ok"}},
     {"name":"Clear prior isolated planets","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM planets WHERE name IN ('v3_pop05_daily_qa','v3_pop05_rollback_qa');"},"expect":{"status":"ok"}},
     {"name":"Clear prior isolated type","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM planettypes WHERE code='V3_POP05_QA';"},"expect":{"status":"ok"}},
     {"name":"Create isolated planet type","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planettypes(code,typeName,typeDescription) VALUES ('V3_POP05_QA','POP-05 QA','Disposable acceptance type');"},"expect":{"status":"ok"}},

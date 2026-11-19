@@ -803,11 +803,12 @@ apply_db (db_t *db)
 	      if (cfg_parse_int64 (val, type, &setting) == 0 && setting >= 0)
 		g_cfg.planet_slave_unrest_stoppage_cycles = setting;
 	    }
-	  else if (strcmp (key, "planet.slave_unrest_population_loss") == 0)
+	  else if (strcmp (key, "planet.slave_unrest_population_loss_percent") == 0)
 	    {
 	      int64_t setting = 0;
-	      if (cfg_parse_int64 (val, type, &setting) == 0 && setting >= 0)
-		g_cfg.planet_slave_unrest_population_loss = setting;
+	      if (cfg_parse_int64 (val, type, &setting) == 0
+                  && setting >= 0 && setting <= 100)
+		g_cfg.planet_slave_unrest_population_loss_percent = setting;
 	    }
 	  else if (strcmp (key, "starter_shiptype_name") == 0)
 	    {

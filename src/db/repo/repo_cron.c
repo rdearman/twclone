@@ -371,34 +371,20 @@ db_cron_try_lock (db_t *db, const char *name, int64_t now_s)
   /* 3. Attempt to acquire/refresh lock */
 
   char sql_ins[512];
+  const char *insert_tmpl = db_backend (db) == DB_BACKEND_POSTGRES
+    ? "INSERT INTO locks(lock_name, owner, until_ms) VALUES({1}, {2}, {3}) ON CONFLICT (lock_name) DO NOTHING"
+    : "INSERT IGNORE INTO locks(lock_name, owner, until_ms) VALUES({1}, {2}, {3})";
+  if (sql_build (db, insert_tmpl, sql_ins, sizeof sql_ins) != 0)
+    return 0;
+  db_bind_t ins_params[] = { db_bind_text (name), db_bind_text(g_engine_uuid),
+                             db_bind_i64 (until_ms) };
+  int64_t inserted = 0;
+  if (!db_exec_rows_affected (db, sql_ins, ins_params, 3, &inserted, &err))
+    return 0;
 
-  sql_build(db, "INSERT INTO locks(lock_name, owner, until_ms) VALUES({1}, {2}, {3});", sql_ins, sizeof(sql_ins));
-
-  db_bind_t ins_params[] = { db_bind_text (name), db_bind_text(g_engine_uuid), db_bind_i64 (until_ms) };
-
-  if (!db_exec (db, sql_ins, ins_params, 3, &err)) {
-
-      if (err.code == ERR_DB_CONSTRAINT) {
-
-          /* Double check if we own it (concurrent write) */
-
-          sql_build(db, "UPDATE locks SET until_ms = {3} WHERE lock_name={1} AND owner={2};", sql_ins, sizeof(sql_ins));
-
-          int64_t rows = 0;
-
-          if (db_exec_rows_affected(db, sql_ins, ins_params, 3, &rows, &err) && rows > 0) return 1;
-
-          return 0;
-
-      }
-
-      return 0;
-
-  }
-
-
-
-  return 1;
+  /* Conflict means a concurrent invocation already owns the lock, including
+   * one from this server process. Never refresh an in-flight lock here. */
+  return inserted == 1;
 
 }
 
@@ -1435,7 +1421,8 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
               return err.code ? err.code : -1;
             }
 
-          if (row->next_worker_remainder >= 0 && !unrest_cycle.disrupted)
+          if (row->next_worker_remainder >= 0 && !unrest_cycle.disrupted
+              && !planet->unrest_stopped)
             {
               const char *remainder_sql =
                 "UPDATE planets SET ore_production_remainder = CASE WHEN {1}='ORE' THEN {2} ELSE ore_production_remainder END, "
@@ -3006,10 +2993,10 @@ int
 db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
                             int64_t interval_days,
                             int64_t stoppage_cycles,
-                            int64_t population_loss)
+                            int64_t population_loss_percent)
 {
   if (!db || now_s <= 0 || interval_days < 0 || stoppage_cycles < 0
-      || population_loss < 0)
+      || population_loss_percent < 0 || population_loss_percent > 100)
     return ERR_INVALID_ARG;
   db_error_t err = {0};
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
@@ -3070,7 +3057,8 @@ db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
           r->stopped = false;
         }
       /* Zero is the deliberate unset/disabled configuration sentinel. */
-      if (interval_days == 0 || stoppage_cycles == 0 || population_loss == 0)
+      if (interval_days == 0 || stoppage_cycles == 0
+          || population_loss_percent == 0)
         continue;
       if (interval_days > INT64_MAX / 86400
           || stoppage_cycles > INT64_MAX / 600)
@@ -3098,9 +3086,27 @@ db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
             { err.code = ERR_DB_CONSTRAINT; goto unrest_fail; }
           bucket_total += r->bucket[b];
         }
-      if (bucket_total <= 0) continue;
-      int64_t loss = population_loss < bucket_total
-        ? population_loss : bucket_total;
+      if (bucket_total == 0)
+        {
+          /* Empty slave worlds have no qualifying unrest loss event. Advance
+           * their persisted evaluation deadline so the due row is not scanned
+           * on every engine tick. */
+          if (r->next_at > INT64_MAX - interval_s)
+            { err.code = ERR_INVALID_ARG; goto unrest_fail; }
+          if (!db_exec (db,
+                "UPDATE planets SET slave_unrest_next_at={1} WHERE planet_id={2} AND COALESCE(slave_unrest_next_at,0)={3}",
+                (db_bind_t[]){db_bind_i64 (r->next_at + interval_s),
+                  db_bind_i64 (r->planet_id), db_bind_i64 (r->next_at)}, 3,
+                &err))
+            goto unrest_fail;
+          continue;
+        }
+      /* The approved 1% is settled in integer population units. Fractional
+       * people are discarded using the game's existing integer-floor rule;
+       * the largest-remainder helper then conserves the exact integer loss
+       * across assignment buckets. */
+      __int128 loss_product = (__int128) bucket_total * population_loss_percent;
+      int64_t loss = (int64_t) (loss_product / 100);
       int64_t split[5] = {0};
       if (!slave_population_split_loss (r->bucket, 5, loss, split))
         { err.code = ERR_DB_CONSTRAINT; goto unrest_fail; }
@@ -3111,12 +3117,12 @@ db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
       int64_t next_at = r->next_at + interval_s;
       const char *event_tmpl =
         "INSERT INTO planet_slave_unrest_events(planet_id,scheduled_at,"
-        "stoppage_until,configured_population_loss,applied_population_loss)"
+        "stoppage_until,configured_population_loss_percent,applied_population_loss)"
         " VALUES({1},{2},{3},{4},{5})";
       if (sql_build (db, event_tmpl, sql, sizeof sql) != 0
           || !db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (r->planet_id),db_bind_i64 (r->next_at),
-                  db_bind_i64 (stopped_until),db_bind_i64 (population_loss),
+                  db_bind_i64 (stopped_until),db_bind_i64 (population_loss_percent),
                   db_bind_i64 (loss)}, 5, &err))
         goto unrest_fail;
       const char *update_tmpl =

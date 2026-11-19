@@ -1,0 +1,11 @@
+{
+  "name": "FED-03 ISS pursuit, restart, target-removal and concurrent settlement verification",
+  "tests": [
+    {"name":"Bootstrap verifier SysOp","setup":"macro_bootstrap_admin"},
+    {"name":"Reconnect ordinary ISS target after server restart","setup":"macro_auth_user","username":"fed_iss_target_qa","password":"qa-password"},
+    {"name":"Reconnect removed-target player after server restart","setup":"macro_auth_user","username":"fed_iss_removed_qa","password":"qa-password"},
+    {"name":"Invoke the authoritative NPC/ISS scheduler handler","command":"sys.cron.npc_step_once","user":"admin","data":{},"expect":{"status":"ok"}},
+    {"name":"Read target ship through ordinary authenticated session","command":"ship.status","user":"fed_iss_target_qa","data":{},"expect":{"status":"ok"}},
+    {"name":"Assert pursuit combat, incident persistence, target removal, one concurrent settlement and ISS movement","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT (SELECT status='pursuing' FROM npc_security_incidents WHERE idempotency_key='qa:fed-iss-pursuit:eligible')::int,(SELECT shields=90 AND sector_id=300 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='fed_iss_target_qa'))::int,(SELECT COUNT(*)=1 FROM npc_action_log WHERE faction='ISS' AND action_type='attack' AND target_player_id=(SELECT player_id FROM players WHERE name='fed_iss_target_qa') AND sector_id=300)::int,(SELECT status='pursuing' FROM npc_security_incidents WHERE idempotency_key='qa:fed-iss-pursuit:removed')::int,(SELECT COUNT(*)=0 FROM npc_action_log WHERE faction='ISS' AND action_type='attack' AND target_player_id=(SELECT player_id FROM players WHERE name='fed_iss_removed_qa'))::int,(SELECT p.sector_id=(SELECT origin_sector_id FROM npc_security_incidents WHERE idempotency_key='qa:fed-iss-pursuit:moving') AND p.sector_id>10 FROM players p WHERE p.player_id=(SELECT player_id FROM players WHERE lower(name)='iss'))::int;"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":1},{"path":"data.rows.0.1","op":"==","value":1},{"path":"data.rows.0.2","op":"==","value":1},{"path":"data.rows.0.3","op":"==","value":1},{"path":"data.rows.0.4","op":"==","value":1},{"path":"data.rows.0.5","op":"==","value":1}]}
+  ]
+}

@@ -602,7 +602,6 @@ ori_init_once (db_t *db)
 void
 ori_tick (db_t *db, int64_t now_ms)
 {
-  (void) now_ms;
   if (!ori_initialized)
     {
       if (!ori_init_once (db))
@@ -616,7 +615,9 @@ ori_tick (db_t *db, int64_t now_ms)
       if (!db)
 	return;
     }
-  ori_move_all_ships ((int64_t) time (NULL));
+  int64_t now_s = now_ms >= INT64_C(1000000000000)
+    ? now_ms / 1000 : (int64_t) time (NULL);
+  ori_move_all_ships (now_s);
 }
 
 
@@ -3786,7 +3787,8 @@ fer_tick (db_t *db, int64_t now_ms)
   if (!fer_init_once (db)) return;
   if (!db) db = g_fer_db;
   if (!db) return;
-  int64_t now_s = (int64_t) time (NULL);
+  int64_t now_s = now_ms >= INT64_C(1000000000000)
+    ? now_ms / 1000 : (int64_t) time (NULL);
   if (now_ms != 0 && g_fer_last_tick_s && now_s - g_fer_last_tick_s < 900) return;
   g_fer_last_tick_s = now_s;
   if (repo_universe_ensure_ferengi_traders (db, g_fer_corp_id,
@@ -4052,8 +4054,8 @@ iss_init (db_t *db)
 void
 iss_tick (db_t *db, int64_t now_ms)
 {
-  (void) now_ms;
-  int64_t now_s = (int64_t) time (NULL);
+  int64_t now_s = now_ms >= INT64_C(1000000000000)
+    ? now_ms / 1000 : (int64_t) time (NULL);
   if (g_iss_last_patrol_s != 0 && now_s - g_iss_last_patrol_s < 30)
     return;
   if (!g_iss_inited)
