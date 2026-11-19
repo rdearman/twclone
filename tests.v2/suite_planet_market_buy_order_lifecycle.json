@@ -133,6 +133,13 @@
       "data": { "sql": "UPDATE entity_stock SET quantity = 0 WHERE entity_type = 'planet' AND entity_id = @{market_planet_id} AND commodity_code = 'ORE';" }
     },
     {
+      "name": "Isolate the ORE order book around the one test buy order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE commodity_orders SET status='cancelled', cancellation_reason='isolated planet market lifecycle fixture' WHERE commodity_id=(SELECT commodities_id FROM commodities WHERE code='ORE') AND status='open' AND commodity_orders_id<>@{market_buy_order_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Seed ten units of seller stock and its account",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -152,15 +159,34 @@
       "save": { "market_sell_order_id": "data.rows.0.0" }
     },
     {
-      "name": "Make daily market settlement due",
+      "name": "Enable deterministic scheduler only in the disposable database",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" }
+      "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
+      "expect": { "status": "ok" }
     },
     {
-      "name": "Wait for best-effort market settlement",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Choose synthetic settlement time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint+300;" },
+      "expect": { "status": "ok" },
+      "save": { "market_settlement_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Disable unrelated cron handlers and make market settlement due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=(name='daily_market_settlement'),next_due_at=CASE WHEN name='daily_market_settlement' THEN to_timestamp(@{market_settlement_at}) ELSE next_due_at END;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Run the actual market settlement handler at synthetic time",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{market_settlement_at}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify two-unit partial fill and unexecutable remainder cancellation",
@@ -185,6 +211,42 @@
         { "path": "data.rows.0.2", "op": "==", "value": 8 },
         { "path": "data.rows.0.3", "op": "==", "value": 200 },
         { "path": "data.rows.0.4", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "Rearm only the market matcher for a deterministic idempotency retry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT @{market_settlement_at}+30;" },
+      "expect": { "status": "ok" },
+      "save": { "market_settlement_retry_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Rearm only settlement at the retry time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=(name='daily_market_settlement'),next_due_at=CASE WHEN name='daily_market_settlement' THEN to_timestamp(@{market_settlement_retry_at}) ELSE next_due_at END;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Retry the real market handler without new eligible orders",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{market_settlement_retry_at}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
+    },
+    {
+      "name": "Verify scheduler retry cannot duplicate the partial settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT status='cancelled' AND filled_quantity=2 AND cancellation_reason='insufficient_credits' FROM commodity_orders WHERE commodity_orders_id=@{market_buy_order_id})::int,(SELECT quantity=2 FROM entity_stock WHERE entity_type='planet' AND entity_id=@{market_planet_id} AND commodity_code='ORE')::int,(SELECT balance=50 FROM bank_accounts WHERE owner_type='player' AND owner_id=@{planet_market_buyer_v3_player_id} AND currency='CRD' AND is_active=TRUE)::int,(SELECT COUNT(*)=1 FROM commodity_trades WHERE buyer_actor_type='player' AND buyer_actor_id=@{planet_market_buyer_v3_player_id} AND buyer_location_type='planet' AND buyer_location_id=@{market_planet_id} AND seller_location_type='port' AND seller_location_id=@{market_seller_port_id})::int;" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 }
       ]
     }
   ]

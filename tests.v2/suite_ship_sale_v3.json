@@ -12,6 +12,12 @@
       "password": "password"
     },
     {
+      "name": "Setup one-ship seller",
+      "setup": "macro_auth_user",
+      "username": "ship_sale_last_ship_v3",
+      "password": "password"
+    },
+    {
       "name": "Read standalone sale factor",
       "command": "sysop.config.get",
       "user": "admin",
@@ -36,11 +42,53 @@
       "asserts": [ { "path": "data.value", "op": "==", "value": 5000 } ]
     },
     {
+      "name": "Verify classic reference equipment prices in the live catalogue",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT price FROM hardware_items WHERE code='MINES'),(SELECT price FROM hardware_items WHERE code='LIMPETS'),(SELECT price FROM hardware_items WHERE code='PROBE'),(SELECT price FROM hardware_items WHERE code='PHOTONS'),(SELECT price FROM hardware_items WHERE code='BEACONS');" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.1", "op": "==", "value": 10000 },
+        { "path": "data.rows.0.2", "op": "==", "value": 3000 },
+        { "path": "data.rows.0.3", "op": "==", "value": 40000 },
+        { "path": "data.rows.0.4", "op": "==", "value": 100 }
+      ]
+    },
+    {
       "name": "Reject sale factor above the allowed range",
       "command": "sysop.config.set",
       "user": "admin",
       "data": { "key": "shipyard_sale_factor_bp", "value": 10001, "confirm": true },
       "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Dock the sole owned hull at a real StarDock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "WITH yard AS (SELECT p.port_id,p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id=p.porttype_id WHERE pt.is_stardock=TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players p SET sector_id=yard.sector_id FROM yard WHERE p.name='ship_sale_last_ship_v3' RETURNING p.player_id,p.ship_id,yard.sector_id,yard.port_id), docked AS (UPDATE ships s SET sector_id=moved.sector_id,ported=moved.port_id FROM moved WHERE s.ship_id=moved.ship_id RETURNING s.ship_id) SELECT moved.ship_id,moved.port_id,(SELECT ship_id FROM ships WHERE ship_id<>moved.ship_id ORDER BY ship_id LIMIT 1),(SELECT COUNT(*) FROM ship_ownership WHERE player_id=moved.player_id AND role_id=1) FROM moved JOIN docked ON docked.ship_id=moved.ship_id;" },
+      "expect": { "status": "ok" },
+      "save": { "last_ship_id": "data.rows.0.0", "last_ship_port_id": "data.rows.0.1", "unowned_replacement_ship_id": "data.rows.0.2" },
+      "asserts": [ { "path": "data.rows.0.3", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Reject sale of the player's last owned ship",
+      "command": "ship.sell",
+      "user": "ship_sale_last_ship_v3",
+      "data": { "ship_id": "@last_ship_id", "replacement_ship_id": "@unowned_replacement_ship_id" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Last-ship rejection preserves active ship, ownership and credits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (p.ship_id=@{last_ship_id})::int,(SELECT COUNT(*)=1 FROM ship_ownership WHERE player_id=p.player_id AND ship_id=@{last_ship_id} AND role_id=1)::int,(SELECT COUNT(*)=0 FROM ship_sale_audit WHERE ship_id=@{last_ship_id})::int,p.credits FROM players p WHERE p.name='ship_sale_last_ship_v3';" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 }
+      ]
     },
     {
       "name": "Locate real Stardock and prepare active ship plus replacement",

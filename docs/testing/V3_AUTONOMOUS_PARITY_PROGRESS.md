@@ -74,18 +74,54 @@ separate from `RUNTIME`; do not silently promote until the policy is accepted.
 SHIP-01 remains VERIFIED; its previous Godot menu and Python sale workflow
 evidence covers the contract's player-facing access requirement.
 
+## Batch 2 — completed 19 November 2026
+
+Requirements selected from the smallest remaining gaps:
+
+- CFG-03 — VERIFIED.
+- SHIP-02 — VERIFIED.
+- SHIP-04 — VERIFIED.
+- POP-04 — VERIFIED.
+- EXC-05 — sequential clauses VERIFIED, parent remains
+  IMPLEMENTED_UNVERIFIED pending concurrent PostgreSQL settlement/order-lock
+  acceptance required in `V3_GAMEPLAY_DECISIONS.md`.
+
+Executed evidence:
+
+- `suite_planet_market_buy_order_lifecycle.json`: 36/36.
+- `suite_ship_sale_v3.json`: 27/27.
+- `manual_acceptance/ship_sale_atomic_rollback.json`: 19/19.
+- `suite_slave_unrest_config_defaults.json`: 12/12.
+- `slave_unrest_production_prepare.json`: 19/19.
+- `slave_unrest_production_verify.json`: 10/10.
+- Total: 123/123 disposable-PostgreSQL cases across six suites.
+- `test_ship_sale_equipment_catalog.py` plus JSON assertion runner tests:
+  9 passed, 17 subtests passed.
+
+The first EXC-05 run failed because other open ORE orders could consume the
+seeded port stock before the intended player buyer. This was a fixture
+isolation failure. The test now cancels unrelated ORE orders, disables
+unrelated cron tasks in the disposable database, and advances the actual
+settlement handler through the deterministic test scheduler. A second
+acceptance run proved the exact two-unit fill, remainder cancellation, balance
+and stock conservation, and no duplicate trade after scheduler retry. No
+server behavior or expected result was relaxed.
+
+Classification moved from 32 VERIFIED / 27 IMPLEMENTED_UNVERIFIED / 7
+PARTIAL / 1 BLOCKED to **36 VERIFIED / 23 IMPLEMENTED_UNVERIFIED / 7 PARTIAL /
+1 BLOCKED**. All 18 base clauses for the five selected requirements have
+executed evidence; EXC-05 parent promotion awaits concurrency acceptance.
+
 ## Next batch candidates
 
-Next smallest candidate set, pending clause and harness inspection:
+Next candidate set, pending exact-clause and evidence review:
 
-1. CFG-03 — disabled-by-default POP-05 configuration, independent of its
-   unresolved numeric policy.
-2. SHIP-02 — valuation formula, cargo exclusion, and equipment catalogue
-   prices.
-3. SHIP-04 — last-ship guard and active-ship replacement settlement.
-4. EXC-05 — placement/reservation/execution distinction and partial-fill
-   remainder behavior.
-5. BANK-05 — standing-order creation/list/cancel and exact-once execution.
+1. EXC-05 — concurrent order settlement and order-lock acceptance.
+2. NPC-POP-01 — Ferengi population target, stable roster and reconciliation.
+3. NPC-POP-02 — Orion population target, stable roster and personality/class
+   preservation.
+4. NPC-POP-03 — NPC-only Ferengi ship classes and deterministic allocation.
+5. BANK-05 — standing-order execution/cancel races and uncapped order count.
 
 These are candidate selections, not verified results. Existing evidence will
 be reused only if it exercises each mandatory clause. No deployment,

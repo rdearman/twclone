@@ -22,6 +22,16 @@ The executed focused acceptance results were: HARV-02 40/40; HARV-03 27/27 plus 
 
 `POP-07` stays IMPLEMENTED_UNVERIFIED: its final corporation-capture statement is a documentary scope constraint, not a behavior prohibition; the matrix's runtime-only verification policy still applies. `SHIP-01` stays VERIFIED; its earlier Python and Godot menu tests cover the required sale access. The batch-3 total was 27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED.
 
+## Autonomous parity batches 1–2 — 19 November 2026
+
+Batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and
+`V3-PHOTON-DURATION-01`. Batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and
+`POP-04`. EXC-05's sequential order lifecycle clauses passed, but the parent
+remains IMPLEMENTED_UNVERIFIED pending the concurrent settlement/order-lock
+acceptance required by the decision register. Exact cases and
+disposable-PostgreSQL evidence are in the clause matrix. Current total:
+**36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**.
+
 ## Autonomous parity batch 1 — 19 November 2026
 
 `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01` are now VERIFIED. Exact clauses, test cases, PostgreSQL evidence, limits and Godot parser regression results are recorded in the clause matrix. The new parent total is **32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**. `POP-07` remains unverified pending an evidence-policy decision; documentary scope constraints should be labeled as contract evidence rather than represented as runtime evidence.
@@ -38,7 +48,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | POP-01 | Population state and transitions | VERIFIED |
 | POP-02 | Acquisition and capture disposition | PARTIAL |
 | POP-03 | Slave productivity | VERIFIED |
-| POP-04 | Slave morale | IMPLEMENTED_UNVERIFIED |
+| POP-04 | Slave morale | VERIFIED |
 | POP-05 | Slave unrest configuration and scheduler | BLOCKED |
 | POP-06 | Emancipation | IMPLEMENTED_UNVERIFIED |
 | POP-07 | Capture conversion | IMPLEMENTED_UNVERIFIED |
@@ -73,9 +83,9 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | NPC-FER-01 | Ferengi bounty and retaliation | VERIFIED |
 | NPC-ORI-01 | Orion blockade targeting | PARTIAL |
 | SHIP-01 | Ship-sale locations | VERIFIED |
-| SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
+| SHIP-02 | Ship acquisition and ownership | VERIFIED |
 | SHIP-03 | Ship sale settlement effects | VERIFIED |
-| SHIP-04 | Ship loss and recovery | IMPLEMENTED_UNVERIFIED |
+| SHIP-04 | Ship loss and recovery | VERIFIED |
 | COMBAT-01 | Player ship combat | PARTIAL |
 | COMBAT-02 | Combat destruction and recovery | PARTIAL |
 | INS-01 | Insurance eligibility and claim | IMPLEMENTED_UNVERIFIED |
@@ -100,10 +110,10 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | SYS-07 | Session invalidation on player kick | VERIFIED |
 | CFG-01 | Ship-sale factor configuration | VERIFIED |
 | CFG-02 | Fixed slave output multiplier | VERIFIED |
-| CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
+| CFG-03 | Disabled-by-default slave unrest values | VERIFIED |
 | CFG-04 | Insurance configuration | VERIFIED |
 
-**Count (updated 19 November 2026, autonomous parity batch 1):** 32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 19 November 2026, autonomous parity batches 1–2):** 36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 

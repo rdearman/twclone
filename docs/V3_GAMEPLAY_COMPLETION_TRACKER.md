@@ -4,8 +4,19 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 32 VERIFIED, 27
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 1 promoted
+**Parity refresh — 19 November 2026:** 36 VERIFIED, 23
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 2 promoted
+`CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04` from focused
+disposable-PostgreSQL acceptance. The market test exposed fixture contamination
+from unrelated higher-priority ORE orders; its fixture now isolates the book
+and invokes the actual settlement handler through deterministic QA scheduling.
+Partial fill, insufficient-credit cancellation and retry idempotency passed.
+Ship valuation/catalogue and last-ship checks passed; injected sale-audit
+failure confirmed atomic switch/sale rollback. POP-04 detail responses and
+production preserve LOW slave morale, the 50% output rule, and no invented
+colonist morale. EXC-05 remains IMPLEMENTED_UNVERIFIED until concurrent
+settlement/order-lock acceptance is executed. Exact evidence is in the matrix.
+Autonomous batch 1 promoted
 `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01` from
 focused disposable-PostgreSQL acceptance. The clause matrix records exact
 case references; test evidence includes ship-sale configuration separation,

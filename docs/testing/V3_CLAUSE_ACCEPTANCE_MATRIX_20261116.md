@@ -6,8 +6,8 @@ Reviewed: 19 November 2026, after autonomous parity batch 1.
 
 ## Current measures
 
-- Parent requirements: 67 (32 VERIFIED, 27 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
-- Base clause rows: 227 (89 VERIFIED, 138 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`. EXC-05's placement/fill/retry clauses passed, but its separate concurrent settlement acceptance is still outstanding. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Base clause rows: 227 (107 VERIFIED, 120 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -112,6 +112,43 @@ Additional population acceptance slices executed in the same work batch:
 
 ## Clause ledger
 
+## Autonomous parity batch 2 — 19 November 2026
+
+The five selected parents were exercised against disposable PostgreSQL; four
+were promoted. EXC-05 has passing sequential placement/fill/retry evidence but
+remains IMPLEMENTED_UNVERIFIED until concurrent settlement/order-lock
+acceptance passes. The first run
+of `suite_planet_market_buy_order_lifecycle.json` exposed order-book fixture
+contamination: unrelated higher-priority open orders could consume the seeded
+port stock. The test now isolates the ORE book, disables unrelated scheduled
+work in the disposable database, and advances the actual settlement handler
+through the deterministic QA scheduler. It passed 36/36 cases, including the
+unreserved open order, exact two-unit partial fill, cancellation of the
+unfunded remainder, stock/credit/trade assertions and retry without a second
+settlement. No server behavior or expected gameplay result was changed.
+
+`suite_ship_sale_v3.json` passed 27/27: the five live hardware prices match the
+approved catalogue, the exact integer-floor sale formula excludes cargo,
+active replacement is required, and a sole-ship sale is refused without
+changing the active ship, ownership, credits or audit. The separate
+`ship_sale_atomic_rollback.json` passed 19/19 and verifies atomic active-ship
+switch/sale rollback and exact-once retry. `suite_slave_unrest_config_defaults.json`
+passed 12/12: all three POP-05 values are zero by default; the actual daily
+handler creates no unrest event, stoppage or population loss. The production
+morale pair passed 19/19 setup and 10/10 verification cases: owner-facing
+planet detail reports slave morale `LOW` before and after a production cycle,
+colonist detail invents no morale status, colonists retain the baseline output,
+and slaves receive only the approved 50% production result.
+
+Total for these five selected requirements: 123/123 live PostgreSQL cases across six suites,
+plus 9 Python source/unit assertions and 17 subtests. No gameplay server
+defect was found. The market test fixture was made deterministic; its prior
+wall-clock delay and unrelated-order dependency were removed.
+
+Parent status after batch 2: **36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7
+PARTIAL, 1 BLOCKED**. The 18 touched base clauses are verified; additional
+EXC-05 concurrent settlement evidence remains required to promote its parent.
+
 ## Autonomous parity batch 1 — 19 November 2026
 
 Five complete parents were verified through focused disposable-PostgreSQL
@@ -165,10 +202,10 @@ unverified.
 | `POP-03` | ORE output | floor(normal_output * 50 / 100) for ORE | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS; live scheduler `manual_acceptance/slave_unrest_production_verify.json::case-0001`–`case-0004` passed across a serving-server restart (8/8 verification cases). SQL confirmed colonist ORE output 5, slave output 2 or 0 for the accepted deterministic disruption, and same-tick retry did not duplicate output. |
 | `POP-03` | ORG output | floor(normal_output * 50 / 100) for ORG | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. Live scheduler acceptance uses ORE to exercise the shared slave efficiency path; commodity-specific ORG runtime output remains covered by the engine unit test. |
 | `POP-03` | EQU output | floor(normal_output * 50 / 100) for EQU | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. Live scheduler acceptance uses ORE to exercise the shared slave efficiency path; commodity-specific EQU runtime output remains covered by the engine unit test. |
-| `POP-04` | clause 1 | Slave morale is permanently low and cannot improve | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-04` | clause 2 | No additional continuous output modifier | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-04` | clause 3 | Preserve existing colonist rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-04` | clause 4 | invent no dynamic colonist morale | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `POP-04` | clause 1 | Slave morale is permanently low and cannot improve | VERIFIED | `slave_unrest_production_prepare.json` and `slave_unrest_production_verify.json`: ordinary SysOp-owned `planet.info` returns `morale_status=LOW` before and after scheduler execution; 19+10 PostgreSQL acceptance cases passed. |
+| `POP-04` | clause 2 | No additional continuous output modifier | VERIFIED | The actual production handler yields floor(normal ORE output × 50/100); `slave_unrest_production_verify.json` asserts the slave output remains 2 when colonist baseline is 5 and separately accounts for the approved disruption event. |
+| `POP-04` | clause 3 | Preserve existing colonist rules | VERIFIED | `slave_unrest_production_verify.json` asserts the colonist control produces 5 while the matching slave control produces 2; persisted population/allocation snapshots pass. |
+| `POP-04` | clause 4 | invent no dynamic colonist morale | VERIFIED | `slave_unrest_production_prepare.json` and `slave_unrest_production_verify.json` assert colonist `planet.info` has no `morale_status`; no dynamic colonist morale field or numeric morale rule was introduced. |
 | `POP-05` | clause 1 | Evaluate daily | VERIFIED | `slave_unrest_daily_prepare.json` configured a one-day interval and ran the production handler against due and future events; 18/18 cases passed. |
 | `POP-05` | clause 2 | deterministic, persisted, restart/idempotency-safe | IMPLEMENTED_UNTESTED | `slave_unrest_daily_prepare.json` and `slave_unrest_daily_restart_verify.json` passed 30/30 cases for replay idempotency, restart persistence, recovery and rollback. Concurrent scheduler invocation remains untested, so this clause is not promoted. |
 | `POP-05` | clause 3 | May stop production and reduce slave population | VERIFIED | `slave_unrest_daily_prepare.json` asserts configured four-person loss, persistent stoppage and exact assigned-population result; restart suite verifies recovery without repeated loss. 30/30 combined. |
@@ -202,10 +239,10 @@ unverified.
 | `EXC-03` | clause 1 | Sold goods leave seller ownership and cannot be harvested, resold, built with, consumed or counted twice | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus second-tick stock readback cited by the parity closure. |
 | `EXC-04` | clause 1 | Deliveries are immediate economic transfers | VERIFIED | `suite_planet_taxable_activity_e2e.json::case-0035`–`case-0040`, 44/44 live disposable-PostgreSQL cases; actual scheduler settlement transfers goods/credits once and retry is idempotent. |
 | `EXC-04` | clause 2 | no physical NPC ships, movement, fuel, holds, docking or delay | VERIFIED | `suite_planet_taxable_activity_e2e.json::case-0031`, `case-0036`–`case-0040`; database snapshot compares physical ship count and ship state before/after settlement. |
-| `EXC-05` | clause 1 | Keep placement, reservation, execution and settlement distinct | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `EXC-05` | clause 2 | Open orders wait for matches | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `EXC-05` | clause 3 | partial fills preserve remainder | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `EXC-05` | clause 4 | no duplicate settlement | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `EXC-05` | clause 1 | Keep placement, reservation, execution and settlement distinct | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0016`–`case-0027`: zero-balance/full-storage order is accepted unreserved, remains open until matching; real scheduler later settles after funding/storage. |
+| `EXC-05` | clause 2 | Open orders wait for matches | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0018`–`case-0025`: unfilled order remains open until matching inventory and eligible sell order exist. |
+| `EXC-05` | clause 3 | partial fills preserve remainder | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0030`–`case-0031`: two of ten fill; eight remain and the unfunded remainder is cancelled with `insufficient_credits`; balances and stock conserve. |
+| `EXC-05` | clause 4 | no duplicate settlement | VERIFIED | `suite_planet_market_buy_order_lifecycle.json::case-0032`–`case-0036`: rearmed deterministic scheduler retry leaves one trade record, one partial fill and exact unchanged inventory/credits; 36/36 passed. |
 | `EXC-06` | clause 1 | Port demand follows current target/pricing/capacity rules | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |
 | `EXC-06` | clause 2 | ports purchase Exchange goods to replenish | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |
 | `EXC-06` | clause 3 | Do not bypass Exchange with artificial supply unless a separate source is documented | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` port replenishment case and PostgreSQL settlement readback. |
@@ -279,14 +316,14 @@ unverified.
 | `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: 60/60 live cases passed, including warp/transwarp, allied exclusion, hostile damage, restart persistence and same-window idempotency. Safe-zone arrival, additional protected-player exclusions, NPC-removal race and genuinely concurrent arrivals remain unverified. |
 | `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
 | `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | VERIFIED | `suite_ship_sale_v3.json` (18/18) plus `manual_acceptance/ship_sale_locations_v3.json` (19/19) against disposable PostgreSQL: StarDock, black-market and inventory-authorized facilities, sale audit, proceeds, used-inventory persistence and duplicate-sale rejection. Player-facing access: `client/python_client/tests/test_v3_shipyard_sale_request.py` (2/2); Godot `tests/command_menu_test.gd` emitted the selected `ship.sell` request from the roster sale action (206 checks passed, Godot 4.5.1). |
-| `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SHIP-02` | clause 2 | default 60%, integer basis points | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SHIP-02` | clause 3 | Cargo excluded | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SHIP-02` | clause 4 | Use classic TradeWars 2002/TWGS 3.13 reference prices for Armid mines (1000), Limpets (10000), Ether probes (3000), photons (40000), and beacons (100) credits | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | VERIFIED | `suite_ship_sale_v3.json`: sale response and authoritative audit valuation are asserted against the integer-floor formula; 27/27 PostgreSQL cases passed. |
+| `SHIP-02` | clause 2 | default 60%, integer basis points | VERIFIED | `suite_ship_sale_v3.json` asserts default `shipyard_sale_factor_bp=6000`, separately asserts trade-in remains 5000, and asserts response uses 6000 basis points. |
+| `SHIP-02` | clause 3 | Cargo excluded | VERIFIED | `suite_ship_sale_v3.json` includes legacy ORE cargo and a sale receipt declaring cargo forfeiture; proceeds equal hull plus installed equipment valuation only, with exact SQL audit formula. |
+| `SHIP-02` | clause 4 | Use classic TradeWars 2002/TWGS 3.13 reference prices for Armid mines (1000), Limpets (10000), Ether probes (3000), photons (40000), and beacons (100) credits | VERIFIED | Live PostgreSQL query in `suite_ship_sale_v3.json` checks MINES 1000, LIMPETS 10000, PROBE 3000, PHOTONS 40000 and BEACONS 100. Historical catalogue remains subject to the documented reference/version caveat. |
 | `SHIP-03` | clause 1 | Cargo forfeited, equipment accompanies hull, insurance ends without refund, persistent used inventory, atomic credit/ownership/audit | VERIFIED | `manual_acceptance/ship_sale_atomic_rollback.json::case-0006`–`case-0019`: ordinary player sale at DB-classified StarDock; injected audit failure proved rollback of credits, ship selection, cargo, ownership, insurance, equipment and inventory; retry settled exactly once, retained equipment in used inventory and forfeited cargo/insurance; duplicate sale rejected. 19/19 passed against disposable PostgreSQL. `SHIP-01` client-access tests provide the same public sale workflow through Python and Godot. |
-| `SHIP-04` | clause 1 | Cannot sell last eligible ship | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SHIP-04` | clause 2 | Selling active hull requires explicit eligible replacement | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SHIP-04` | clause 3 | switch and sale atomic | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `SHIP-04` | clause 1 | Cannot sell last eligible ship | VERIFIED | `suite_ship_sale_v3.json` registers a separate player with exactly one owned active hull, docks it at a real StarDock, refuses the sale and checks active identity, ownership, credits and sale audit remain unchanged (27/27). |
+| `SHIP-04` | clause 2 | Selling active hull requires explicit eligible replacement | VERIFIED | `suite_ship_sale_v3.json` refuses an active-hull request missing `replacement_ship_id`, then accepts a separately owned eligible replacement in the same facility. |
+| `SHIP-04` | clause 3 | switch and sale atomic | VERIFIED | `manual_acceptance/ship_sale_atomic_rollback.json` passed 19/19: injected audit failure rolls back credit, active ship, ownership, cargo, insurance and used inventory; retry switches and settles once. |
 | `COMBAT-01` | clause 1 | Every player ship destruction yields escape-pod respawn, independent of installed pod | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `COMBAT-01` | clause 2 | no starter ship | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `COMBAT-01` | clause 3 | Cargo/equipment lost | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
@@ -375,9 +412,9 @@ unverified.
 | `CFG-01` | clause 2 | distinct from trade-in | VERIFIED | `suite_ship_sale_v3.json::case-0004`–`case-0005`, 19/19; changing standalone factor leaves trade-in factor at 5000. |
 | `CFG-02` | clause 1 | Fixed 50% | VERIFIED | `manual_acceptance/slave_unrest_production_prepare.json::case-0007`–`case-0013` and `slave_unrest_production_verify.json::case-0001`–`case-0004`; actual production scheduler comparison confirms floor(normal output × 50/100). |
 | `CFG-02` | clause 2 | not an adjustable setting under current policy | VERIFIED | `slave_unrest_production_prepare.json::case-0002` asserts the authenticated SysOp config listing does not expose a slave-output setting; 15/15 preparation and 8/8 verification cases passed. |
-| `CFG-03` | clause 1 | `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-03` | clause 2 | zero is an unset/disabled sentinel | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `CFG-03` | clause 3 | no active gameplay defaults | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `CFG-03` | clause 1 | `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss` | VERIFIED | `suite_slave_unrest_config_defaults.json` reads all three approved settings via authenticated `sysop.config.get`; 12/12 cases passed against disposable PostgreSQL. |
+| `CFG-03` | clause 2 | zero is an unset/disabled sentinel | VERIFIED | Same suite asserts each fresh migration default is zero and runs the authoritative handler against a due slave planet without activating an event. |
+| `CFG-03` | clause 3 | no active gameplay defaults | VERIFIED | `suite_slave_unrest_config_defaults.json` confirms no event, stoppage, loss or allocation change when fresh defaults remain zero; numeric POP-05 policy remains separately unresolved. |
 | `CFG-04` | clause 1 | Existing eligibility and coverage parameters retained | VERIFIED | `suite_economy_insurance.json::case-0001`–`case-0006`, `case-0014`–`case-0015`, 22/22; ordinary authenticated purchase, cargo exclusion and eligibility path exercised. |
 | `CFG-04` | clause 2 | hull-only payout to bank | VERIFIED | `suite_economy_insurance.json::case-0007`–`case-0018`, 22/22; exact hull payout credited to bank once, retry does not duplicate, injected ledger failure rolls policy/bank/fund/ledger state back. |
 
