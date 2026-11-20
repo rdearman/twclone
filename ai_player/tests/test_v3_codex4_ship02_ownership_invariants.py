@@ -22,10 +22,10 @@ def load_catalog():
     return json.loads(CATALOG.read_text(encoding="utf-8"))
 
 
-def test_ship02_catalog_is_ordinary_player_and_read_only():
+def test_ship02_catalog_is_ordinary_player_and_uses_live_transfer_qa():
     catalog = load_catalog()
     assert catalog["requirement_id"] == "V3-SHIP-02"
-    assert catalog["execution_status"] == "next-unblocked-qa-preparation"
+    assert catalog["execution_status"] == "next-unblocked-live-transfer-qa"
     assert catalog["simulation_fixture"] is False
     assert catalog["ai_policy"]["ordinary_player"] is True
     assert "canonical_requirements" not in catalog["ai_policy"]
@@ -43,19 +43,19 @@ def test_ship02_cases_cover_positive_refusal_and_restart_boundaries():
             assert not command["command"].startswith(("admin.", "sys."))
 
 
-def test_ship02_catalog_is_read_only_and_excludes_blocked_lifecycle_mutations():
+def test_ship02_catalog_covers_authorized_inactive_transfer_and_refusals():
     catalog = load_catalog()
-    allowed = {"ship.list", "ship.status", "ship.inspect"}
+    allowed = {"ship.list", "ship.status", "ship.inspect", "ship.transfer"}
     for case in catalog["cases"]:
         assert case["expected"] in {"success", "refusal"}
         for command in case["commands"]:
             assert command["command"] in allowed
             assert "sql" not in command["data"]
-            assert "recipient" not in command["data"]
-    # Sale/transfer belongs to V3-SHIP-01, which is still a server-side stub;
-    # this QA slice must not imply that it has been exercised or accepted.
+    assert {"foreign-transfer-refusal", "authorized-inactive-transfer",
+            "active-transfer-refusal"} <= {case["id"] for case in catalog["cases"]}
+    # Ship sale remains outside this catalog's approved QA contract.
     assert all(
-        command["command"] not in {"ship.sell", "ship.transfer", "shipyard.sell"}
+        command["command"] not in {"ship.sell", "shipyard.sell"}
         for case in catalog["cases"]
         for command in case["commands"]
     )
