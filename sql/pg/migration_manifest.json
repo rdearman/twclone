@@ -80,7 +80,9 @@
       "185_v3_starport_construction.sql",
       "188_v3_player_feedback_outbox.sql",
       "190_v3_slave_unrest_production_cycles.sql",
-      "191_ferengi_destruction_rewards.sql"
+      "191_ferengi_destruction_rewards.sql",
+      "192_v3_approved_slave_unrest_rules.sql",
+      "193_v3_photon_ship_disablement.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -818,6 +820,13 @@
     {
       "name": "192_v3_approved_slave_unrest_rules.sql",
       "subsystem": "planets",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "193_v3_photon_ship_disablement.sql",
+      "subsystem": "combat",
       "required": true,
       "v3_only": true,
       "diagnostic": false

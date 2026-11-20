@@ -493,6 +493,8 @@ class JsonSuiteRunner:
                         time.sleep(delay_ms / 1000.0)
                         client.connect()
                     command = {"command": request["command"]}
+                    if isinstance(request.get("request_id"), str):
+                        command["id"] = request["request_id"]
                     if "data" in request:
                         command["data"] = request["data"]
                     client.send_json(command)
@@ -579,6 +581,8 @@ class JsonSuiteRunner:
             client.connect()
 
         cmd_json = {}
+        if isinstance(test.get("request_id"), str):
+            cmd_json["id"] = test["request_id"]
         if "command" in test:
             cmd_json["command"] = test["command"]
             if "data" in test:

@@ -132,6 +132,7 @@ CREATE TABLE ships (
     ported integer DEFAULT 0,
     onplanet boolean NOT NULL DEFAULT FALSE,
     destroyed boolean NOT NULL DEFAULT FALSE,
+    combat_disabled_until bigint NOT NULL DEFAULT 0,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
     personality text CHECK (personality IS NULL OR personality IN ('balanced', 'offensive', 'defensive', 'looter', 'blockader')),
@@ -781,6 +782,9 @@ CREATE TABLE photon_fire_requests (
     player_id integer NOT NULL REFERENCES players (player_id),
     ship_id integer NOT NULL REFERENCES ships (ship_id),
     sector_id integer NOT NULL REFERENCES sectors (sector_id),
+    target_ship_id integer REFERENCES ships (ship_id),
+    direct_impact_applied boolean NOT NULL DEFAULT FALSE,
+    target_disabled_until bigint NOT NULL DEFAULT 0,
     expires_at bigint NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -6,6 +6,7 @@ var failures: Array[String] = []
 var checks := 0
 
 func _initialize() -> void:
+	_check(EventPresenter.notification_for({"type": "combat.photon_ship_disabled.v1", "data": {"ship_id": 42, "disabled_until": 12345}}) == "Combat · Photon disabled ship 42 until 12345", "photon disablement was not presented to the affected player")
 	_check(EventPresenter.targets_player_ship_destruction({"type": "ship.destroyed", "data": {"player_id": 7}}, 7), "self-destruct event did not target the authenticated player")
 	_check(EventPresenter.targets_player_ship_destruction({"type": "combat.ship_destroyed", "data": {"victim_player_id": 7, "attacker_player_id": 8}}, 7), "combat destruction event did not target the authenticated victim")
 	_check(not EventPresenter.targets_player_ship_destruction({"type": "combat.ship_destroyed", "data": {"victim_player_id": 8}}, 7), "foreign destruction event triggered local reconciliation")

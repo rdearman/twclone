@@ -3,6 +3,7 @@
   "tests": [
     { "name": "Bootstrap SysOp", "setup": "macro_bootstrap_admin" },
     { "name": "Create ordinary photon player", "setup": "macro_auth_user", "username": "photon_atomic_qa", "password": "qa-password" },
+    { "name": "Create ordinary photon target", "setup": "macro_auth_user", "username": "photon_atomic_target", "password": "qa-password" },
     {
       "name": "Select a clean adjacent photon sector",
       "command": "sys.raw_sql_exec", "user": "admin",
@@ -16,6 +17,17 @@
       "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=3,destroyed=FALSE,onplanet=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_atomic_qa');" },
       "expect": { "status": "ok" }
     },
+    { "name": "Move target owner to adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=@{photon_rollback_target} WHERE name='photon_atomic_target';" }, "expect": { "status": "ok" } },
+    { "name": "Place photon target in adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=@{photon_rollback_target},shields=0,combat_disabled_until=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_atomic_target');" }, "expect": { "status": "ok" } },
+    { "name": "Save photon target ship ID", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT ship_id FROM players WHERE name='photon_atomic_target';" }, "expect": { "status": "ok" }, "save": { "photon_target_ship_id": "data.rows.0.0" } },
+    { "name": "Reject a non-adjacent target without partial mutation", "command": "combat.fire_photon", "user": "photon_atomic_qa", "request_id": "photon-nonadjacent-001", "data": { "sector_id": 9999, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "refused" } },
+    { "name": "Non-adjacent refusal conserves ammo, effects and receipts", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN s.photons=3 AND NOT EXISTS(SELECT 1 FROM photon_fire_requests WHERE player_id=p.player_id) AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=9999) AND (SELECT combat_disabled_until FROM ships WHERE ship_id=@{photon_target_ship_id})=0 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" }, "expect": { "status": "ok", "data": { "rows": [["1"]] } } },
+    { "name": "Reject a nonexistent target without partial mutation", "command": "combat.fire_photon", "user": "photon_atomic_qa", "request_id": "photon-invalid-target-001", "data": { "sector_id": "@photon_rollback_target", "target_ship_id": 999999999 }, "expect": { "status": "refused" } },
+    { "name": "Invalid-target refusal conserves ammo, sector and ship state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN s.photons=3 AND NOT EXISTS(SELECT 1 FROM photon_fire_requests WHERE player_id=p.player_id) AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=@{photon_rollback_target}) AND (SELECT combat_disabled_until FROM ships WHERE ship_id=@{photon_target_ship_id})=0 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" }, "expect": { "status": "ok", "data": { "rows": [["1"]] } } },
+    { "name": "Set photon ammunition to zero for refusal check", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET photons=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_atomic_qa');" }, "expect": { "status": "ok" } },
+    { "name": "Reject insufficient ammunition", "command": "combat.fire_photon", "user": "photon_atomic_qa", "request_id": "photon-no-ammo-001", "data": { "sector_id": "@photon_rollback_target", "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "refused", "message": "No photons remain" } },
+    { "name": "Insufficient ammunition creates no receipt, effect or target state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=0 AND NOT EXISTS(SELECT 1 FROM photon_fire_requests WHERE player_id=p.player_id) AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=@{photon_rollback_target}) AND (SELECT combat_disabled_until FROM ships WHERE ship_id=@{photon_target_ship_id})=0 FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Restore ammunition for transaction rollback test", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET photons=3 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_atomic_qa');" }, "expect": { "status": "ok" } },
     {
       "name": "Install a controlled failure after ammo/effect updates",
       "command": "sys.raw_sql_exec", "user": "admin",
@@ -31,7 +43,8 @@
     {
       "name": "Injected request insert failure returns an error",
       "command": "combat.fire_photon", "user": "photon_atomic_qa",
-      "data": { "sector_id": "@photon_rollback_target" },
+      "request_id": "photon-atomic-retry-001",
+      "data": { "sector_id": "@photon_rollback_target", "target_ship_id": "@photon_target_ship_id" },
       "expect": { "status": "error" }
     },
     {
@@ -56,14 +69,23 @@
     {
       "name": "Retry firing after rollback succeeds once",
       "command": "combat.fire_photon", "user": "photon_atomic_qa",
-      "data": { "sector_id": "@photon_rollback_target" },
+      "request_id": "photon-atomic-retry-001",
+      "data": { "sector_id": "@photon_rollback_target", "target_ship_id": "@photon_target_ship_id" },
       "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
       "asserts": [{ "path": "data.ammo_remaining", "op": "==", "value": 2 }]
     },
     {
+      "name": "Retry the committed request returns the same receipt without another debit",
+      "command": "combat.fire_photon", "user": "photon_atomic_qa",
+      "request_id": "photon-atomic-retry-001",
+      "data": { "sector_id": "@photon_rollback_target", "target_ship_id": "@photon_target_ship_id" },
+      "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "asserts": [{ "path": "data.idempotent_retry", "op": "==", "value": true }]
+    },
+    {
       "name": "Retry leaves one durable debit/effect/request/event",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "SELECT CASE WHEN s.photons=2 AND (SELECT COUNT(*) FROM photon_fire_requests r WHERE r.player_id=p.player_id AND r.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM sector_photon_effects e WHERE e.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM engine_events e WHERE e.type='combat.photon_fired.v1' AND e.actor_player_id=p.player_id)=1 THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" },
+      "data": { "sql": "SELECT CASE WHEN s.photons=2 AND (SELECT COUNT(*) FROM photon_fire_requests r WHERE r.player_id=p.player_id AND r.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM sector_photon_effects e WHERE e.sector_id=@{photon_rollback_target})=1 AND (SELECT COUNT(*) FROM engine_events e WHERE e.type='combat.photon_fired.v1' AND e.actor_player_id=p.player_id)=1 AND (SELECT combat_disabled_until FROM ships WHERE ship_id=@{photon_target_ship_id})>EXTRACT(EPOCH FROM NOW())::bigint THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.name='photon_atomic_qa';" },
       "expect": { "status": "ok" },
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
     }

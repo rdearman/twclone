@@ -1338,6 +1338,15 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 			gameplay_view.show_trade_routes(data)
 			return
+		if command_name == "combat.fire_photon":
+			var target_ship_id := int(data.get("target_ship_id", 0))
+			var expiry := int(data.get("expires_at", 0))
+			if data.get("direct_impact_applied", false) == true:
+				gameplay_view.show_notification("Photon disabled combat systems on ship %d until %d. Sector suppression expires at %d." % [target_ship_id, int(data.get("target_disabled_until", expiry)), expiry])
+			else:
+				gameplay_view.show_notification("Photon fired. Ship %d shields blocked direct impact; sector suppression expires at %d." % [target_ship_id, expiry])
+			gameplay_view.set_command_busy(false)
+			return
 		if command_name == "auth.logout":
 			_finish_logout()
 			return

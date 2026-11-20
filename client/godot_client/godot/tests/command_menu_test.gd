@@ -21,6 +21,11 @@ func _run() -> void:
 	menu._active_category = "NAVIGATION"
 	menu._render_actions()
 	await process_frame
+	var photon_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("OPERATIONS", []):
+		if str(candidate.get("command", "")) == "combat.fire_photon":
+			photon_action = candidate
+	_check(photon_action.get("fields", []).size() == 2 and photon_action["fields"][0][0] == "sector_id" and photon_action["fields"][1][0] == "target_ship_id", "photon workflow does not request both adjacent sector and explicit target ship")
 	var communication_mail_action: Dictionary = {}
 	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
 		if str(candidate.get("command", "")) == "mail.inbox":

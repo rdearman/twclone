@@ -2841,6 +2841,14 @@ def print_last_rpc(ctx):
     if resp is None:
         print("[no response captured]")
         return
+    if isinstance(resp, dict) and resp.get("type") == "combat.photon_fired_v1" and resp.get("status") == "ok":
+        data = get_data(resp)
+        if data.get("direct_impact_applied") is True:
+            print("Photon fired: target ship combat systems disabled until {0}; sector defenses suppressed until {1}.".format(
+                data.get("target_disabled_until", "unknown"), data.get("expires_at", "unknown")))
+        else:
+            print("Photon fired: target ship shields blocked direct impact; sector defenses suppressed until {0}.".format(
+                data.get("expires_at", "unknown")))
     print(json.dumps(resp, ensure_ascii=False, indent=2))
 
 @register("pretty_print_trade_quote")

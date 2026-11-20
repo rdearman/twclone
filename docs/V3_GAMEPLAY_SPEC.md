@@ -99,7 +99,7 @@ V3 covers the approved original-game play loop and explicitly approved TWClone a
 | ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references |
 | --- | --- | --- | --- | --- |
 | PARITY-PORT-ATTACK-01 | Port attack | V3 names `combat.attack.port` and `player.port_strike.v1`; `ports.size` is capacity, not hull strength. | `src/server_loop.c`, `src/server_combat.c`, `sql/pg/000_tables.sql::ports` | `23_Combat_and_Weapons.md`, `08_Engine_Event_Contract.md` |
-| PARITY-PHOTON-01 | Photon missiles | Eligible ship classes, adjacent sector firing, explicit `target_ship_id` for direct ship impact, shield protection for the direct impact, planetary shield behavior, independent sector suppression, atomic ammunition/effect settlement, idempotency, cooldown and configured expiry. | `cmd_combat_fire_photon`; persisted sector effect/request tables; Python and Godot weapon workflows; hazard/interdiction/citadel reaction checks | `23_Combat_and_Weapons.md`, `19_Ship_Commands.md`; [manual](https://electraphysics.com/documents/tradewarsmanual.pdf), photon section |
+| PARITY-PHOTON-01 | Photon missiles | Eligible ship classes, adjacent sector firing at required `target_ship_id`, shielded direct-impact block while consuming one photon and applying independent sector suppression, unshielded persisted combat disablement through configured expiry, no stacking and max-expiry refresh, prohibition on disabled-ship attacks/weapons, navigation/retreat/non-combat availability, atomic ammunition/direct-effect/sector-effect/receipt settlement, idempotency, cooldown and configured expiry. | `cmd_combat_fire_photon`; combat entry-point guards; persisted `ships.combat_disabled_until`, sector effect/request tables; Python and Godot workflows; hazard/interdiction/citadel reaction checks | `23_Combat_and_Weapons.md`, `19_Ship_Commands.md`; [manual](https://electraphysics.com/documents/tradewarsmanual.pdf), photon section. Direct ship disablement semantics are approved TWClone V3 behavior, not a historical parity claim. |
 | PARITY-TOLL-01 | Toll fighters | Original manual: toll fighters stop non-hostile passers, request payment based on deployed quantity, and fight if attacked. | `move_warp_toll_offer`, normal/transwarp settlement, `apply_sector_fighters_on_entry`, Python/Godot movement flows; migration 184 | `21_Sector_and_Movement_Commands.md`, `23_Combat_and_Weapons.md`; [manual](https://electraphysics.com/documents/tradewarsmanual.pdf), pp. 8–9 |
 | PARITY-TW-HOMING-01 | Transwarp homing fighter | A deployed destination-sector fighter is the homing reference; validate and lock it inside the movement transaction before turn/location mutations. | `src/server_universe.c::cmd_move_transwarp`, `src/db/repo/repo_universe.c::repo_universe_lock_sector_fighter` | `21_Sector_and_Movement_Commands.md` |
 | MOVE-05 | Transwarp fuel quantity | TWGS 3.13 baseline: 3 Fuel Ore per sector of distance, measured as the shortest directed warp-hop count in the authoritative universe graph. | `src/server_universe.c::cmd_move_transwarp`, `src/db/repo/repo_universe.c::repo_universe_get_transwarp_distance`, `src/db/repo/repo_cargo.c::repo_cargo_consume_locked` | `21_Sector_and_Movement_Commands.md` |
@@ -123,9 +123,32 @@ continues to take precedence.
 
 These defaults supersede only unresolved numeric details for those mechanics. They do not alter the approved fighter-production contract, planet-population rules, port-class directions, shield/citadel restrictions, one-active-port invariant, or inactive-history policy.
 
-## Unresolved gameplay rule
+## Approved Photon ship-targeting semantics
 
-Photon firing has an approved `target_ship_id` targeting contract, ship-shield boundary, and independent sector-suppression behavior. The persistent gameplay consequence for an unshielded direct ship impact is unspecified. Do not infer damage, disabling, or destruction. The gap remains documented in [`V3_PARITY.md`](V3_PARITY.md).
+`combat.fire_photon` requires an explicit `target_ship_id` in an eligible
+adjacent sector. These six approved TWClone V3 rules govern direct impact and
+sector suppression:
+
+1. A shielded target consumes one photon and receives sector suppression, but
+   receives no direct combat disablement.
+2. An unshielded target's combat systems are disabled until the shot's
+   configured expiry.
+3. A disabled ship cannot initiate attacks or fire weapons through any combat
+   entry point. Navigation, retreat, status and non-combat operations remain
+   available.
+4. Repeated hits set expiry to `max(existing_expiry, new_expiry)` and never
+   shorten an existing disablement.
+5. Ammunition, direct impact, sector suppression and the idempotency receipt
+   commit or roll back together. Invalid targets, insufficient ammunition and
+   non-adjacent sectors produce no partial effects.
+6. Disablement persists across reconnect and server restart. Expired effects
+   cease to apply by timestamp comparison and need no cleanup job.
+
+Sector suppression remains independent of direct ship impact and uses the
+configured duration. Existing planetary-shield behavior remains in force.
+Direct ship disablement is an approved TWClone V3 rule, not a claim about
+canonical historical TradeWars behavior. See [`V3_PARITY.md`](V3_PARITY.md) for
+executable evidence.
 
 
 ## SysOp session invalidation

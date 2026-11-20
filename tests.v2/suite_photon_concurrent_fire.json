@@ -1,0 +1,35 @@
+{
+  "name": "Concurrent photon firing serializes ammo and disablement",
+  "version": "1.0.0",
+  "tests": [
+    { "name": "Register first photon shooter", "setup": "macro_auth_user", "username": "photon_concurrent_a", "password": "qa-password" },
+    { "name": "Register second photon shooter", "setup": "macro_auth_user", "username": "photon_concurrent_b", "password": "qa-password" },
+    { "name": "Register photon target", "setup": "macro_auth_user", "username": "photon_concurrent_target", "password": "qa-password" },
+    { "name": "Select an adjacent unshielded sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT w.to_sector FROM players p JOIN sector_warps w ON w.from_sector=p.sector_id WHERE p.name='photon_concurrent_a' AND NOT EXISTS(SELECT 1 FROM planets pl JOIN citadels c USING(planet_id) WHERE pl.sector_id=w.to_sector AND COALESCE(c.planetaryShields,0)>0) AND NOT EXISTS(SELECT 1 FROM sector_photon_effects e WHERE e.sector_id=w.to_sector) ORDER BY w.to_sector LIMIT 1;" }, "expect": { "status": "ok" }, "save": { "concurrent_photon_sector": "data.rows.0.0" }, "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }] },
+    { "name": "Prepare both shooters and the unshielded target", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=2,destroyed=FALSE,onplanet=FALSE,combat_disabled_until=0 WHERE ship_id IN ((SELECT ship_id FROM players WHERE name='photon_concurrent_a'),(SELECT ship_id FROM players WHERE name='photon_concurrent_b'));" }, "expect": { "status": "ok" } },
+    { "name": "Move target owner to adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=@{concurrent_photon_sector} WHERE name='photon_concurrent_target';" }, "expect": { "status": "ok" } },
+    { "name": "Place target ship in adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=@{concurrent_photon_sector},shields=0,destroyed=FALSE,combat_disabled_until=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_concurrent_target');" }, "expect": { "status": "ok" } },
+    { "name": "Save target ship ID", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT ship_id FROM players WHERE name='photon_concurrent_target';" }, "expect": { "status": "ok" }, "save": { "concurrent_photon_target_ship": "data.rows.0.0" } },
+    {
+      "name": "Two distinct authenticated launches race on one target",
+      "parallel_requests": [
+        { "command": "combat.fire_photon", "user": "photon_concurrent_a", "request_id": "photon-concurrent-a-001", "data": { "sector_id": "@concurrent_photon_sector", "target_ship_id": "@concurrent_photon_target_ship" } },
+        { "command": "combat.fire_photon", "user": "photon_concurrent_b", "request_id": "photon-concurrent-b-001", "data": { "sector_id": "@concurrent_photon_sector", "target_ship_id": "@concurrent_photon_target_ship" } }
+      ],
+      "expect_each": { "status": "ok", "asserts": [{ "path": "data.direct_impact_applied", "op": "==", "value": true }] },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Concurrent firing accounts for two debits and one extended target state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN (SELECT photons FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_concurrent_a'))=1 AND (SELECT photons FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_concurrent_b'))=1 AND (SELECT combat_disabled_until FROM ships WHERE ship_id=@{concurrent_photon_target_ship})>EXTRACT(EPOCH FROM NOW())::bigint AND (SELECT COUNT(*) FROM photon_fire_requests WHERE target_ship_id=@{concurrent_photon_target_ship} AND sector_id=@{concurrent_photon_sector} AND direct_impact_applied=TRUE)=2 AND (SELECT COUNT(*) FROM sector_photon_effects WHERE sector_id=@{concurrent_photon_sector})=1 THEN 1 ELSE 0 END;" }, "expect": { "status": "ok", "data": { "rows": [["1"]] } } },
+    { "name": "Restore two photons to one shooter for a concurrent duplicate retry", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET photons=2 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_concurrent_a');" }, "expect": { "status": "ok" } },
+    {
+      "name": "Duplicate idempotent requests race concurrently",
+      "parallel_requests": [
+        { "command": "combat.fire_photon", "user": "photon_concurrent_a", "request_id": "photon-concurrent-duplicate-001", "data": { "sector_id": "@concurrent_photon_sector", "target_ship_id": "@concurrent_photon_target_ship" } },
+        { "command": "combat.fire_photon", "user": "photon_concurrent_a", "request_id": "photon-concurrent-duplicate-001", "data": { "sector_id": "@concurrent_photon_sector", "target_ship_id": "@concurrent_photon_target_ship" } }
+      ],
+      "expect_each": { "status": "ok" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Concurrent duplicate retry consumes one photon and commits one receipt", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN (SELECT photons FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_concurrent_a'))=1 AND (SELECT COUNT(*) FROM photon_fire_requests WHERE request_id='photon-concurrent-duplicate-001' AND player_id=(SELECT player_id FROM players WHERE name='photon_concurrent_a'))=1 AND (SELECT COUNT(*) FROM engine_events WHERE type='combat.photon_fired.v1' AND actor_player_id=(SELECT player_id FROM players WHERE name='photon_concurrent_a'))=2 THEN 1 ELSE 0 END;" }, "expect": { "status": "ok", "data": { "rows": [["1"]] } } }
+  ]
+}

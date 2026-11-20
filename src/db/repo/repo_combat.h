@@ -3,6 +3,7 @@
 
 #include <jansson.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "db/db_api.h"
 
 /* Structure to hold basic ship combat stats */
@@ -68,6 +69,7 @@ typedef struct {
     int max_attack;
     int player_id;
     int corp_id;
+    int64_t combat_disabled_until;
 } repo_combat_ship_full_t;
 
 int db_combat_load_ship_full_locked(db_t *db, int ship_id, repo_combat_ship_full_t *out, bool skip_locked);

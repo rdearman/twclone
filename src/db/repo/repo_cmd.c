@@ -4855,7 +4855,8 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
     "       s.ship_id, s.name as ship_name, s.type_id as ship_type, "
     "       s.holds, s.fighters, s.shields, s.onplanet, s.ported, "
     "       sec.name as sector_name, "
-    "       s.ore, s.equipment, s.organics, s.slaves, s.drugs, s.weapons, s.colonists "
+    "       s.ore, s.equipment, s.organics, s.slaves, s.drugs, s.weapons, s.colonists, "
+    "       COALESCE(s.combat_disabled_until,0) "
     "FROM players p "
     "LEFT JOIN ships s ON p.ship_id = s.ship_id "
     "LEFT JOIN sectors sec ON p.sector_id = sec.sector_id "
@@ -4916,6 +4917,8 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
       json_object_set_new (ship, "shields", json_integer (db_res_col_i32 (res, 11, &err)));
       json_object_set_new (ship, "onplanet", json_integer (db_res_col_i32 (res, 12, &err)));
       json_object_set_new (ship, "ported", json_integer (db_res_col_i32 (res, 13, &err)));
+      json_object_set_new (ship, "combat_disabled_until",
+                           json_integer (db_res_col_i64 (res, 22, &err)));
       
       /* Build cargo array from commodity columns (columns 15-20) */
       json_t *cargo = json_array ();

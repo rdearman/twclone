@@ -73,6 +73,7 @@ const COMMANDS := {
 	],
 	"OPERATIONS": [
 		{"label": "Combat status", "command": "combat.status"},
+		{"label": "Fire photon at adjacent ship", "command": "combat.fire_photon", "fields": [["sector_id", FIELD_INT, "Adjacent target sector", ""], ["target_ship_id", FIELD_INT, "Target ship ID in that sector", ""]], "mutating": true},
 		{"label": "Deploy fighters", "command": "combat.deploy_fighters", "fields": [["amount", FIELD_INT, "Number of fighters", "1"], ["offense", FIELD_INT, "Offense percentage", "50"]], "mutating": true},
 		{"label": "Deploy mines", "command": "combat.deploy_mines", "fields": [["amount", FIELD_INT, "Number of mines", "1"], ["offense", FIELD_INT, "Offense mode (1 toll, 2 defend, 3 attack)", "2"]], "mutating": true},
 		# The list schemas are empty objects; the server scopes results to the

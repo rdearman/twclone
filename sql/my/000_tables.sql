@@ -117,6 +117,7 @@ CREATE TABLE ships (
     ported bigint DEFAULT 0,
     onplanet boolean NOT NULL DEFAULT FALSE,
     destroyed boolean NOT NULL DEFAULT FALSE,
+    combat_disabled_until BIGINT NOT NULL DEFAULT 0,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
     towing_ship_id BIGINT DEFAULT 0,
@@ -731,10 +732,14 @@ CREATE TABLE photon_fire_requests (
     player_id bigint NOT NULL,
     ship_id bigint NOT NULL,
     sector_id bigint NOT NULL,
+    target_ship_id bigint NULL,
+    direct_impact_applied boolean NOT NULL DEFAULT FALSE,
+    target_disabled_until bigint NOT NULL DEFAULT 0,
     expires_at bigint NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (player_id) REFERENCES players (player_id),
     FOREIGN KEY (ship_id) REFERENCES ships (ship_id),
+    FOREIGN KEY (target_ship_id) REFERENCES ships (ship_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id));
 
 CREATE TABLE toll_passage_offers (

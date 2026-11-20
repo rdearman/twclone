@@ -1,0 +1,13 @@
+{
+  "name": "Verify photon combat disablement after game-server restart",
+  "tests": [
+    { "name": "Bootstrap read-only post-restart verifier", "setup": "macro_bootstrap_admin" },
+    { "name": "Reauthenticate photon shooter after restart", "setup": "macro_auth_user", "username": "photon_restart_shooter", "password": "qa-password" },
+    { "name": "Reauthenticate photon target after restart", "setup": "macro_auth_user", "username": "photon_restart_target", "password": "qa-password" },
+    { "name": "Read the durable shot target and sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT sector_id,target_ship_id FROM photon_fire_requests WHERE request_id='photon-restart-persist-001';" }, "expect": { "status": "ok" }, "save": { "photon_restart_sector": "data.rows.0.0", "photon_restart_target_ship": "data.rows.0.1" } },
+    { "name": "Reauthenticate and retry the committed shot after server restart", "command": "combat.fire_photon", "user": "photon_restart_shooter", "request_id": "photon-restart-persist-001", "data": { "sector_id": "@photon_restart_sector", "target_ship_id": "@photon_restart_target_ship" }, "expect": { "status": "ok", "type": "combat.photon_fired_v1" }, "asserts": [{ "path": "data.idempotent_retry", "op": "==", "value": true }] },
+    { "name": "Restart retry leaves the original single debit and receipt", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN (SELECT photons FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_restart_shooter'))=0 AND (SELECT COUNT(*) FROM photon_fire_requests WHERE request_id='photon-restart-persist-001')=1 AND (SELECT COUNT(*) FROM engine_events WHERE type='combat.photon_fired.v1' AND actor_player_id=(SELECT player_id FROM players WHERE name='photon_restart_shooter'))=1 THEN 1 ELSE 0 END;" }, "expect": { "status": "ok", "data": { "rows": [["1"]] } } },
+    { "name": "Reauthenticate and read persisted photon state", "command": "ship.status", "user": "photon_restart_target", "expect": { "status": "ok", "type": "ship.status" }, "asserts": [{ "path": "data.ship.combat_disabled_until", "op": ">", "value": 0 }] },
+    { "name": "Persisted photon disablement still blocks attacks after restart", "command": "combat.attack", "user": "photon_restart_target", "data": { "target_ship_id": 1 }, "expect": { "status": "refused", "message": "Photon-disabled combat systems cannot initiate attacks or fire weapons" } }
+  ]
+}

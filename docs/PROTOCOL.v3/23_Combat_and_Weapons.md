@@ -30,6 +30,52 @@ reinforced defenses or overwriting a newer capture.
 Attack a port.
 **Events**: Emits `player.port_strike.v1`.
 
+### `combat.fire_photon`
+Fire one photon missile into an adjacent sector at a specific ship.
+**Args**: `{ "sector_id": 679, "target_ship_id": 123 }`.
+Both fields are required. The target must be a live ship in the adjacent
+sector; the firing ship must be a Missile Frigate or Imperial Starship with
+ammunition. The approved TWClone V3 direct-impact and sector-suppression
+semantics are:
+
+1. A shielded target consumes one photon and receives sector suppression, but
+   no direct combat disablement.
+2. An unshielded target's combat systems are disabled until the configured
+   shot expiry.
+3. While disabled, a ship cannot initiate attacks or fire weapons through any
+   combat entry point. Navigation, retreat and non-combat operations remain
+   available.
+4. Repeated hits set disablement expiry to `max(existing_expiry, new_expiry)`;
+   they never shorten the existing effect.
+5. Ammunition, direct impact, sector suppression and the idempotency receipt
+   commit or roll back together.
+6. Disablement survives reconnect and server restart. An expired effect ceases
+   to apply by timestamp comparison; it does not depend on cleanup.
+
+A successful shot independently suppresses sector defenses and the applicable
+citadel reactions for the configured duration. Planetary shields retain their
+existing refusal behavior. Invalid targets, insufficient ammunition and
+non-adjacent sectors have no partial effects.
+
+The photon debit, direct ship effect, sector effect and request receipt settle
+in one database transaction. `request_id` makes retries return the original
+result without consuming ammunition or applying another effect. Invalid ship,
+sector, adjacency, eligibility or ammunition requests have no partial effects.
+The server returns `combat.photon_fired_v1` with `target_ship_id`,
+`direct_impact_applied`, `target_disabled_until`, `expires_at`,
+`duration_seconds`, `ammo_remaining` and `idempotent_retry`.
+
+Photon disablement is enforced by the server at every current attack or weapon
+entry point: `combat.attack` (ship-to-ship), `combat.attack_planet`,
+`combat.attack.port` (StarPort), and `combat.fire_photon`. The shared NPC
+`npc_combat_attack_ship` entry point also refuses a photon-disabled attacking
+ship. `combat.deploy_fighters`, `combat.deploy_mines` and `combat.lay_mines`
+deploy or recall defenses; they do not initiate attacks and remain available.
+The rule does not block navigation, retreat, status or other non-combat
+operations. The persisted expiry survives reconnects and server restarts; it
+is active only while later than current server time and therefore needs no
+cleanup job.
+
 ### `combat.deploy_mines`
 Deploy `amount` Armid mines or Limpets. `mine_type` accepts `"armid"` or
 `"limpet"` (integer aliases 1 and 4 are retained); omitted mine type defaults
@@ -39,13 +85,14 @@ does not select a mine type; fighter offensive settings do not apply to mines.
 ## 1.1 Historical Photon and Toll-Fighter Mechanics
 
 The original TradeWars 2002 Player's Manual (1990–2000) establishes these
-mechanics as parity references; this section does not claim that V3 handlers
-currently implement them:
+historical references:
 
 - Photon missiles may be used by Missile Frigates and Imperial StarShips.
 - Ship and planetary shields protect against photon impact. The manual
   describes disabling citadel Combat Control, Quasar Cannon and Interdictor
-  systems after shields are defeated.
+  systems after shields are defeated. The direct ship combat-disablement
+  expiry and request/response semantics above are approved TWClone V3 rules;
+  they are not claimed as verified historical TradeWars behavior.
 - A photon neutralizes sector mines and fighters for a short-lived effect.
   The consulted manual does not establish a numeric duration or the V3
   configuration key/default. Do not invent either value.
@@ -58,8 +105,8 @@ Source: [TradeWars 2002 Player's Manual (1990–2000)](https://electraphysics.co
 fighter modes at pp. 8–9 (PDF lines 385–411), photon description at p. 34
 (PDF lines 338–339). These historical facts do not fill the missing V3
 wire-level and configurable-value contracts. Until those are specified,
-photon firing and toll collection remain incomplete rather than inferred from
-current implementation.
+Toll collection remains governed by its separately documented V3 interaction
+contract.
 
 ## 2. Asset Deployment Rules (FedSpace & MSL)
 

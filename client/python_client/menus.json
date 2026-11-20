@@ -2166,7 +2166,8 @@
             "rpc": {
               "command": "combat.fire_photon",
               "data": {
-                "sector_id": "<prompt:int:Adjacent target sector>"
+                "sector_id": "<prompt:int:Adjacent target sector>",
+                "target_ship_id": "<prompt:int:Ship ID in that sector>"
               }
             },
             "post": "print_last_rpc"

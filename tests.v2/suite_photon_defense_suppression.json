@@ -5,32 +5,40 @@
   "tests": [
     { "name": "Create ordinary photon shooter", "setup": "macro_auth_user", "username": "photon_suppression_shooter", "password": "qa-password" },
     { "name": "Create ordinary sector entrant", "setup": "macro_auth_user", "username": "photon_suppression_victim", "password": "qa-password" },
+    { "name": "Create ordinary photon target", "setup": "macro_auth_user", "username": "photon_suppression_target", "password": "qa-password" },
     {
       "name": "Rig adjacent sectors",
       "command": "sys.raw_sql_exec", "user": "admin",
       "data": { "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES(1,679),(679,1),(1,680),(680,1) ON CONFLICT DO NOTHING;" },
       "expect": { "status": "ok" }
     },
-    { "name": "Position photon participants", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=1 WHERE player_id IN (@{photon_suppression_shooter_player_id},@{photon_suppression_victim_player_id});" }, "expect": { "status": "ok" } },
-    { "name": "Prepare eligible photon ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=0,photons=2,type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Position photon participants", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=1 WHERE player_id IN (@{photon_suppression_shooter_player_id},@{photon_suppression_victim_player_id},@{photon_suppression_target_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Prepare eligible photon ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=0,photons=3,type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
     { "name": "Prepare ordinary entering ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=FALSE,destroyed=FALSE,hull=100,shields=0,fighters=12 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_victim_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Move target owner before its ship to shield test sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=680 WHERE player_id=@{photon_suppression_target_player_id};" }, "expect": { "status": "ok" } },
+    { "name": "Prepare shielded-planet photon target ship", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=680,onplanet=FALSE,destroyed=FALSE,hull=100,shields=10,fighters=12,combat_disabled_until=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_target_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Save target and shooter ship IDs", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT (SELECT ship_id FROM players WHERE player_id=@{photon_suppression_target_player_id}),(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" }, "save": { "photon_target_ship_id": "data.rows.0.0", "photon_shooter_ship_id": "data.rows.0.1" } },
     { "name": "Clear old sector assets", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=679;" }, "expect": { "status": "ok" } },
     { "name": "Place hostile Armid mine and fighter", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES(679,@{photon_suppression_shooter_player_id},0,1,1,0,0),(679,@{photon_suppression_shooter_player_id},0,2,1,1,0);" }, "expect": { "status": "ok" } },
     { "name": "Create planet with active citadel reaction", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,created_by,population,population_type,colonists_unassigned,fighters) VALUES(987655,679,'Photon Suppression Citadel',@{photon_suppression_shooter_player_id},'player',@{photon_suppression_shooter_player_id},100,'COLONIST',100,10);" }, "expect": { "status": "ok" } },
+    { "name": "Select an ordinary active StarPort for disabled-attack coverage", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT port_id FROM ports WHERE is_active=TRUE ORDER BY port_id LIMIT 1;" }, "expect": { "status": "ok" }, "save": { "photon_test_port_id": "data.rows.0.0" } },
+    { "name": "Place the test StarPort in the photon target sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ports SET sector_id=679,durability=10000,defensive_strength=1000 WHERE port_id=@{photon_test_port_id};" }, "expect": { "status": "ok" } },
     { "name": "Configure citadel reaction multiplier", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO citadels(planet_id,level,militaryReactionLevel,planetaryShields) VALUES(987655,2,2,0);" }, "expect": { "status": "ok" } },
     { "name": "Create shielded planet", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,created_by,population) VALUES(987654,680,'Photon Shield Test',@{photon_suppression_shooter_player_id},'player',@{photon_suppression_shooter_player_id},0);" }, "expect": { "status": "ok" } },
     { "name": "Create planetary shield", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO citadels(planet_id,level,planetaryShields) VALUES(987654,5,1);" }, "expect": { "status": "ok" } },
     { "name": "Prepare second approved photon ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Imperial Starship') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
-    { "name": "Imperial Starship passes class check but shield blocks impact", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 680 }, "expect": { "status": "refused", "message": "Planetary shields protect this target" } },
-    { "name": "Second eligible class shield refusal does not spend photon", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=2 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=680) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Imperial Starship passes class check but planetary shield blocks launch", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 680, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "refused", "message": "Planetary shields protect this target" } },
+    { "name": "Second eligible class shield refusal does not spend photon", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=3 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=680) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
     { "name": "Temporarily equip an ineligible ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Merchant Cruiser') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
-    { "name": "Ineligible ship class cannot fire photons", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 679 }, "expect": { "status": "refused" } },
-    { "name": "Ineligible attempt preserves ammo and effect state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=2 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Ineligible ship class cannot fire photons", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "data": { "sector_id": 679, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "refused" } },
+    { "name": "Ineligible attempt preserves ammo and effect state", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=3 AND NOT EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679) FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_shooter_player_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
     { "name": "Restore eligible photon ship class", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate') WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{photon_suppression_shooter_player_id});" }, "expect": { "status": "ok" } },
+    { "name": "Move target owner before its ship to adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=679 WHERE player_id=@{photon_suppression_target_player_id};" }, "expect": { "status": "ok" } },
+    { "name": "Place direct target in adjacent firing sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=679,shields=10,combat_disabled_until=0 WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
     {
       "name": "Planetary shield refuses photon impact",
       "command": "combat.fire_photon", "user": "photon_suppression_shooter",
-      "data": { "sector_id": 680 }, "expect": { "status": "refused" }
+      "data": { "sector_id": 680, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "refused" }
     },
     {
       "name": "Shield refusal preserves ammunition and creates no effect",
@@ -39,10 +47,24 @@
       "expect": { "status": "ok", "data": { "rows": [["t"]] } }
     },
     {
-      "name": "Eligible ordinary player fires photon at armed adjacent sector",
+      "name": "Shielded ship consumes one photon and sector suppression still applies",
       "command": "combat.fire_photon", "user": "photon_suppression_shooter",
-      "data": { "sector_id": 679 }, "expect": { "status": "ok", "type": "combat.photon_fired_v1" }
+      "request_id": "photon-shielded-target-001",
+      "data": { "sector_id": 679, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "asserts": [ { "path": "data.direct_impact_applied", "op": "==", "value": false } ]
     },
+    { "name": "Shielded direct target remains enabled while sector suppression persists", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=2 AND s.combat_disabled_until=0 AND EXISTS(SELECT 1 FROM sector_photon_effects WHERE sector_id=679 AND expires_at>EXTRACT(EPOCH FROM NOW())::bigint) FROM ships s WHERE s.ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Remove ship shields for direct impact acceptance", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET shields=0 WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
+    { "name": "Unshielded target receives combat disablement", "command": "combat.fire_photon", "user": "photon_suppression_shooter", "request_id": "photon-unshielded-target-001", "data": { "sector_id": 679, "target_ship_id": "@photon_target_ship_id" }, "expect": { "status": "ok", "type": "combat.photon_fired_v1" }, "asserts": [ { "path": "data.direct_impact_applied", "op": "==", "value": true } ] },
+    { "name": "Photon disablement is persisted through authoritative ship status", "command": "ship.status", "user": "photon_suppression_target", "expect": { "status": "ok", "type": "ship.status" }, "asserts": [ { "path": "data.ship.combat_disabled_until", "op": ">", "value": 0 } ] },
+    { "name": "Photon-disabled ship cannot initiate a ship attack", "command": "combat.attack", "user": "photon_suppression_target", "data": { "target_ship_id": "@photon_shooter_ship_id" }, "expect": { "status": "refused", "message": "Photon-disabled combat systems cannot initiate attacks or fire weapons" } },
+    { "name": "Photon-disabled ship cannot initiate a planetary attack", "command": "combat.attack_planet", "user": "photon_suppression_target", "data": { "planet_id": 987655, "enslave_colonists": false }, "expect": { "status": "refused", "message": "Photon-disabled combat systems cannot initiate attacks or fire weapons" } },
+    { "name": "Photon-disabled ship cannot initiate a StarPort attack", "command": "combat.attack.port", "user": "photon_suppression_target", "data": { "port_id": "@photon_test_port_id", "idempotency_key": "photon-disabled-port-attack" }, "expect": { "status": "refused", "message": "Photon-disabled combat systems cannot initiate attacks or fire weapons" } },
+    { "name": "Equip disabled target with a photon without changing its effect", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=1 WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
+    { "name": "Photon-disabled ship cannot fire another weapon", "command": "combat.fire_photon", "user": "photon_suppression_target", "request_id": "photon-disabled-cannot-refire-001", "data": { "sector_id": 1, "target_ship_id": "@photon_shooter_ship_id" }, "expect": { "status": "refused", "message": "Photon-disabled combat systems cannot initiate attacks or fire weapons" } },
+    { "name": "Disabled weapon refusal preserves ammunition and creates no shot receipt", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT s.photons=1 AND NOT EXISTS(SELECT 1 FROM photon_fire_requests WHERE request_id='photon-disabled-cannot-refire-001') FROM ships s WHERE s.ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok", "data": { "rows": [["t"]] } } },
+    { "name": "Photon-disabled ship retains non-combat status access", "command": "ship.status", "user": "photon_suppression_target", "expect": { "status": "ok", "type": "ship.status" } },
+    { "name": "Photon-disabled ship retains navigation", "command": "move.warp", "user": "photon_suppression_target", "data": { "to_sector_id": 1 }, "expect": { "status": "ok" } },
     {
       "name": "Entrant has undamaged baseline",
       "command": "combat.status", "user": "photon_suppression_victim",
@@ -75,6 +97,12 @@
       "command": "sys.raw_sql_exec", "user": "admin",
       "data": { "sql": "SELECT s.hull<100 AND NOT EXISTS(SELECT 1 FROM sector_assets WHERE sector_id=679 AND owner_id=@{photon_suppression_shooter_player_id} AND asset_type IN (1,2)) AND EXISTS(SELECT 1 FROM engine_events WHERE actor_player_id=@{photon_suppression_victim_player_id} AND type='combat.hit.fighters') FROM players p JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{photon_suppression_victim_player_id};" },
       "expect": { "status": "ok", "data": { "rows": [["t"]] } }
-    }
+    },
+    { "name": "Photon shooter enters the target sector after defenses are consumed", "command": "move.warp", "user": "photon_suppression_shooter", "data": { "to_sector_id": 679 }, "expect": { "status": "ok" } },
+    { "name": "Reset disabled player's location before expiry recovery", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=1 WHERE player_id=@{photon_suppression_target_player_id};" }, "expect": { "status": "ok" } },
+    { "name": "Reset disabled ship location before expiry recovery", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1 WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
+    { "name": "Expire direct ship disablement without cleanup", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET combat_disabled_until=EXTRACT(EPOCH FROM NOW())::bigint-1 WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
+    { "name": "Disabled player can navigate after direct effect expiry", "command": "move.warp", "user": "photon_suppression_target", "data": { "to_sector_id": 679 }, "expect": { "status": "ok" } },
+    { "name": "Expired direct disablement no longer blocks combat", "command": "combat.attack", "user": "photon_suppression_target", "data": { "target_ship_id": "@photon_shooter_ship_id" }, "expect": { "status": "ok" } }
   ]
 }

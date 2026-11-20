@@ -4,6 +4,7 @@
   "tests": [
     { "name": "Bootstrap SysOp", "setup": "macro_bootstrap_admin" },
     { "name": "Create ordinary photon player", "setup": "macro_auth_user", "username": "photon_duration_qa", "password": "qa-password" },
+    { "name": "Create ordinary photon target", "setup": "macro_auth_user", "username": "photon_duration_target", "password": "qa-password" },
     {
       "name": "Read migration default photon duration",
       "command": "sysop.config.get", "user": "admin",
@@ -26,11 +27,15 @@
       "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Missile Frigate'),photons=3,destroyed=FALSE,onplanet=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_duration_qa');" },
       "expect": { "status": "ok" }
     },
+    { "name": "Move target owner to first adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=@{photon_target_600} WHERE name='photon_duration_target';" }, "expect": { "status": "ok" } },
+    { "name": "Place photon target in first adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=@{photon_target_600},shields=0,combat_disabled_until=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='photon_duration_target');" }, "expect": { "status": "ok" } },
+    { "name": "Save duration target ship ID", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT ship_id FROM players WHERE name='photon_duration_target';" }, "expect": { "status": "ok" }, "save": { "photon_target_ship_id": "data.rows.0.0" } },
     {
       "name": "Fire with the configured default duration",
       "command": "combat.fire_photon", "user": "photon_duration_qa",
-      "data": { "sector_id": "@photon_target_600" },
+      "data": { "sector_id": "@photon_target_600", "target_ship_id": "@photon_target_ship_id" },
       "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
+      "save": { "photon_expiry_600": "data.target_disabled_until" },
       "asserts": [
         { "path": "data.duration_seconds", "op": "==", "value": 600 },
         { "path": "data.ammo_remaining", "op": "==", "value": 2 }
@@ -42,14 +47,17 @@
       "data": { "key": "combat.photon_effect_duration_seconds", "value": 1, "confirm": true },
       "expect": { "status": "ok" }
     },
+    { "name": "Move target owner to second adjacent sector", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=@{photon_target_1} WHERE name='photon_duration_target';" }, "expect": { "status": "ok" } },
+    { "name": "Move photon target to second adjacent sector without clearing disablement", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=@{photon_target_1} WHERE ship_id=@{photon_target_ship_id};" }, "expect": { "status": "ok" } },
     {
       "name": "Fire with the configured minimum duration",
       "command": "combat.fire_photon", "user": "photon_duration_qa",
-      "data": { "sector_id": "@photon_target_1" },
+      "data": { "sector_id": "@photon_target_1", "target_ship_id": "@photon_target_ship_id" },
       "expect": { "status": "ok", "type": "combat.photon_fired_v1" },
       "asserts": [
         { "path": "data.duration_seconds", "op": "==", "value": 1 },
-        { "path": "data.ammo_remaining", "op": "==", "value": 1 }
+        { "path": "data.ammo_remaining", "op": "==", "value": 1 },
+        { "path": "data.target_disabled_until", "op": "==", "value": "@photon_expiry_600" }
       ]
     },
     {

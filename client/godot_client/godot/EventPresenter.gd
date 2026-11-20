@@ -20,6 +20,12 @@ static func notification_for(event: Dictionary) -> String:
 	var data = event.get("data", {})
 	if event_type.is_empty() or not data is Dictionary:
 		return ""
+	if event_type == "combat.photon_ship_disabled.v1":
+		var ship_id: Variant = data.get("ship_id", null)
+		var disabled_until: Variant = data.get("disabled_until", null)
+		if ship_id is int and ship_id > 0 and disabled_until is int and disabled_until > 0:
+			return "Combat · Photon disabled ship %d until %d" % [ship_id, disabled_until]
+		return ""
 	if event_type in ["system.notice", "system.notice_v1"]:
 		var title := str(data.get("title", "Server notice")).strip_edges()
 		var body := str(data.get("body", "")).strip_edges()

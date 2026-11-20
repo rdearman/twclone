@@ -4131,6 +4131,11 @@ schema_combat_fire_photon (void)
   json_object_set_new (sector_id, "minimum", json_integer (1));
   json_object_set_new (props, "sector_id", sector_id);
 
+  json_t *target_ship_id = json_object ();
+  json_object_set_new (target_ship_id, "type", json_string ("integer"));
+  json_object_set_new (target_ship_id, "minimum", json_integer (1));
+  json_object_set_new (props, "target_ship_id", target_ship_id);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/combat.fire_photon.json"));
@@ -4140,6 +4145,7 @@ schema_combat_fire_photon (void)
   json_object_set_new (root, "properties", props);
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("sector_id"));
+  json_array_append_new (required, json_string ("target_ship_id"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_false ());
   return root;

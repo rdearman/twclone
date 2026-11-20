@@ -136,6 +136,35 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  db_res_t *photon_state_res = NULL;
+  db_error_t photon_state_err = {0};
+  if (!db_query (db,
+       "SELECT COALESCE(combat_disabled_until,0) FROM ships WHERE ship_id={1}",
+       (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &photon_state_res,
+       &photon_state_err)
+      || !db_res_step (photon_state_res, &photon_state_err))
+    {
+      if (photon_state_res) db_res_finalize (photon_state_res);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not verify photon combat state");
+      return 0;
+    }
+  int64_t early_photon_disabled_until = db_res_col_i64 (photon_state_res, 0,
+                                                          &photon_state_err);
+  db_res_finalize (photon_state_res);
+  if (photon_state_err.code)
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not verify photon combat state");
+      return 0;
+    }
+  if (early_photon_disabled_until > (int64_t) time (NULL))
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+          "Photon-disabled combat systems cannot initiate attacks or fire weapons", NULL);
+      return 0;
+    }
+
   /* Get current sector */
   int current_sector = ctx->sector_id;
 
@@ -387,6 +416,36 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
       send_response_error (ctx, root, ERR_DB, "Transaction failed");
+      return 0;
+    }
+
+  db_res_t *combat_lock_res = NULL;
+  int64_t combat_disabled_until = 0;
+  if (!db_query (db,
+       "SELECT COALESCE(combat_disabled_until,0) FROM ships WHERE ship_id={1} AND COALESCE(destroyed,FALSE)=FALSE FOR UPDATE",
+       (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &combat_lock_res, &err)
+      || !db_res_step (combat_lock_res, &err))
+    {
+      if (combat_lock_res) db_res_finalize (combat_lock_res);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not verify photon combat state");
+      return 0;
+    }
+  combat_disabled_until = db_res_col_i64 (combat_lock_res, 0, &err);
+  db_res_finalize (combat_lock_res);
+  if (err.code)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not verify photon combat state");
+      return 0;
+    }
+  if (combat_disabled_until > (int64_t) time (NULL))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+          "Photon-disabled combat systems cannot initiate attacks or fire weapons", NULL);
       return 0;
     }
 

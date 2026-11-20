@@ -4902,6 +4902,8 @@ cmd_combat_attack_port(client_ctx_t *ctx,json_t *root)
   repo_combat_ship_full_t attacker={0};
   if(err.code||sector!=ctx->sector_id||db_combat_load_ship_full_locked(db,ship,&attacker,false)!=0||attacker.player_id!=ctx->player_id||attacker.sector!=sector)
     {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_PERMISSION_DENIED,"Attack requires your active ship in the StarPort sector");return 0;}
+  if(attacker.combat_disabled_until>(int64_t)time(NULL))
+    {db_tx_rollback(db,NULL);send_response_refused_steal(ctx,root,ERR_PERMISSION_DENIED,"Photon-disabled combat systems cannot initiate attacks or fire weapons",NULL);return 0;}
   if(sector>=1&&sector<=10){
     ship_kill_context_t kill={.victim_player_id=ctx->player_id,.victim_ship_id=ship,.killer_player_id=0,.cause=KILL_CAUSE_OTHER,.sector_id=sector};
     if(handle_ship_destruction(db,&kill)!=0){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Captain Z enforcement could not be committed");return 0;}
