@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -153,7 +154,9 @@ sync_config_to_db (PGconn *c, json_t *jcfg)
     if (strcmp (key, "admin") == 0 || strcmp (key, "db") == 0 ||
     strcmp (key, "app") == 0 || strcmp (key, "sql_dir") == 0 ||
     strcmp (key, "include_v3_migrations") == 0 ||
-    strcmp (key, "port_seed") == 0)
+    strcmp (key, "port_seed") == 0 ||
+    strcmp (key, "universe_seed") == 0 ||
+    strcmp (key, "exact_sector_count") == 0)
       {
 	continue;
       }
@@ -1016,6 +1019,8 @@ usage (const char *argv0)
   fprintf (stderr,
 	   "Optional --port-seed VALUE sets PostgreSQL random() for reproducible port generation (-1.0 to 1.0).\n");
   fprintf (stderr,
+           "Optional --universe-seed VALUE reproducibly seeds C topology and PostgreSQL universe generation.\n");
+  fprintf (stderr,
            "Optional --include-v3-migrations enables all classified V3 migrations.\n");
   exit (1);
 }
@@ -1034,6 +1039,9 @@ main (int argc, char **argv)
   int port_ratio = 40;
   double planet_ratio = 30.0;
   int include_v3_migrations = 0;
+  int exact_sector_count = 0;
+  unsigned int universe_seed = 0;
+  int have_universe_seed = 0;
   double port_seed = 0.0;
   int have_port_seed = 0;
   int port_size = 0;
@@ -1053,6 +1061,7 @@ main (int argc, char **argv)
     {"planet-ratio", required_argument, 0, 'R'},
     {"port-seed", required_argument, 0, 1005},
     {"include-v3-migrations", no_argument, 0, 1006},
+    {"universe-seed", required_argument, 0, 1007},
     {0, 0, 0, 0}
   };
 
@@ -1091,6 +1100,18 @@ main (int argc, char **argv)
       if ((j = json_object_get (jcfg, "include_v3_migrations"))
           && json_is_boolean (j))
         include_v3_migrations = json_is_true (j);
+      if ((j = json_object_get (jcfg, "exact_sector_count"))
+          && json_is_boolean (j))
+        exact_sector_count = json_is_true (j);
+      if ((j = json_object_get (jcfg, "universe_seed"))
+          && json_is_integer (j))
+        {
+          json_int_t seed_value = json_integer_value (j);
+          if (seed_value < 0 || seed_value > UINT_MAX)
+            usage (argv[0]);
+          universe_seed = (unsigned int) seed_value;
+          have_universe_seed = 1;
+        }
       if ((j = json_object_get (jcfg, "sectors")) && json_is_integer (j))
 	{
 	  sectors = (int) json_integer_value (j);
@@ -1197,6 +1218,17 @@ main (int argc, char **argv)
 	case 1006:
 	  include_v3_migrations = 1;
 	  break;
+	case 1007:
+	  {
+	    char *end = NULL;
+	    errno = 0;
+	    unsigned long parsed = strtoul (optarg, &end, 10);
+	    if (errno || end == optarg || *end != '\0' || parsed > UINT_MAX)
+	      usage (argv[0]);
+	    universe_seed = (unsigned int) parsed;
+	    have_universe_seed = 1;
+	  }
+	  break;
 	case 's':
 	  sectors = atoi (optarg);
 	  break;
@@ -1238,7 +1270,7 @@ main (int argc, char **argv)
       return 2;
     }
 
-  srand (time (NULL));
+  srand (have_universe_seed ? universe_seed : (unsigned int) time (NULL));
   server_log_init_file ("./twclone.log", "[bigbang]", 1, LOG_INFO);
 
   // 1) Lifecycle: Create DB
@@ -1339,16 +1371,48 @@ main (int argc, char **argv)
       die ("schema apply failed");
     }
 
+  if (have_universe_seed)
+    {
+      char seed_sql[128];
+      double pg_seed = ((double) (universe_seed % 2000001U) / 1000000.0) - 1.0;
+      snprintf (seed_sql, sizeof (seed_sql), "SELECT setseed(%.17g)", pg_seed);
+      exec_sql (app, seed_sql, "set_universe_seed");
+    }
+
   // 3.5) Sync Config to DB
   sync_config_to_db (app, jcfg);
 
   // 4) Execute Stored Procedures
   printf ("BIGBANG: Running stored procedures...\n");
   char buf[1024];
+  int initial_sector_count = sectors;
+  if (exact_sector_count)
+    {
+      int tunnel_reserve = (min_tunnels + 5) * (min_tunnel_len + 5);
+      initial_sector_count = sectors - tunnel_reserve;
+      if (initial_sector_count < 10)
+	{
+	  fprintf (stderr,
+	           "ERROR: exact_sector_count leaves fewer than 10 base sectors after tunnel reserve\n");
+	  return 2;
+	}
+      printf ("BIGBANG: Exact universe size %d; base sectors %d; tunnel reserve %d.\n",
+	      sectors, initial_sector_count, tunnel_reserve);
+    }
 
 
-  snprintf (buf, sizeof (buf), "SELECT generate_sectors(%d)", sectors);
+  snprintf (buf, sizeof (buf), "SELECT generate_sectors(%d)",
+	    initial_sector_count);
   exec_sql (app, buf, "generate_sectors");
+
+  if (exact_sector_count)
+    {
+      char early_tunnel_sql[256];
+      snprintf (early_tunnel_sql, sizeof (early_tunnel_sql),
+		"SELECT generate_tunnels(%d, %d)", min_tunnels,
+		min_tunnel_len);
+      exec_sql (app, early_tunnel_sql, "generate_tunnels_exact_sector_count");
+    }
 
   if (have_port_seed)
     {
@@ -1508,9 +1572,13 @@ main (int argc, char **argv)
 
   // First, create isolated tunnel chains
   char tunnel_sql[256];
-  snprintf (tunnel_sql, sizeof (tunnel_sql),
-	    "SELECT generate_tunnels(%d, %d)", min_tunnels, min_tunnel_len);
-  exec_sql (app, tunnel_sql, "generate_tunnels");
+  if (!exact_sector_count)
+    {
+      snprintf (tunnel_sql, sizeof (tunnel_sql),
+		"SELECT generate_tunnels(%d, %d)", min_tunnels,
+		min_tunnel_len);
+      exec_sql (app, tunnel_sql, "generate_tunnels");
+    }
 
   // NOW create NPC homeworlds at tunnel endpoints (after tunnels are generated)
   exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");

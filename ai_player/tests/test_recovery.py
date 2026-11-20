@@ -97,6 +97,7 @@ def test_timed_out_warp_is_quarantined_for_late_reconciliation(tmp_path):
     ])
     assert manager.get("uncertain_warp") == {
         "request_id": "warp-1", "command": "move.warp", "to_sector_id": 42,
+        "idempotency_key": None,
     }
 
 
@@ -141,7 +142,7 @@ def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
     assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
 
 
-def test_exhausted_turn_pause_forces_authoritative_refresh_even_after_restart(tmp_path, monkeypatch):
+def test_exhausted_turn_pause_yields_for_network_recovery_and_authoritative_refresh(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
     manager.set("player_info", {"player": {"ship_id": 1, "turns_remaining": 0}})
@@ -150,7 +151,7 @@ def test_exhausted_turn_pause_forces_authoritative_refresh_even_after_restart(tm
 
     _pause_for_turn_refresh(manager, seconds=60)
 
-    assert sleeps == [60]
+    assert sleeps == [5]
     restarted = StateManager(str(path), {})
     planner = Planner.__new__(Planner)
     planner.state_manager = restarted

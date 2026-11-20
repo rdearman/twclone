@@ -10,6 +10,7 @@ import uuid
 import re
 import random # Add this import
 import select
+import threading
 from datetime import datetime, timezone, timedelta
 
 from bug_reporter import BugReporter, redact_secrets
@@ -416,6 +417,45 @@ class GameConnection:
         
         return responses
 
+
+def _start_llm_keepalive(game_conn, state_manager, config):
+    """Keep this authenticated socket alive during a slow synchronous inference."""
+    stop = threading.Event()
+    interval = max(2.5, float(config.get("llm_keepalive_interval_seconds", 4)))
+
+    def heartbeat():
+        sent = 0
+        while not stop.wait(interval):
+            if not game_conn.sock:
+                continue
+            token = state_manager.get("session_id")
+            if not token:
+                continue
+            request_id = f"c-llm-ping-{uuid.uuid4().hex[:12]}"
+            command = {
+                "id": request_id,
+                "command": "session.ping",
+                "data": {},
+                "meta": {
+                    "client_version": config.get("client_version"),
+                    "session_token": token,
+                },
+            }
+            if game_conn.send_command(command):
+                sent += 1
+                state_manager.record_ai_metric("llm_keepalives_sent")
+                if sent == 1:
+                    logger.debug("Started session keepalives during Ollama inference.")
+
+    thread = threading.Thread(target=heartbeat, name="ollama-session-keepalive", daemon=True)
+    thread.start()
+
+    def stop_and_join():
+        stop.set()
+        thread.join(timeout=2)
+
+    return stop_and_join
+
 # --- Strategy & Goal Functions ---
 
 def _get_filtered_game_state_for_llm(game_state, state_manager):
@@ -805,18 +845,18 @@ def qa_coverage_snapshot(tested_commands, server_commands, scenario_ids=None):
     }
 
 def _pause_for_turn_refresh(state_manager, seconds=3600):
-    """Refresh the authoritative turn balance after an exhausted-turn pause."""
+    """Yield during the exhausted-turn cooldown so connection recovery can run."""
     # Persist the need for a fresh read before sleeping, so a shutdown during
     # the pause does not resume with an indefinitely stale zero-turn balance.
     state_manager.set("player_info", None)
-    # Preserve the short, testable wait contract; long population waits are
-    # chunked so SIGINT can be observed promptly.
-    if seconds <= 60:
-        time.sleep(seconds)
-        return
-    deadline = time.monotonic() + max(0.0, float(seconds))
-    while not shutdown_flag and time.monotonic() < deadline:
-        time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+    # The caller owns the outer network loop. Returning after a short wait
+    # lets it receive disconnects, reconnect after a server restart, and ask
+    # player.my_info for authoritative turns before deciding whether to wait
+    # again. Sleeping for the full one-hour cooldown stranded clients on a
+    # closed socket after a server restart.
+    pause = max(0.0, min(5.0, float(seconds)))
+    if pause and not shutdown_flag:
+        time.sleep(pause)
 
 
 def _get_fallback_plan(game_state, state_manager, planner):
@@ -942,7 +982,10 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
                           planner: Optional[Planner] = None, ollama_url: Optional[str] = None,
                           inference_diagnostics: Optional[dict] = None,
                           behavior_profile: Optional[str] = None,
-                          inference_timeout: Optional[float] = None):
+                          inference_timeout: Optional[float] = None,
+                          role_name: Optional[str] = None,
+                          primary_objective: Optional[str] = None,
+                          ollama_options: Optional[dict] = None):
     """
     Asks the LLM for a high-level strategic plan.
     """
@@ -964,20 +1007,26 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
     if not filtered_game_state.get("can_trade_at_current_location", False) and not qa_objective:
         stage = "explore"
     
+    role_intro = (
+        f"Role: {role_name or 'pilot'}. Primary objective: "
+        f"{primary_objective or 'make steady progress through V3 gameplay'}.\n"
+        "Choose only goal types supported by the action contract and current observation. "
+        "Prefer one to three purposeful steps; never repeat a recently failed goal.\n"
+    )
     if qa_objective:
         # Pre-format the QA objective into the specific prompt section
         qa_intro = PROMPT_QA_OBJECTIVE.format(qa_objective=qa_objective)
-        prompt = qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = role_intro + qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
         logger.info(f"Using QA Objective prompt for LLM: {qa_objective}")
     elif stage == "explore":
         prompt = (
-            "You are a space explorer. Choose a useful exploration plan.\n"
+            role_intro + "Choose a useful exploration plan.\n"
             f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
             + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
         )
     else:
         prompt = (
-            "You are a space trader. Choose a useful trade or exploration plan.\n"
+            role_intro + "Choose a useful trade or exploration plan.\n"
             f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
             + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
         )
@@ -989,6 +1038,8 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
             "endpoint": ollama_url,
             "error_report": client_error,
         }
+        if ollama_options:
+            ollama_kwargs.update(ollama_options)
         if inference_timeout is not None:
             ollama_kwargs["request_timeout"] = inference_timeout
         response_text = get_ollama_response(
@@ -1002,6 +1053,12 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
                     "reason": client_error.get("reason", "Ollama returned no response"),
                 })
             return None
+
+        if inference_diagnostics is not None:
+            if "latency_seconds" in client_error:
+                inference_diagnostics["latency_seconds"] = client_error["latency_seconds"]
+            if "model" in client_error:
+                inference_diagnostics["model"] = client_error["model"]
 
         raw_plan = []
 
@@ -1195,6 +1252,13 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     mode = config.get("strategy_mode", "ollama")
     if mode not in ("deterministic", "ollama"):
         raise ValueError(f"Unknown strategy_mode: {mode!r}")
+    strict_llm = bool(config.get("require_llm_decisions", False))
+    now = time.time()
+    retry_after = float(state_manager.get("ollama_retry_after", 0) or 0)
+    next_decision_at = float(state_manager.get("ollama_next_decision_at", 0) or 0)
+    if mode == "ollama" and max(retry_after, next_decision_at) > now:
+        state_manager.set("strategy_plan_source", "ollama_wait")
+        return []
     # Safety and victory transitions are controller-owned and must preempt a
     # stale or imaginative LLM plan in every strategy mode.
     endgame_reader = getattr(planner, "_endgame_goal", None)
@@ -1202,14 +1266,14 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     mission_reader = getattr(planner, "_mission_goal", None)
     diplomacy_reader = getattr(planner, "_diplomacy_goal", None)
     fleet_reader = getattr(planner, "_fleet_goal", None)
-    priority_goal = mission_reader(game_state) if callable(mission_reader) else None
-    if priority_goal is None and callable(diplomacy_reader):
+    priority_goal = mission_reader(game_state) if callable(mission_reader) and not strict_llm else None
+    if priority_goal is None and callable(diplomacy_reader) and not strict_llm:
         priority_goal = diplomacy_reader(game_state)
-    if priority_goal is None and callable(fleet_reader):
+    if priority_goal is None and callable(fleet_reader) and not strict_llm:
         priority_goal = fleet_reader(game_state)
-    if priority_goal is None and callable(endgame_reader):
+    if priority_goal is None and callable(endgame_reader) and not strict_llm:
         priority_goal = endgame_reader(game_state)
-    if priority_goal is None and callable(readiness_reader) and readiness_reader(game_state):
+    if priority_goal is None and callable(readiness_reader) and readiness_reader(game_state) and not strict_llm:
         priority_goal = "combat: readiness"
     if priority_goal:
         state_manager.set("strategy_plan_source", "controller_priority")
@@ -1237,7 +1301,36 @@ def select_strategy_plan(game_state, config, state_manager, planner):
         inference_diagnostics=diagnostics,
         behavior_profile=profile,
         inference_timeout=config.get("inference_timeout_seconds"),
+        role_name=config.get("role_name"),
+        primary_objective=config.get("primary_objective"),
+        ollama_options={
+            "num_ctx": config.get("ollama_num_ctx", 4096),
+            "num_predict": config.get("ollama_num_predict", 256),
+            "temperature": config.get("ollama_temperature", 0.3),
+            "keep_alive": config.get("ollama_keep_alive", "30m"),
+            "lock_dir": config.get("ollama_lock_dir", "/tmp/twclone-ollama-slots"),
+            "max_concurrent": config.get("ollama_max_concurrent", 2),
+        },
     )
+    try:
+        interval = max(5.0, float(config.get("decision_interval_seconds", 8)))
+    except (TypeError, ValueError):
+        interval = 8.0
+    state_manager.set("ollama_next_decision_at",
+                      time.time() + interval * random.uniform(0.8, 1.2))
+    state_manager.record_ai_metric("ollama_requests")
+    if diagnostics.get("status") not in ("succeeded", "safely_rejected"):
+        state_manager.record_ai_metric("ollama_errors")
+    latency = diagnostics.get("latency_seconds")
+    if isinstance(latency, (int, float)):
+        metrics = state_manager.get("ai_metrics", {})
+        previous_count = int(metrics.get("ollama_successes", 0) or 0)
+        previous_total = float(metrics.get("ollama_latency_seconds_total", 0) or 0)
+        state_manager.set("ollama_last_latency_seconds", latency)
+        state_manager.set("ollama_average_latency_seconds",
+                          (previous_total + latency) / (previous_count + 1))
+        state_manager.record_ai_metric("ollama_successes")
+        state_manager.record_ai_metric("ollama_latency_seconds_total", latency)
     if plan and isinstance(plan, list) and all(
         isinstance(goal, str) and ":" in goal for goal in plan
     ):
@@ -1255,7 +1348,24 @@ def select_strategy_plan(game_state, config, state_manager, planner):
             "Strategy decision source=fallback inference_status=%s reason=%s",
             diagnostics["status"], diagnostics["reason"],
         )
+        if strict_llm:
+            try:
+                retry_delay = max(5.0, float(config.get("ollama_retry_seconds", 30)))
+            except (TypeError, ValueError):
+                retry_delay = 30.0
+            state_manager.set("strategy_plan_source", "ollama_wait")
+            state_manager.set("strategy_inference_status", diagnostics)
+            state_manager.set("ollama_retry_after", time.time() + retry_delay)
+            return []
         plan = _get_fallback_plan(game_state, state_manager, planner)
+    if plan and diagnostics.get("status") == "succeeded":
+        state_manager.set("ollama_retry_after", 0)
+        if config.get("playtest_bot") and not state_manager.get("playtest_first_inference_at"):
+            stamp = time.time()
+            state_manager.set("playtest_first_inference_at", stamp)
+            logger.info("PLAYTEST_FIRST_INFERENCE bot=%s model=%s latency_seconds=%.2f",
+                        config.get("playtest_bot"), config.get("ollama_model"),
+                        float(diagnostics.get("latency_seconds", 0)))
     state_manager.set("strategy_plan_source", source)
     state_manager.set("strategy_inference_status", diagnostics)
     state_manager.record_decision({"goal": plan[0] if plan else None, "reason": diagnostics.get("reason"), "source": source})
@@ -1280,6 +1390,7 @@ def quarantine_timed_out_trades(state_manager, expired_commands):
                 "request_id": request_id,
                 "command": "move.warp",
                 "to_sector_id": data.get("to_sector_id"),
+                "idempotency_key": (command.get("meta") or {}).get("idempotency_key"),
             })
             return
 
@@ -1614,6 +1725,7 @@ def main(config_path="config.json"):
     state_manager.set_default("server_commands", [])
 
     last_heartbeat = time.time()
+    reconnect_attempt = 0
     schemas_bootstrapped = False
     
     # QA Mode Constants
@@ -1696,9 +1808,25 @@ def main(config_path="config.json"):
             # 1. Handle Connection & Authentication
             if not game_conn.sock:
                 if not game_conn.connect():
-                    logger.info("Attempting to reconnect in 5 seconds...")
-                    time.sleep(5)
+                    reconnect_attempt += 1
+                    state_manager.record_ai_metric("reconnects")
+                    base = max(1.0, float(config.get("reconnect_base_seconds", 3)))
+                    cap = max(base, float(config.get("reconnect_max_seconds", 60)))
+                    bot_index = max(0, int(config.get("playtest_index", 1)) - 1)
+                    delay = min(cap, base * (2 ** min(reconnect_attempt - 1, 8)))
+                    delay *= random.uniform(0.8, 1.2)
+                    delay += min(20.0, bot_index * 2.0)
+                    logger.info("Reconnect attempt=%d bot_index=%d retry_in_seconds=%.1f",
+                                reconnect_attempt, bot_index + 1, delay)
+                    time.sleep(delay)
                     continue
+                if reconnect_attempt:
+                    logger.info("Reconnected after %d attempts", reconnect_attempt)
+                reconnect_attempt = 0
+                if config.get("playtest_bot") and not state_manager.get("playtest_connected_at"):
+                    state_manager.set("playtest_connected_at", time.time())
+                    logger.info("PLAYTEST_CONNECTED bot=%s host=%s port=%s",
+                                config.get("playtest_bot"), game_host, game_port)
 
             # V3 requires a system handshake before authentication. Older
             # servers may refuse it; in that case retain the legacy flow so
@@ -1810,8 +1938,54 @@ def main(config_path="config.json"):
                 continue
 
             if game_state.get("uncertain_warp"):
-                logger.error("Warp outcome is uncertain; gameplay is paused pending operator reconciliation.")
-                time.sleep(10)
+                uncertain = game_state.get("uncertain_warp") or {}
+                if state_manager.get("pending_commands"):
+                    time.sleep(0.5)
+                    continue
+                target_sector = uncertain.get("to_sector_id")
+                idempotency_key = uncertain.get("idempotency_key")
+                request_id = f"c-warp-reconcile-{uuid.uuid4().hex[:8]}"
+                if idempotency_key and target_sector is not None:
+                    retry = {
+                        "id": request_id,
+                        "command": "move.warp",
+                        "data": {"to_sector_id": target_sector},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": idempotency_key,
+                            "session_token": game_state.get("session_id"),
+                        },
+                    }
+                    if game_conn.send_command(retry):
+                        state_manager.set("uncertain_warp", {
+                            **uncertain, "request_id": request_id,
+                            "reconcile_attempts": int(uncertain.get("reconcile_attempts", 0)) + 1,
+                        })
+                        state_manager.add_pending_command(request_id, retry)
+                        state_manager.record_ai_metric("commands_sent")
+                        state_manager.record_ai_metric("warp_retries")
+                        logger.warning("Retrying uncertain warp with the original idempotency key.")
+                    else:
+                        logger.warning("Could not send idempotent warp retry; will reconnect and retry later.")
+                elif not uncertain.get("readback_request_id"):
+                    # Legacy state written before idempotency was persisted cannot
+                    # be replayed safely. Read the authoritative player location,
+                    # then release the hold only after that response arrives.
+                    readback = {
+                        "id": request_id,
+                        "command": "player.my_info",
+                        "data": {},
+                        "meta": {"client_version": config.get("client_version"),
+                                 "session_token": game_state.get("session_id")},
+                    }
+                    if game_conn.send_command(readback):
+                        uncertain["readback_request_id"] = request_id
+                        state_manager.set("uncertain_warp", uncertain)
+                        state_manager.add_pending_command(request_id, readback)
+                        state_manager.record_ai_metric("commands_sent")
+                        logger.info("Reconciling legacy uncertain warp by authenticated player-state readback.")
+                else:
+                    time.sleep(1)
                 continue
 
             # Reconcile a server-persisted autopilot route after each login.
@@ -2012,7 +2186,15 @@ def main(config_path="config.json"):
                     else:
                         if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
                             logger.info("Strategy plan is empty. Selecting a new plan.")
-                            new_plan = select_strategy_plan(game_state, config, state_manager, planner)
+                            stop_keepalive = (
+                                _start_llm_keepalive(game_conn, state_manager, config)
+                                if config.get("playtest_bot") and config.get("strategy_mode") == "ollama"
+                                else (lambda: None)
+                            )
+                            try:
+                                new_plan = select_strategy_plan(game_state, config, state_manager, planner)
+                            finally:
+                                stop_keepalive()
                             state_manager.set("strategy_plan", new_plan)
                             strategy_plan = new_plan
                             if state_manager.get("strategy_plan_source") == "fallback":
@@ -2276,6 +2458,24 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             if response.get("status") == "ok":
                 if sent_command:
                     state_manager.record_ai_metric("commands_succeeded")
+                    non_gameplay_commands = {
+                        "system.hello", "system.cmd_list", "system.describe_schema",
+                        "auth.login", "auth.register", "player.my_info", "player.info",
+                        "player.ping", "ship.info", "ship.status", "sector.info",
+                        "trade.port_info", "trade.quote", "planet.info", "corp.status",
+                        "session.ping", "move.autopilot.status", "shipyard.list",
+                    }
+                    if config.get("playtest_bot") and command_name not in non_gameplay_commands:
+                        state_manager.record_ai_metric("playtest_gameplay_actions")
+                        action_number = (state_manager.get("ai_metrics", {})
+                                         or {}).get("playtest_gameplay_actions", 0)
+                        logger.info("PLAYTEST_ACTION bot=%s number=%s command=%s",
+                                    config.get("playtest_bot"), action_number, command_name)
+                        if not state_manager.get("playtest_first_gameplay_action_at"):
+                            stamp = time.time()
+                            state_manager.set("playtest_first_gameplay_action_at", stamp)
+                            logger.info("PLAYTEST_FIRST_GAMEPLAY_ACTION bot=%s command=%s request_id=%s",
+                                        config.get("playtest_bot"), command_name, request_id)
                 # --- Feedback Loop: Record Success ---
                 state_manager.record_command_success(command_name)
                 if command_name == "auth.register":
@@ -2981,7 +3181,18 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                           and response_data.get("to_sector_id") is not None
                           and str(response_data["to_sector_id"]) == str(warp.get("to_sector_id")))
                          or response.get("status") == "refused")):
-                state_manager.set("uncertain_warp", None)
+                    state_manager.set("uncertain_warp", None)
+            legacy_warp = state_manager.get("uncertain_warp") or {}
+            if (command_name in ("player.my_info", "player.info")
+                    and isinstance(legacy_warp, dict)
+                    and legacy_warp.get("readback_request_id") == request_id
+                    and response.get("status") == "ok"):
+                readback_player = response_data.get("player", response_data)
+                observed_sector = readback_player.get("current_sector", readback_player.get("sector_id"))
+                if observed_sector is not None:
+                    state_manager.set("player_location_sector", observed_sector)
+                    state_manager.set("uncertain_warp", None)
+                    logger.info("Legacy warp reconciled from authoritative player sector %s.", observed_sector)
 
         # In live audit mode, verify every successful movement/trade against
         # fresh public player and ship reads. Refusals are logged as refusals

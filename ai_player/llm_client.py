@@ -4,22 +4,58 @@ import logging
 import re
 import random
 import time
+import hashlib
+import os
+import fcntl
+from contextlib import contextmanager
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 DEFAULT_OLLAMA_URL = "http://192.168.25.5:11434"
-OLLAMA_API_PATH = "/api/generate"
+OLLAMA_API_PATH = "/api/chat"
 DEFAULT_MODEL = "qwen3:8b"
-REQUEST_TIMEOUT = 300  # 5 minutes - account for Ollama queueing with concurrent bots
+REQUEST_TIMEOUT = 100
 
 
 def ollama_generate_url(endpoint=None):
-    """Return the Ollama generate URL from the existing AI-player config value."""
+    """Compatibility name returning the structured chat endpoint."""
     base = (endpoint or DEFAULT_OLLAMA_URL).rstrip("/")
+    if base.endswith("/api/generate"):
+        base = base[:-len("/api/generate")]
     if base.endswith(OLLAMA_API_PATH):
         return base
     return base + OLLAMA_API_PATH
+
+
+@contextmanager
+def _endpoint_slot(endpoint, lock_dir, max_concurrent, timeout):
+    """Cross-process endpoint semaphore shared by all bots in the playtest."""
+    endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
+    root = Path(lock_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    held = None
+    try:
+        while held is None:
+            for slot in range(max(1, int(max_concurrent))):
+                handle = open(root / f"ollama-{endpoint_hash}-{slot}.lock", "a+")
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = handle
+                    break
+                except BlockingIOError:
+                    handle.close()
+            if held is None:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Ollama endpoint queue wait timed out")
+                time.sleep(0.1)
+        yield
+    finally:
+        if held is not None:
+            fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+            held.close()
 
 def parse_llm_json(response_text):
     """
@@ -53,7 +89,10 @@ def parse_llm_json(response_text):
         return None
 
 def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None,
-                        endpoint=None, error_report=None, request_timeout=None):
+                        endpoint=None, error_report=None, request_timeout=None,
+                        num_ctx=4096, num_predict=256, temperature=0.3,
+                        keep_alive="30m", lock_dir="/tmp/twclone-ollama-slots",
+                        max_concurrent=2):
     """
     Sends a prompt and game state to the Ollama server and gets a response.
     
@@ -94,13 +133,29 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         return None
 
     # --- Build the request payload for Ollama ---
+    plan_schema = {
+        "type": "object",
+        "properties": {
+            "plan": {"type": "array", "items": {"type": "string"},
+                     "minItems": 1, "maxItems": 5}
+        },
+        "required": ["plan"],
+        "additionalProperties": False,
+    }
     payload = {
         "model": model,
-        "prompt": full_prompt,
-        "stream": False,  # We want the full response at once
-        "format": "json",  # We asked the LLM to respond in JSON
+        "messages": [
+            {"role": "system", "content": "Return only a JSON object matching the supplied schema. Select a short, legal gameplay plan for the player."},
+            {"role": "user", "content": full_prompt},
+        ],
+        "stream": False,
+        "format": plan_schema,
+        "think": False,
+        "keep_alive": keep_alive,
         "options": {
-            "num_predict": 128  # Limit response length to save CPU
+            "temperature": float(temperature),
+            "num_ctx": int(num_ctx),
+            "num_predict": int(num_predict),
         }
     }
 
@@ -109,14 +164,19 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
     # --- Make the API call ---
     try:
         timeout = REQUEST_TIMEOUT if request_timeout is None else max(0.1, float(request_timeout))
-        with httpx.Client(timeout=timeout) as client:
-            response = client.post(api_url, json=payload)
-            response.raise_for_status()  # Raise an exception for bad status codes
+        started = time.monotonic()
+        with _endpoint_slot(endpoint or DEFAULT_OLLAMA_URL, lock_dir,
+                            max_concurrent, timeout):
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(api_url, json=payload)
+                response.raise_for_status()
 
         response_data = response.json()
-        
-        # The actual content is in the 'response' key
-        model_response_str = response_data.get("response")
+        model_response_str = (response_data.get("message") or {}).get("content")
+        latency = time.monotonic() - started
+        if error_report is not None:
+            error_report.update({"status": "succeeded", "latency_seconds": latency,
+                                 "model": response_data.get("model", model)})
         
         if model_response_str:
             logger.debug(f"Ollama raw response: {model_response_str}")
@@ -129,6 +189,10 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
     except httpx.TimeoutException as e:
         logger.error("Timeout calling Ollama: %s", e)
         record_error("timeout", "Ollama request timed out")
+        return None
+    except TimeoutError:
+        logger.warning("Timed out waiting for an Ollama inference slot")
+        record_error("queue_timeout", "Ollama endpoint concurrency queue timed out")
         return None
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error calling Ollama: {e.response.status_code} - {e.response.text}")
