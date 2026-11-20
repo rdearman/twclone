@@ -17,6 +17,7 @@ from bug_reporter import BugReporter, redact_secrets
 from planner import Planner
 from state_manager import StateManager
 from llm_client import get_ollama_response, parse_llm_json
+from turn_budget import affordable_plan, command_turn_cost, turn_refresh_due
 from bandit_policy import BanditPolicy, make_context_key 
 from typing import Optional
 from helpers import canon_commodity
@@ -618,15 +619,16 @@ def align_command_idempotency(command_name, data_payload, generated_key):
 PROMPT_CONTRACT_BLOCK = """
 State: {game_state}
 
-Goal: Maximize profit by flipping commodities.
-Rules:
-- NO "scan: density" if scanned_current_sector is true.
-- Use ONLY commodities in valid_comms.
-- "goto: <id>" to travel.
-- Only "buy:" or "sell:" if at a port.
-- If you have cargo, ALWAYS sell it before buying new commodities.
+Choose actions that advance the stated role objective and current progress.
+Use only available_actions and legal goals supported by the observation.
+Preserve the turn reserve for role-priority goals; remaining turns are shown.
+Avoid repeating a failed goal unless the failure reason or relevant state changed.
+Avoid movement without a concrete destination or gameplay purpose.
+Trade only listed commodities and only when the current port supports that side
+of the trade. Sell carried cargo when the port buys it at a viable price.
 
-Output JSON: {{"plan": ["goto: 5", "buy: ORE", "goto: 10", "sell: ORE"]}}
+Output JSON with one to three purposeful goals, for example
+{{"plan": ["planet: create"]}} or {{"plan": ["goto: 5", "buy: ORE"]}}.
 """
 
 PROMPT_EXPLORE = """Explorer goal: Find new sectors and ports. """ + PROMPT_CONTRACT_BLOCK
@@ -845,15 +847,7 @@ def qa_coverage_snapshot(tested_commands, server_commands, scenario_ids=None):
     }
 
 def _pause_for_turn_refresh(state_manager, seconds=3600):
-    """Yield during the exhausted-turn cooldown so connection recovery can run."""
-    # Persist the need for a fresh read before sleeping, so a shutdown during
-    # the pause does not resume with an indefinitely stale zero-turn balance.
-    state_manager.set("player_info", None)
-    # The caller owns the outer network loop. Returning after a short wait
-    # lets it receive disconnects, reconnect after a server restart, and ask
-    # player.my_info for authoritative turns before deciding whether to wait
-    # again. Sleeping for the full one-hour cooldown stranded clients on a
-    # closed socket after a server restart.
+    """Yield without invalidating state; the main loop polls reset every 30s."""
     pause = max(0.0, min(5.0, float(seconds)))
     if pause and not shutdown_flag:
         time.sleep(pause)
@@ -1000,6 +994,63 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
     
     # Filter the game state to reduce token count for the LLM
     filtered_game_state = _get_filtered_game_state_for_llm(game_state, state_manager)
+    config = getattr(state_manager, "config", {}) or {}
+    metrics = state_manager.get("ai_metrics", {}) or {}
+    failures = []
+    for command, detail in (state_manager.get("command_retry_info", {}) or {}).items():
+        if isinstance(detail, dict) and int(detail.get("failures", 0) or 0) > 0:
+            failures.append({"command": command, "count": int(detail.get("failures", 0))})
+    filtered_game_state["objective"] = {
+        "role": role_name or config.get("role_name", "pilot"),
+        "primary": primary_objective or config.get("primary_objective", "make steady V3 gameplay progress"),
+        "current_goal": (state_manager.get("strategy_plan") or [None])[0],
+        "successful_actions": int(metrics.get("playtest_gameplay_actions", 0) or 0),
+        "goals_completed": int(metrics.get("goals_completed", 0) or 0),
+        "recent_failures": failures[-3:],
+        "last_failure_reason": (state_manager.get("last_action_result") or {}).get("error_msg"),
+    }
+    try:
+        turns = int((filtered_game_state.get("player") or {}).get("turns", 0) or 0)
+        reserve = max(0, int(config.get("turn_reserve", 12)))
+    except (TypeError, ValueError):
+        turns, reserve = 0, 0
+    filtered_game_state["turn_budget"] = {
+        "remaining": turns, "reserved": min(turns, reserve),
+        "general_actions_available": max(0, turns - reserve),
+    }
+    filtered_game_state["capabilities"] = {
+        "on_planet": bool((game_state.get("ship_info") or {}).get("onplanet")),
+        "fighters": (game_state.get("ship_info") or {}).get("fighters", 0),
+        "shields": (game_state.get("ship_info") or {}).get("shields", 0),
+        "genesis_torpedoes": (game_state.get("ship_info") or {}).get("genesis_torpedoes", 0),
+    }
+    filtered_game_state["available_goals"] = [
+        "buy/sell at a port", "goto a legal adjacent or known target", "scan density",
+        "land or inspect a planet", "create/develop a planet when eligible",
+        "bank excess credits", "attack only a visible eligible target",
+    ]
+    if config.get("allow_corporation_play"):
+        filtered_game_state["available_goals"].append("found/invite or join the configured playtest corporation")
+    command_inventory = game_state.get("server_commands") or []
+    relevant_prefixes = ("move.", "sector.scan", "trade.", "planet.", "citadel.",
+                         "corp.", "combat.", "bank.", "hardware.", "shipyard.")
+    filtered_game_state["available_actions"] = [
+        command for command in command_inventory
+        if isinstance(command, str) and command.startswith(relevant_prefixes)
+    ][:32]
+    prompt_observation = dict(filtered_game_state)
+    # Exact sector IDs are used locally to reject repeat exploration. Sending
+    # the entire map on every decision adds tokens without helping the model.
+    for key in ("all_known_sectors", "known_sector_ids"):
+        values = prompt_observation.pop(key, [])
+        prompt_observation[key.replace("_ids", "_count").replace("all_known_sectors", "known_sector_count")] = len(values)
+    prompt_observation["known_port_sector_ids"] = (prompt_observation.get("known_port_sector_ids") or [])[:20]
+    prompt_observation["market_top_prices"] = (prompt_observation.get("market_top_prices") or {})
+    try:
+        if len(prompt_observation["market_top_prices"]) > 3:
+            prompt_observation["market_top_prices"] = dict(list(prompt_observation["market_top_prices"].items())[:3])
+    except (TypeError, AttributeError):
+        prompt_observation["market_top_prices"] = {}
     logger.debug(f"DEBUG: Known sectors passed to LLM: {filtered_game_state.get('all_known_sectors')}")
 
     # --- FIX 3.1 & 3.2 ---
@@ -1016,19 +1067,19 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
     if qa_objective:
         # Pre-format the QA objective into the specific prompt section
         qa_intro = PROMPT_QA_OBJECTIVE.format(qa_objective=qa_objective)
-        prompt = role_intro + qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = role_intro + qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(prompt_observation, separators=(",", ":")))
         logger.info(f"Using QA Objective prompt for LLM: {qa_objective}")
     elif stage == "explore":
         prompt = (
             role_intro + "Choose a useful exploration plan.\n"
             f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
-            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(prompt_observation, separators=(",", ":")))
         )
     else:
         prompt = (
             role_intro + "Choose a useful trade or exploration plan.\n"
             f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
-            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(prompt_observation, separators=(",", ":")))
         )
 
     try:
@@ -1059,6 +1110,8 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
                 inference_diagnostics["latency_seconds"] = client_error["latency_seconds"]
             if "model" in client_error:
                 inference_diagnostics["model"] = client_error["model"]
+            if "profile" in client_error:
+                inference_diagnostics["profile"] = client_error["profile"]
 
         raw_plan = []
 
@@ -1136,7 +1189,7 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
         can_trade = filtered_game_state.get("can_trade_at_current_location", False)
         has_cargo = bool((filtered_game_state.get("ship") or {}).get("cargo"))
         
-        goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat)\s*:\s*(.+)$', re.IGNORECASE)
+        goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat|bank|citadel|fleet|corp|diplomacy)\s*:\s*(.+)$', re.IGNORECASE)
 
         for goal in raw_plan:
             if not isinstance(goal, str): continue
@@ -1190,8 +1243,28 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
                     validated_plan.append("scan: density")
 
             elif verb == "planet":
-                if arg.lower() in ("land", "info"):
+                if arg.lower() in ("land", "info", "create", "workforce", "defend"):
                     validated_plan.append(f"planet: {arg.lower()}")
+
+            elif verb == "bank":
+                if arg.lower() in ("secure", "deposit"):
+                    validated_plan.append(f"bank: {arg.lower()}")
+
+            elif verb == "citadel":
+                if arg.lower() in ("maintain", "build", "upgrade"):
+                    validated_plan.append(f"citadel: {arg.lower()}")
+
+            elif verb == "fleet":
+                if arg.lower() in ("assign", "acquire"):
+                    validated_plan.append(f"fleet: {arg.lower()}")
+
+            elif verb == "corp":
+                if arg.lower() in ("found", "join", "invite", "operate"):
+                    validated_plan.append(f"corp: {arg.lower()}")
+
+            elif verb == "diplomacy":
+                if arg.lower() == "offer":
+                    validated_plan.append("diplomacy: offer")
             
             elif verb == "combat":
                 if arg.lower() == "attack":
@@ -1321,6 +1394,8 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     state_manager.record_ai_metric("ollama_requests")
     if diagnostics.get("status") not in ("succeeded", "safely_rejected"):
         state_manager.record_ai_metric("ollama_errors")
+    if diagnostics.get("profile"):
+        state_manager.set("ollama_last_profile", diagnostics["profile"])
     latency = diagnostics.get("latency_seconds")
     if isinstance(latency, (int, float)):
         metrics = state_manager.get("ai_metrics", {})
@@ -1494,6 +1569,10 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
 
         elif goal_type == "diplomacy" and goal_target == "offer":
             return response_type in ("trade.offer.created_v1", "trade.offer.accepted_v1")
+
+        elif goal_type == "corp" and goal_target in ("found", "join", "invite", "operate"):
+            return response_type in ("corp.create.success", "corp.invite.success",
+                                     "corp.join.success", "corp.status.success")
 
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
@@ -2056,9 +2135,25 @@ def main(config_path="config.json"):
             game_state = state_manager.get_all()
             
             # --- FIX: Cooldown if out of turns ---
-            if (game_state.get("player_info") or {}).get("player", {}).get("turns_remaining", 1) <= 0:
-                logger.info("Out of turns. Cooling down for 1 hour.")
-                _pause_for_turn_refresh(state_manager)
+            current_turns = (game_state.get("player_info") or {}).get("player", {}).get("turns_remaining", 1)
+            if current_turns is not None and int(current_turns) <= 0:
+                # Keep the authenticated socket and local state intact. Poll the
+                # server's normal turn allocation every 30 seconds so reset is
+                # detected automatically without flooding player.my_info.
+                now = time.time()
+                last_poll = float(state_manager.get("turn_reset_last_poll", 0) or 0)
+                if turn_refresh_due(last_poll, now, config.get("turn_reset_poll_seconds", 30)):
+                    request_id = str(uuid.uuid4())
+                    full_command = build_player_command(
+                        "player.my_info", {}, game_state.get("session_id"),
+                        config.get("client_version"), game_state.get("server_commands"), request_id,
+                    )
+                    if game_conn.send_command(full_command):
+                        state_manager.add_pending_command(full_command["id"], full_command)
+                        state_manager.set("turn_reset_last_poll", now)
+                        state_manager.record_ai_metric("turn_reset_polls")
+                        logger.info("Turn budget exhausted; requested authoritative reset check.")
+                _pause_for_turn_refresh(state_manager, seconds=5)
                 continue
 
             strategy_plan = game_state.get("strategy_plan", [])
@@ -2213,11 +2308,46 @@ def main(config_path="config.json"):
                 current_goal = strategy_plan[0] # Get the top goal
                 logger.info(f"Current strategic goal: {current_goal}")
 
+            # Trim multi-step plans to the affordable turn budget while
+            # preserving configured turns for role-priority goals. The server
+            # remains authoritative and rejects any stale/incorrect estimate.
+            if strategy_plan:
+                player = (game_state.get("player_info") or {}).get("player") or {}
+                prefixes = config.get("turn_reserve_priority_prefixes", [])
+                budgeted_plan = affordable_plan(
+                    strategy_plan, game_state, player.get("turns_remaining"),
+                    config.get("turn_reserve", 12), prefixes,
+                    path_finder=getattr(state_manager, "find_path", None),
+                )
+                if budgeted_plan != strategy_plan:
+                    logger.info("Turn budget trimmed plan from %s to %s (turns=%s reserve=%s).",
+                                strategy_plan, budgeted_plan, player.get("turns_remaining"),
+                                config.get("turn_reserve", 12))
+                    state_manager.set("strategy_plan", budgeted_plan)
+                    strategy_plan = budgeted_plan
+                    current_goal = strategy_plan[0] if strategy_plan else None
+
             # 7. Get Next Command from Planner
             next_command_dict = planner.get_next_command(game_state, current_goal)
             
             if next_command_dict:
                 command_name = next_command_dict.get("command")
+                turn_cost = command_turn_cost(command_name)
+                player = (game_state.get("player_info") or {}).get("player") or {}
+                try:
+                    turns_remaining = int(player.get("turns_remaining", 0))
+                    reserve = max(0, int(config.get("turn_reserve", 12)))
+                except (TypeError, ValueError):
+                    turns_remaining, reserve = 0, 0
+                priority_prefixes = config.get("turn_reserve_priority_prefixes", [])
+                priority_goal = bool(priority_prefixes) and isinstance(current_goal, str) and current_goal.startswith(tuple(priority_prefixes))
+                if turn_cost and turns_remaining - turn_cost < reserve and not priority_goal:
+                    logger.info("Turn budget deferred %s (cost=%d turns=%d reserve=%d goal=%s).",
+                                command_name, turn_cost, turns_remaining, reserve, current_goal)
+                    state_manager.set("strategy_plan", [])
+                    state_manager.record_ai_metric("turn_budget_deferrals")
+                    time.sleep(1)
+                    continue
                 # Trade handlers require the data and meta copies of the
                 # idempotency key to agree. The planner may already have put a
                 # key in the trade payload, so reuse it for the envelope.
@@ -2425,6 +2555,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         if not isinstance(response_data, dict):
             logger.warning("Expected object payload in %s reply; ignoring malformed payload.", response_type)
             response_data = {}
+        if response_type == "player.list_online" and isinstance(response_data.get("players"), list):
+            state_manager.set("online_players", response_data["players"])
+        elif response_type == "corp.list.success" and isinstance(response_data.get("corporations"), list):
+            state_manager.set("corporations", response_data["corporations"])
         if command_name == "system.hello" and response_type != "system.welcome":
             # Compatibility with pre-V3 servers: one failed hello must not
             # prevent the legacy authenticated flow from starting.
@@ -2463,10 +2597,22 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         "auth.login", "auth.register", "player.my_info", "player.info",
                         "player.ping", "ship.info", "ship.status", "sector.info",
                         "trade.port_info", "trade.quote", "planet.info", "corp.status",
-                        "session.ping", "move.autopilot.status", "shipyard.list",
+                        "corp.list", "corp.roster", "player.list_online", "ship.inspect",
+                        "bank.balance", "corp.balance", "session.ping",
+                        "move.autopilot.status", "shipyard.list",
                     }
                     if config.get("playtest_bot") and command_name not in non_gameplay_commands:
                         state_manager.record_ai_metric("playtest_gameplay_actions")
+                        category = (
+                            "movement" if command_name.startswith("move.") else
+                            "trading" if command_name.startswith(("trade.", "port.")) else
+                            "planet" if command_name.startswith(("planet.", "citadel.")) else
+                            "corporation" if command_name.startswith("corp.") else
+                            "combat" if command_name.startswith(("combat.", "photon.")) else
+                            "banking" if command_name.startswith("bank.") else
+                            "ship" if command_name.startswith(("ship.", "shipyard.")) else "other"
+                        )
+                        state_manager.record_ai_metric("playtest_category_" + category)
                         action_number = (state_manager.get("ai_metrics", {})
                                          or {}).get("playtest_gameplay_actions", 0)
                         logger.info("PLAYTEST_ACTION bot=%s number=%s command=%s",

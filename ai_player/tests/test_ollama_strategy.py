@@ -88,6 +88,34 @@ def test_ollama_plan_is_selected_and_retained_as_controller_strategy(monkeypatch
     assert manager.get("strategy_inference_status") == {"status": "succeeded", "reason": None}
 
 
+def test_role_observation_is_compact_and_includes_objective_turns_capabilities_and_failures(monkeypatch, tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {"role_name": "Coloniser"})
+    manager.set("command_retry_info", {"trade.buy": {"failures": 2}})
+    state = _game_state()
+    state["sector_data"] = {str(i): {} for i in range(1, 501)}
+    observed = {}
+
+    def fake_ollama(_state, _model, _key, override_prompt=None, **_kwargs):
+        observed["prompt"] = override_prompt
+        return json.dumps({"plan": ["planet: create"]})
+
+    monkeypatch.setattr(main, "get_ollama_response", fake_ollama)
+    monkeypatch.setattr(main.time, "sleep", lambda _seconds: None)
+    plan = main.get_strategy_from_llm(
+        state, "qwen3:8b", "explore", manager, planner=PlannerStub(),
+        role_name="Coloniser", primary_objective="Acquire and develop planets",
+    )
+    assert plan == ["planet: create"]
+    prompt = observed["prompt"]
+    assert "Acquire and develop planets" in prompt
+    assert '"turns":100' in prompt
+    assert '"current_goal"' in prompt
+    assert '"available_actions"' in prompt
+    assert '"recent_failures":[{"command":"trade.buy","count":2}]' in prompt
+    assert '"known_sector_count":500' in prompt
+    assert '"known_sector_ids"' not in prompt
+
+
 def test_strict_playtest_never_substitutes_a_deterministic_plan(monkeypatch, tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     monkeypatch.setattr(main, "get_strategy_from_llm", lambda *args, **kwargs: None)

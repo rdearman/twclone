@@ -49,9 +49,31 @@ BOT_ROLES = [
 NON_GAMEPLAY_ACTIONS = {
     "bank.balance", "bank.history", "combat.status", "corp.balance", "corp.status",
     "move.autopilot.status", "player.computer.recommend_routes", "player.info",
-    "player.my_info", "player.ping", "planet.info", "sector.info", "ship.info",
+    "player.my_info", "player.ping", "player.list_online", "player.rankings",
+    "planet.info", "sector.info", "ship.info", "ship.inspect",
     "ship.status", "shipyard.list", "trade.history", "trade.port_info", "trade.quote",
+    "corp.list", "corp.roster", "bank.history", "bank.statement",
 }
+
+
+def action_category(command: str) -> str:
+    if command.startswith("move."):
+        return "navigation"
+    if command.startswith(("trade.", "port.")):
+        return "trading"
+    if command.startswith(("planet.", "citadel.")):
+        return "planets"
+    if command.startswith("corp."):
+        return "corporations"
+    if command.startswith(("combat.", "photon.")):
+        return "combat"
+    if command.startswith("bank."):
+        return "banking"
+    if command.startswith(("ship.", "shipyard.", "hardware.")):
+        return "ships"
+    if command.startswith("sector.scan"):
+        return "scanning"
+    return "other"
 
 
 def completed_gameplay_actions(bot: str, log_text: str) -> list[tuple[str, str]]:
@@ -139,6 +161,15 @@ def check_ollama() -> dict:
             raise SystemExit(f"Ollama {name} failed structured decision validation: {content}")
         result[name] = {"endpoint": endpoint, "model": MODEL, "id": installed,
                         "probe_latency_seconds": round(elapsed, 2),
+                        "queue_wait_seconds": 0.0,
+                        "prompt_eval_seconds": round(body.get("prompt_eval_duration", 0) / 1e9, 3),
+                        "generation_seconds": round(body.get("eval_duration", 0) / 1e9, 3),
+                        "model_load_seconds": round(body.get("load_duration", 0) / 1e9, 3),
+                        "server_total_seconds": round(body.get("total_duration", 0) / 1e9, 3),
+                        "prompt_tokens": body.get("prompt_eval_count"),
+                        "generated_tokens": body.get("eval_count"),
+                        "active_requests": 1,
+                        "think_requested_off": body.get("message", {}).get("thinking") in (None, ""),
                         "structured_decision": content}
     print(json.dumps(result, indent=2))
     return result
@@ -164,10 +195,19 @@ def _write_bot_configs(runtime: dict) -> None:
             "ollama_temperature": 0.3, "ollama_keep_alive": "30m",
             "ollama_lock_dir": str(RUNTIME / "ollama-locks"),
             "ollama_max_concurrent": 2, "inference_timeout_seconds": 110,
+            "decision_interval_seconds": 8,
             "ollama_retry_seconds": 35, "cooldown_seconds": 8,
             "startup_stagger_max_seconds": 0,
             "reconnect_base_seconds": 3, "reconnect_max_seconds": 60,
             "role_name": role, "primary_objective": objective,
+            "turn_reserve": 12,
+            "turn_reset_poll_seconds": 30,
+            "turn_reserve_priority_prefixes": (
+                ["planet:", "citadel:"] if index in (3, 4) else
+                ["combat:"] if index in (6, 7) else
+                ["corp:", "planet:"] if index in (8, 9) else
+                ["combat:", "planet:"] if index == 10 else []
+            ),
             "behavior_profile": profile, "playtest_bot": bot,
             "playtest_index": index, "client_version": "TWCloneLivePlaytest/1.0",
             "register_if_missing": True,
@@ -177,6 +217,9 @@ def _write_bot_configs(runtime: dict) -> None:
             "allow_corporation_play": index in (8, 9),
             "corporation_win_condition": index in (8, 9),
             "corporation_ai_players": 2 if index in (8, 9) else 0,
+            "corporation_name": "TWClone Playtest Founders",
+            "corporation_partner_name": "TWClone Playtest Founders",
+            "corporation_partner_username": "playbot09" if index == 8 else "playbot08",
             "enable_bank_management": True,
             "enable_planet_creation": True,
             "enable_citadel_management": True,
@@ -192,6 +235,31 @@ def _write_bot_configs(runtime: dict) -> None:
         old_path.chmod(0o600)
     runtime["bot_count"] = 10
     runtime["ollama"] = check_ollama()
+
+
+def configure_bots() -> None:
+    """Apply runtime policy without replacing accounts or world state."""
+    require_runtime()
+    for index in range(1, 11):
+        bot = f"BOT{index:02d}"
+        path = RUNTIME / "bots" / bot / "config.json"
+        config = json.loads(path.read_text())
+        config.update({"turn_reserve": 12, "turn_reset_poll_seconds": 30,
+                       "decision_interval_seconds": 8})
+        config["turn_reserve_priority_prefixes"] = (
+            ["planet:", "citadel:"] if index in (3, 4) else
+            ["combat:"] if index in (6, 7) else
+            ["corp:", "planet:"] if index in (8, 9) else
+            ["combat:", "planet:"] if index == 10 else []
+        )
+        config.update({
+            "corporation_name": "TWClone Playtest Founders",
+            "corporation_partner_name": "TWClone Playtest Founders",
+            "corporation_partner_username": "playbot09" if index == 8 else "playbot08",
+        })
+        path.write_text(json.dumps(config, indent=2) + "\n")
+        path.chmod(0o600)
+    print("Updated turn budget and role policy for BOT01–BOT10; identities and world state unchanged.")
 
 
 def provision(args) -> None:
@@ -401,6 +469,8 @@ def status() -> None:
         cfg = json.loads((RUNTIME / "bots" / bot / "config.json").read_text())
         info = (state.get("player_info") or {}).get("player") or {}
         metrics = state.get("ai_metrics") or {}
+        profile = state.get("ollama_last_profile") or {}
+        plan = state.get("strategy_plan") or []
         endpoint = cfg["ollama_url"]
         ship = state.get("ship_info") or {}
         sector = state.get("player_location_sector") or info.get("current_sector", "?")
@@ -421,9 +491,18 @@ def status() -> None:
             action_records = completed_gameplay_actions(bot, bot_log.read_text(errors="replace"))
             completed_actions = len(action_records)
             last_action = action_records[-1][1] if action_records else "?"
+            categories = {}
+            for _timestamp, command in action_records:
+                category = action_category(command)
+                categories[category] = categories.get(category, 0) + 1
         except OSError:
             completed_actions = 0
             last_action = "?"
+            categories = {}
+        trace = state.get("decision_trace") or []
+        current_goal = plan[0] if plan else (
+            trace[-1].get("goal") if trace else state.get("strategy_plan_source", "?")
+        )
         print(f"{bot}: service={active} endpoint={endpoint} model={cfg['ollama_model']} "
               f"sector={sector} ship={ship_id} turns={turns} "
               f"credits={credits} valid_session={db_player.get('session_valid', False)} objective={objective} "
@@ -431,7 +510,15 @@ def status() -> None:
               f"inferences={metrics.get('ollama_successes', 0)}/{metrics.get('ollama_requests', 0)} "
               f"inference_last={state.get('ollama_last_latency_seconds', '?')}s "
               f"inference_avg={state.get('ollama_average_latency_seconds', '?')}s "
+              f"profile(queue={profile.get('queue_wait_seconds', '?')}s "
+              f"prompt={profile.get('prompt_eval_seconds', '?')}s "
+              f"generate={profile.get('generation_seconds', '?')}s "
+              f"load={profile.get('model_load_seconds', '?')}s "
+              f"tokens={profile.get('prompt_tokens', '?')}/{profile.get('generated_tokens', '?')} "
+              f"active={profile.get('active_requests', '?')}) "
               f"inference_errors={metrics.get('ollama_errors', 0)} last={last_action} "
+              f"progress={json.dumps(categories, sort_keys=True)} "
+              f"goals_completed={metrics.get('goals_completed', 0)} current_goal={current_goal} "
               f"reconnects={metrics.get('reconnects', 0)}")
     print("Human count reflects valid auth sessions, not live TCP sockets.")
 
@@ -502,6 +589,7 @@ def main() -> int:
     logs.add_argument("target", choices=["server", "bots", "database"], default="server", nargs="?")
     reset = sub.add_parser("reset")
     reset.add_argument("--confirm-reset", action="store_true")
+    sub.add_parser("configure-bots", help="Apply turn budgeting and role goals without resetting the universe")
     args = parser.parse_args()
     if args.command == "provision":
         provision(args)
@@ -549,6 +637,8 @@ def main() -> int:
                     print(f"--- BOT{index:02d} ---\n" + path.read_text(errors="replace")[-5000:])
     elif args.command == "reset":
         reset_universe(args)
+    elif args.command == "configure-bots":
+        configure_bots()
     return 0
 
 

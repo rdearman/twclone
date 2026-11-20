@@ -35,6 +35,7 @@ def _endpoint_slot(endpoint, lock_dir, max_concurrent, timeout):
     endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
     root = Path(lock_dir)
     root.mkdir(parents=True, exist_ok=True)
+    wait_started = time.monotonic()
     deadline = time.monotonic() + timeout
     held = None
     try:
@@ -51,7 +52,18 @@ def _endpoint_slot(endpoint, lock_dir, max_concurrent, timeout):
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Ollama endpoint queue wait timed out")
                 time.sleep(0.1)
-        yield
+        active = 0
+        for slot in range(max(1, int(max_concurrent))):
+            handle = open(root / f"ollama-{endpoint_hash}-{slot}.lock", "a+")
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except BlockingIOError:
+                active += 1
+            finally:
+                handle.close()
+        yield {"queue_wait_seconds": max(0.0, time.monotonic() - wait_started),
+               "active_requests": min(active, max(1, int(max_concurrent)))}
     finally:
         if held is not None:
             fcntl.flock(held.fileno(), fcntl.LOCK_UN)
@@ -166,7 +178,8 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         timeout = REQUEST_TIMEOUT if request_timeout is None else max(0.1, float(request_timeout))
         started = time.monotonic()
         with _endpoint_slot(endpoint or DEFAULT_OLLAMA_URL, lock_dir,
-                            max_concurrent, timeout):
+                            max_concurrent, timeout) as slot_profile:
+            acquired = time.monotonic()
             with httpx.Client(timeout=timeout) as client:
                 response = client.post(api_url, json=payload)
                 response.raise_for_status()
@@ -176,7 +189,19 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         latency = time.monotonic() - started
         if error_report is not None:
             error_report.update({"status": "succeeded", "latency_seconds": latency,
-                                 "model": response_data.get("model", model)})
+                                 "model": response_data.get("model", model),
+                                 "profile": {
+                                     "queue_wait_seconds": slot_profile.get("queue_wait_seconds"),
+                                     "active_requests": slot_profile.get("active_requests"),
+                                     "prompt_eval_seconds": _duration_seconds(response_data.get("prompt_eval_duration")),
+                                     "generation_seconds": _duration_seconds(response_data.get("eval_duration")),
+                                     "server_total_seconds": _duration_seconds(response_data.get("total_duration")),
+                                     "model_load_seconds": _duration_seconds(response_data.get("load_duration")),
+                                     "prompt_tokens": response_data.get("prompt_eval_count"),
+                                     "generated_tokens": response_data.get("eval_count"),
+                                     "client_total_seconds": latency,
+                                     "think_requested_off": payload.get("think") is False,
+                                 }})
         
         if model_response_str:
             logger.debug(f"Ollama raw response: {model_response_str}")
@@ -209,6 +234,14 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
     except Exception as e:
         logger.error(f"Unexpected error in get_ollama_response: {e}", exc_info=True)
         record_error("client_error", f"Ollama client failed: {type(e).__name__}")
+        return None
+
+
+def _duration_seconds(value):
+    """Ollama reports profiling durations in nanoseconds."""
+    try:
+        return round(max(0, int(value)) / 1_000_000_000, 4)
+    except (TypeError, ValueError):
         return None
 
 # --- Main entry point for testing ---

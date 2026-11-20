@@ -17,7 +17,10 @@ def test_chat_uses_schema_constrained_payload_and_records_model_latency(monkeypa
         def raise_for_status(self):
             pass
         def json(self):
-            return {"model": "qwen3:8b", "message": {"content": '{"plan":["scan: density"]}'}}
+            return {"model": "qwen3:8b", "message": {"content": '{"plan":["scan: density"]}'},
+                    "prompt_eval_count": 121, "prompt_eval_duration": 2_000_000_000,
+                    "eval_count": 18, "eval_duration": 3_000_000_000,
+                    "total_duration": 5_500_000_000}
 
     class Client:
         def __init__(self, timeout):
@@ -48,6 +51,12 @@ def test_chat_uses_schema_constrained_payload_and_records_model_latency(monkeypa
     assert report["status"] == "succeeded"
     assert report["model"] == "qwen3:8b"
     assert report["latency_seconds"] >= 0
+    assert report["profile"]["prompt_tokens"] == 121
+    assert report["profile"]["generated_tokens"] == 18
+    assert report["profile"]["prompt_eval_seconds"] == 2.0
+    assert report["profile"]["generation_seconds"] == 3.0
+    assert report["profile"]["active_requests"] == 1
+    assert report["profile"]["queue_wait_seconds"] >= 0
 
 
 def test_slow_inference_uses_authenticated_session_keepalive(monkeypatch):

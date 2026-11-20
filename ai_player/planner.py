@@ -928,7 +928,43 @@ class Planner:
                 }}
 
             elif goal_type == "corp":
-                logger.info("Solo empire policy refuses corporation goal %s", goal_str)
+                if not self._corporation_action_allowed("corp.create"):
+                    logger.info("Corporation goal is disabled by playtest policy.")
+                    return None
+                player = (current_state.get("player_info") or {}).get("player", {})
+                corp_id = int(player.get("corp_id", 0) or 0)
+                commands = set(current_state.get("server_commands", []))
+                if goal_target == "found":
+                    if corp_id:
+                        online = current_state.get("online_players")
+                        if online is None:
+                            return {"command": "player.list_online", "data": {"page": 1, "limit": 100}}
+                        partner = str(self.config.get("corporation_partner_username", "playbot09"))
+                        target = next((item for item in online if isinstance(item, dict)
+                                       and item.get("username") == partner), None)
+                        own_name = str(self.config.get("corporation_name", "TWClone Playtest Founders"))
+                        if target and target.get("corporation") != own_name:
+                            if not commands or "corp.invite" in commands:
+                                return {"command": "corp.invite", "data": {
+                                    "target_player_id": int(target["player_id"])
+                                }}
+                        return None
+                    name = str(self.config.get("corporation_name", "TWClone Playtest Founders"))[:64]
+                    if not commands or "corp.create" in commands:
+                        return {"command": "corp.create", "data": {"name": name}}
+                elif goal_target == "join":
+                    if corp_id:
+                        return {"command": "corp.status", "data": {}}
+                    corporations = current_state.get("corporations")
+                    if corporations is None:
+                        return {"command": "corp.list", "data": {}}
+                    wanted = str(self.config.get("corporation_partner_name", "TWClone Playtest Founders"))
+                    candidate = next((item for item in corporations if isinstance(item, dict)
+                                      and item.get("name") == wanted), None)
+                    if candidate and (not commands or "corp.join" in commands):
+                        return {"command": "corp.join", "data": {"corp_id": int(candidate["corp_id"])}}
+                elif goal_target == "operate" and corp_id:
+                    return {"command": "corp.status", "data": {}}
                 return None
 
         except Exception as e:
@@ -1175,7 +1211,7 @@ class Planner:
             goal_type, _, goal_target = current_goal.partition(":")
             goal_type = goal_type.strip()
 
-            if goal_type == "corp":
+            if goal_type == "corp" and not self._corporation_action_allowed("corp.status"):
                 return None
 
             # Pre-check for credits if the goal is to buy

@@ -142,7 +142,7 @@ def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
     assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
 
 
-def test_exhausted_turn_pause_yields_for_network_recovery_and_authoritative_refresh(tmp_path, monkeypatch):
+def test_exhausted_turn_pause_preserves_session_state_for_throttled_refresh(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
     manager.set("player_info", {"player": {"ship_id": 1, "turns_remaining": 0}})
@@ -153,11 +153,8 @@ def test_exhausted_turn_pause_yields_for_network_recovery_and_authoritative_refr
 
     assert sleeps == [5]
     restarted = StateManager(str(path), {})
-    planner = Planner.__new__(Planner)
-    planner.state_manager = restarted
-    assert planner.ensure_minimum_world_state(restarted.get_all()) == {
-        "command": "player.my_info", "data": {},
-    }
+    assert restarted.get("player_info")["player"]["turns_remaining"] == 0
+    assert restarted.get("player_info")["player"]["ship_id"] == 1
 
 
 def test_authentication_retries_respect_failure_backoff():
