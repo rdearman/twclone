@@ -548,6 +548,23 @@ def test_genesis_creation_refreshes_unknown_adjacent_planet_presence():
     }
 
 
+def test_opportunist_only_gets_planet_development_goal_for_authoritatively_owned_world():
+    game = {
+        "player_location_sector": 140,
+        "player_info": {"player": {"player_id": 115, "corp_id": 0}},
+        "ship_info": {"onplanet": 0},
+        "sector_data": {"140": {"has_planet": True}},
+        "planet_info": {"planet_id": 140, "sector_id": 140,
+                         "owner_type": "none", "owner_id": 0},
+    }
+    options = _role_goal_options("Opportunist", game, {}, {})
+    assert "planet: develop" not in options
+
+    game["owned_planets"] = [{"planet_id": 140, "sector_id": 140,
+                               "owner_type": "player", "owner_id": 115}]
+    assert "planet: develop" in _role_goal_options("Opportunist", game, {}, {})
+
+
 def test_v3_shipyard_list_response_normalizes_available_catalog_without_fleet_side_effects():
     catalog = normalize_shipyard_catalog("shipyard.list_v1", {
         "sector_id": 440, "is_shipyard": True,

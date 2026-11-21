@@ -746,7 +746,43 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
     # Opportunists can choose from actual current opportunities; do not tell
     # other roles to default to trading and exploration.
     options = []
-    if sector.get("has_planet"):
+    player = ((game_state.get("player_info") or {}).get("player") or {})
+    planet = game_state.get("planet_info") or {}
+    try:
+        player_id = int(player.get("player_id", player.get("id", 0)) or 0)
+        corp_id = int(player.get("corp_id", 0) or 0)
+        owner_id = int(planet.get("owner_id", 0) or 0)
+        planet_sector = int(planet.get("sector_id", sector_id) or 0)
+    except (TypeError, ValueError):
+        player_id = corp_id = owner_id = planet_sector = 0
+    owner_type = str(planet.get("owner_type", "")).lower()
+    try:
+        current_sector_number = int(sector_id or 0)
+    except (TypeError, ValueError):
+        current_sector_number = 0
+    has_owned_world_here = False
+    for item in game_state.get("owned_planets") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            item_sector = int(item.get("sector_id", 0) or 0)
+            item_owner = int(item.get("owner_id", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        item_type = str(item.get("owner_type", "")).lower()
+        if (item_sector == current_sector_number
+                and ((item_type == "player" and player_id > 0 and item_owner == player_id)
+                     or (item_type in ("corp", "corporation") and corp_id > 0
+                         and item_owner == corp_id))):
+            has_owned_world_here = True
+            break
+    has_owned_world_here = has_owned_world_here or (
+        bool((game_state.get("ship_info") or {}).get("onplanet"))
+        and planet_sector == current_sector_number
+        and ((owner_type == "player" and player_id > 0 and owner_id == player_id)
+             or (owner_type in ("corp", "corporation") and corp_id > 0 and owner_id == corp_id))
+    )
+    if has_owned_world_here:
         options.append("planet: develop")
     if eligible_combat_targets(filtered_state.get("visible_ship_targets"),
                                game_state.get("opponent_model"),
