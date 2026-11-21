@@ -8,7 +8,8 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
-                  _audit_state_snapshot, process_responses, quarantine_timed_out_trades)  # noqa: E402
+                  _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
+                  reconcile_planet_transition_receipt)  # noqa: E402
 from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
 from bug_reporter import BugReporter  # noqa: E402
@@ -142,6 +143,22 @@ def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
     assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
 
 
+def test_landing_and_launch_receipts_update_context_without_waiting_for_refresh(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.update_player_info({"ship": {"id": 56, "onplanet": 0}})
+    assert reconcile_planet_transition_receipt(
+        manager, "planet.land.success", {"planet_id": 62}
+    ) == ("landed", 62)
+    assert manager.get("ship_info")["onplanet"] == 1
+    assert manager.get("ship_info")["planet_id"] == 62
+
+    assert reconcile_planet_transition_receipt(
+        manager, "planet.launch.success", {}
+    ) == ("launched", None)
+    assert manager.get("ship_info")["onplanet"] == 0
+    assert "planet_id" not in manager.get("ship_info")
+
+
 def test_exhausted_turn_pause_preserves_session_state_for_throttled_refresh(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
@@ -149,9 +166,9 @@ def test_exhausted_turn_pause_preserves_session_state_for_throttled_refresh(tmp_
     sleeps = []
     monkeypatch.setattr("main.time.sleep", sleeps.append)
 
-    _pause_for_turn_refresh(manager, seconds=60)
+    _pause_for_turn_refresh(manager, seconds=60, heartbeat_interval=4)
 
-    assert sleeps == [5]
+    assert sleeps == [2.0]
     restarted = StateManager(str(path), {})
     assert restarted.get("player_info")["player"]["turns_remaining"] == 0
     assert restarted.get("player_info")["player"]["ship_id"] == 1
@@ -409,6 +426,8 @@ def test_uncertain_trade_survives_disconnect_and_mismatched_late_reply(tmp_path)
     manager.set("uncertain_trade", marker)
     manager.add_pending_command("buy-1", {"command": "trade.buy", "data": {"port_id": 1}})
     manager.clear_connection_state()
+    assert manager.get("ai_metrics").get("session_state_resets") == 1
+    assert manager.get("ai_metrics").get("reconnects", 0) == 0
     restored = StateManager(str(path), {})
     process_responses([{"reply_to": "buy-1", "status": "ok", "type": "player.my_info",
                         "data": {"player": {"credits": "900"}}}],
@@ -536,3 +555,34 @@ def test_warp_quarantine_requires_matching_correlated_destination(tmp_path):
                       FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
     assert manager.get("uncertain_warp") is None
     assert manager.get("player_location_sector") == 2
+
+
+def test_explicit_warp_error_resolves_uncertainty_instead_of_retrying_forever(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    marker = {"request_id": "warp-retry", "command": "move.warp", "to_sector_id": 24,
+              "idempotency_key": "stable-warp-key"}
+    manager.set("uncertain_warp", marker)
+    manager.add_pending_command("warp-retry", {
+        "command": "move.warp", "data": {"to_sector_id": 24},
+    })
+
+    process_responses([{"reply_to": "warp-retry", "status": "error", "type": "error",
+                        "error": {"code": 1453, "message": "No link"}, "data": None}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+
+    assert manager.get("uncertain_warp") is None
+    assert "24" in {str(value) for value in manager.get("warp_blacklist", [])}
+
+
+def test_planet_info_receipt_is_reconciled_outside_population_mode(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.add_pending_command("planet-info", {
+        "command": "planet.info", "data": {"planet_id": 62},
+    })
+    planet = {"planet_id": 62, "owner_type": "none", "population": 0}
+
+    process_responses([{"reply_to": "planet-info", "status": "ok", "type": "planet.info",
+                        "data": planet}], FakeConnection(), manager,
+                      UnusedBugReporter(), QuietBandit(), {"population_mode": False}, None)
+
+    assert manager.get("planet_info") == planet

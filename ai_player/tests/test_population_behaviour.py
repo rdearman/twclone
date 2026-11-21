@@ -116,6 +116,7 @@ def test_live_command_catalogue_is_cached_without_schema_fanout():
     assert "admin.shutdown_warning" not in main.schema_commands_to_fetch(
         ["admin.shutdown_warning", "trade.buy"]
     )
+    assert "bank.deposit" in main.schema_commands_to_fetch(["bank.deposit"])
 
 
 def test_public_registration_is_opt_in_and_attempted_once_across_restart(tmp_path):

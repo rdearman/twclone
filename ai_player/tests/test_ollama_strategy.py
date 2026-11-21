@@ -92,6 +92,7 @@ def test_role_observation_is_compact_and_includes_objective_turns_capabilities_a
     manager = StateManager(str(tmp_path / "state.json"), {"role_name": "Coloniser"})
     manager.set("command_retry_info", {"trade.buy": {"failures": 2}})
     state = _game_state()
+    state["ship_info"]["genesis_torpedoes"] = 1
     state["sector_data"] = {str(i): {} for i in range(1, 501)}
     observed = {}
 
@@ -128,6 +129,14 @@ def test_strict_playtest_never_substitutes_a_deterministic_plan(monkeypatch, tmp
     assert plan == []
     assert manager.get("strategy_plan_source") == "ollama_wait"
     assert manager.get("ollama_retry_after") > 0
+
+
+def test_zero_turn_pause_leaves_room_for_session_heartbeat(monkeypatch):
+    requested = []
+    monkeypatch.setattr(main.time, "sleep", requested.append)
+    monkeypatch.setattr(main, "shutdown_flag", False)
+    main._pause_for_turn_refresh(object(), seconds=5, heartbeat_interval=4)
+    assert requested == [2.0]
 
 
 def test_ollama_prompt_uses_the_selected_population_profile(monkeypatch, tmp_path):

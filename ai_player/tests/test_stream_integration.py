@@ -85,6 +85,18 @@ def test_oversized_unterminated_server_frame_disconnects():
     assert connection.consume_disconnect()
 
 
+def test_connection_metrics_distinguish_server_close_from_client_close(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    connection = GameConnection("unused", 0, manager)
+    connection.sock = FakeStreamSocket()
+    connection.disconnect(reason="server_close")
+    metrics = manager.get("ai_metrics")
+    assert metrics["tcp_connections_closed"] == 1
+    assert metrics["server_initiated_disconnects"] == 1
+    assert metrics.get("client_initiated_disconnects", 0) == 0
+    assert metrics.get("authentication_attempts", 0) == 0
+
+
 def test_unsolicited_event_is_deduplicated_and_requests_refresh(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.state["player_location_sector"] = 42

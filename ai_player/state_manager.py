@@ -558,13 +558,26 @@ class StateManager:
             return
         trace = self.state.setdefault("decision_trace", [])
         item = {"timestamp": time.time(), **{
-            key: decision[key] for key in ("goal", "command", "reason", "risk", "source")
+            key: decision[key] for key in (
+                "goal", "command", "reason", "risk", "source", "role",
+                "objective", "llm_raw_plan", "accepted_plan", "observation",
+            )
             if key in decision
         }}
         if outcome is not None:
             item["outcome"] = outcome
         trace.append(item)
         del trace[:-100]
+        self.save_state()
+
+    def annotate_last_decision(self, **fields):
+        """Attach adapter and authoritative response evidence to the latest plan."""
+        trace = self.state.setdefault("decision_trace", [])
+        if not trace or not isinstance(trace[-1], dict):
+            return
+        allowed = {"command", "response_type", "response_status", "error_code",
+                   "server_reason", "progress_category", "outcome"}
+        trace[-1].update({key: value for key, value in fields.items() if key in allowed})
         self.save_state()
 
     def record_learning_outcome(self, action, context, reward, success):
@@ -919,6 +932,14 @@ class StateManager:
             logger.info(f"Added '{command_name}' to schema blacklist.")
             self.save_state()
 
+    def remove_from_schema_blacklist(self, command_name):
+        """Forget a stale schema failure so a newly advertised command can retry."""
+        blacklist = self.state.setdefault("schema_blacklist", [])
+        if command_name in blacklist:
+            blacklist.remove(command_name)
+            logger.info("Removed stale schema failure for advertised command %s.", command_name)
+            self.save_state()
+
     # --- Pending Command and Blacklist Management ---
 
     def add_pending_command(self, request_id, command):
@@ -971,7 +992,10 @@ class StateManager:
         self.state["strategy_plan"] = []
         self.state["needs_bootstrap"] = True
         if record_reconnect:
-            self.record_ai_metric("reconnects")
+            # This counts discarded session-scoped state, not TCP connects.
+            # Keep the legacy metric for saved state display, but stop adding
+            # ambiguous values to it going forward.
+            self.record_ai_metric("session_state_resets")
         self.save_state()
 
     def record_ai_metric(self, name, amount=1):

@@ -17,7 +17,6 @@ TURN_COSTS = {
     "trade.jettison": 1,
     "combat.flee": 1,
     "combat.attack.port": 1,
-    "port.attack": 1,
 }
 
 
@@ -26,12 +25,48 @@ def command_turn_cost(command: str) -> int:
     return TURN_COSTS.get(str(command or ""), 0)
 
 
+def command_fits_turn_budget(command, turns_remaining, reserve=0, priority=False):
+    """Never send a turn-costing action without at least its required turns."""
+    try:
+        turns = max(0, int(turns_remaining))
+        keep = max(0, int(reserve))
+    except (TypeError, ValueError):
+        return False
+    cost = command_turn_cost(command)
+    if cost and turns < cost:
+        return False
+    return not cost or bool(priority) or turns - cost >= keep
+
+
 def turn_refresh_due(last_poll, now, interval=30):
     """Whether the bot should request an authoritative reset-state refresh."""
     try:
         return float(now) - float(last_poll or 0) >= max(1.0, float(interval))
     except (TypeError, ValueError):
         return True
+
+
+def session_heartbeat_interval(config):
+    """Return a client heartbeat interval safely below the server frame deadline.
+
+    The server uses its request deadline while waiting for the next complete
+    line-framed request.  A client heartbeat must arrive before that deadline;
+    it is not merely an authentication-session refresh interval.
+    """
+    config = config or {}
+    try:
+        requested = float(config.get("session_heartbeat_interval_seconds", 4.0))
+    except (TypeError, ValueError):
+        requested = 4.0
+    requested = max(1.0, requested)
+    try:
+        timeout_ms = float(config.get("server_request_timeout_ms", 0) or 0)
+    except (TypeError, ValueError):
+        timeout_ms = 0
+    if timeout_ms > 0:
+        # Leave headroom for scheduling jitter and inference contention.
+        requested = min(requested, max(1.0, timeout_ms / 1000.0 * 0.4))
+    return requested
 
 
 def goal_turn_cost(goal: str, state: dict, path_finder=None) -> int:

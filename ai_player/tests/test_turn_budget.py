@@ -2,7 +2,9 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from turn_budget import affordable_plan, command_turn_cost, goal_turn_cost, turn_refresh_due
+from turn_budget import (affordable_plan, command_fits_turn_budget,
+                         command_turn_cost, goal_turn_cost,
+                         session_heartbeat_interval, turn_refresh_due)
 
 
 def test_server_confirmed_turn_costs_cover_movement_trading_scans_and_combat():
@@ -38,3 +40,18 @@ def test_exhausted_turn_refresh_poll_is_throttled_without_state_invalidation():
     assert turn_refresh_due(0, 100, 30)
     assert not turn_refresh_due(90, 100, 30)
     assert turn_refresh_due(90, 120, 30)
+
+
+def test_session_heartbeat_stays_inside_server_request_deadline():
+    assert session_heartbeat_interval({"server_request_timeout_ms": 10_000}) == 4
+    assert session_heartbeat_interval({"server_request_timeout_ms": 5_000}) == 2
+    assert session_heartbeat_interval({"session_heartbeat_interval_seconds": 3,
+                                       "server_request_timeout_ms": 10_000}) == 3
+
+
+def test_turn_budget_never_allows_a_costful_priority_action_at_zero_turns():
+    assert not command_fits_turn_budget("move.warp", 0, reserve=12, priority=True)
+    assert not command_fits_turn_budget("planet.land", 0, reserve=12, priority=True)
+    assert command_fits_turn_budget("corp.create", 0, reserve=12, priority=True)
+    assert command_fits_turn_budget("move.warp", 1, reserve=12, priority=True)
+    assert not command_fits_turn_budget("move.warp", 1, reserve=12, priority=False)

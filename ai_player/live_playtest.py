@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 
 
@@ -34,6 +35,12 @@ OLLAMA_A = "http://192.168.25.5:11434"
 OLLAMA_B = "http://192.168.25.20:11434"
 MODEL = "qwen3:8b"
 MODEL_ID = "500a1f067a9f"
+PLAYTEST_BOT_USERS = tuple(f"playbot{i:02d}" for i in range(1, 11))
+
+
+def ollama_endpoint_for_index(index: int) -> str:
+    """Return the configured five/five Ollama assignment."""
+    return OLLAMA_A if int(index) <= 5 else OLLAMA_B
 BOT_ROLES = [
     ("Trader", "Maximise credits through profitable public port trades.", "trader"),
     ("Merchant", "Discover and repeat profitable trade routes.", "trader"),
@@ -50,6 +57,7 @@ NON_GAMEPLAY_ACTIONS = {
     "bank.balance", "bank.history", "combat.status", "corp.balance", "corp.status",
     "move.autopilot.status", "player.computer.recommend_routes", "player.info",
     "player.my_info", "player.ping", "player.list_online", "player.rankings",
+    "unknown",
     "planet.info", "sector.info", "ship.info", "ship.inspect",
     "ship.status", "shipyard.list", "trade.history", "trade.port_info", "trade.quote",
     "corp.list", "corp.roster", "bank.history", "bank.statement",
@@ -125,6 +133,131 @@ def _read_playtest_sql(sql: str) -> str:
     return result.stdout.strip()
 
 
+def grant_playtest_turns(amount: int, grant_id: str, reason: str) -> None:
+    """Grant turns only to the ten existing bots in the isolated playtest DB.
+
+    The UUID is mandatory and is the idempotency key. Re-running with the same
+    key cannot repeat a credit; another grant requires an explicit new key.
+    """
+    runtime = require_runtime()
+    if int(amount) < 1 or int(amount) > 10000:
+        raise SystemExit("Turn grant amount must be between 1 and 10000.")
+    try:
+        grant_uuid = str(uuid.UUID(grant_id))
+    except (ValueError, AttributeError, TypeError):
+        raise SystemExit("--grant-id must be a UUID.")
+    if not reason.strip() or len(reason) > 200 or any(ch in reason for ch in "|\r\n"):
+        raise SystemExit("--reason must contain 1–200 characters.")
+
+    if runtime.get("db_name") != "twclone_live_playtest" or runtime.get("db_container") != PG_CONTAINER:
+        raise SystemExit("Playtest database identity mismatch; refusing turn grant.")
+    owned = run(["docker", "inspect", "--format", "{{ index .Config.Labels \"twclone.playtest\" }}", PG_CONTAINER], capture=True)
+    if owned.stdout.strip() != "true":
+        raise SystemExit("Dedicated disposable DB ownership label mismatch; refusing turn grant.")
+    identity = _read_playtest_sql("SELECT current_database() || '|' || inet_server_port()")
+    if identity != f"twclone_live_playtest|5432":
+        raise SystemExit(f"Unexpected database endpoint {identity!r}; refusing turn grant.")
+
+    expected_sql = ",".join("'" + name + "'" for name in PLAYTEST_BOT_USERS)
+    rows = _read_playtest_sql(
+        "SELECT p.name || '|' || p.player_id || '|' || p.is_npc || '|' || t.turns_remaining "
+        "FROM players p JOIN turns t USING (player_id) "
+        f"WHERE p.name IN ({expected_sql}) ORDER BY p.name"
+    ).splitlines()
+    if len(rows) != 10 or {row.split("|", 1)[0] for row in rows} != set(PLAYTEST_BOT_USERS):
+        raise SystemExit("Expected exactly the ten existing bot accounts with turn rows; refusing grant.")
+    if any(row.split("|")[2].lower() not in ("f", "false") for row in rows):
+        raise SystemExit("A target account is not an ordinary player; refusing grant.")
+
+    config = json.loads((RUNTIME / "bigbang.json").read_text())
+    conn = config["app"].replace("%DB%", config["db"])
+    password = conn.split("password=", 1)[1].split()[0]
+    safe_conn = conn.replace(" password=" + password, "")
+    users = ",".join("('" + name + "')" for name in PLAYTEST_BOT_USERS)
+    ledger_exists = _read_playtest_sql(
+        "SELECT CASE WHEN to_regclass('public.ai_playtest_turn_grants') IS NULL THEN 'f' ELSE 't' END"
+    ) == "t"
+    existing_count = int(_read_playtest_sql(
+        f"SELECT count(*) FROM public.ai_playtest_turn_grants WHERE grant_id='{grant_uuid}'::uuid"
+    )) if ledger_exists else 0
+    if existing_count not in (0, 10):
+        raise SystemExit(f"Grant ledger is incomplete ({existing_count}/10 rows); refusing replay.")
+    if existing_count:
+        stored = _read_playtest_sql(
+            "SELECT count(*) FROM public.ai_playtest_turn_grants "
+            f"WHERE grant_id='{grant_uuid}'::uuid AND grant_amount={int(amount)} "
+            f"AND reason='{reason.replace(chr(39), chr(39) * 2)}'"
+        )
+        if stored != "10":
+            raise SystemExit("Grant UUID already exists with a different amount or reason.")
+    # The insert's RETURNING rows feed the balance update in the same statement.
+    # On replay, INSERT returns no rows and therefore changes no live balance.
+    sql = f"""
+BEGIN;
+CREATE TABLE IF NOT EXISTS public.ai_playtest_turn_grants (
+  grant_id uuid NOT NULL,
+  player_id integer NOT NULL REFERENCES players(player_id),
+  player_name text NOT NULL,
+  previous_turns integer NOT NULL,
+  grant_amount integer NOT NULL CHECK (grant_amount > 0),
+  resulting_turns integer NOT NULL,
+  reason text NOT NULL,
+  granted_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (grant_id, player_id)
+);
+DO $grant_guard$
+DECLARE exact_bot_count integer;
+BEGIN
+  SELECT count(*) INTO exact_bot_count
+  FROM players p JOIN turns t USING (player_id)
+  WHERE p.name IN ({expected_sql}) AND p.is_npc=false;
+  IF exact_bot_count <> 10 THEN
+    RAISE EXCEPTION 'expected exactly ten ordinary playtest bots with turn rows, found %', exact_bot_count;
+  END IF;
+END;
+$grant_guard$;
+WITH expected(name) AS (VALUES {users}),
+locked AS MATERIALIZED (
+  SELECT p.player_id,p.name,t.turns_remaining
+  FROM expected e JOIN players p ON p.name=e.name
+  JOIN turns t USING (player_id)
+  WHERE p.is_npc=false
+  ORDER BY p.player_id
+  FOR UPDATE OF p,t
+), inserted AS (
+  INSERT INTO public.ai_playtest_turn_grants
+    (grant_id,player_id,player_name,previous_turns,grant_amount,resulting_turns,reason)
+  SELECT '{grant_uuid}'::uuid,player_id,name,turns_remaining,{int(amount)},
+         turns_remaining+{int(amount)},'{reason.replace("'", "''")}'
+  FROM locked
+  ON CONFLICT (grant_id,player_id) DO NOTHING
+  RETURNING grant_id,player_id,resulting_turns
+), updated AS (
+  UPDATE turns t SET turns_remaining=i.resulting_turns
+  FROM inserted i WHERE t.player_id=i.player_id
+  RETURNING t.player_id,t.turns_remaining
+)
+SELECT player_name || '|' || previous_turns || '|' || grant_amount || '|' || resulting_turns
+FROM public.ai_playtest_turn_grants
+WHERE grant_id='{grant_uuid}'::uuid ORDER BY player_name;
+COMMIT;
+"""
+    run(["psql", safe_conn, "-X", "-v", "ON_ERROR_STOP=1", "-c", sql], capture=True,
+        env=dict(os.environ, PGPASSWORD=password))
+    records = _read_playtest_sql(
+        "SELECT player_name || '|' || previous_turns || '|' || grant_amount || '|' || resulting_turns "
+        f"FROM public.ai_playtest_turn_grants WHERE grant_id='{grant_uuid}'::uuid ORDER BY player_name"
+    ).splitlines()
+    records = [line for line in records if line.count("|") == 3
+               and line.split("|", 1)[0] in PLAYTEST_BOT_USERS]
+    if len(records) != 10:
+        raise SystemExit(f"Grant ledger contains {len(records)} rows for this grant, expected 10.")
+    print(f"database=twclone_live_playtest grant_id={grant_uuid} amount={amount} reason={reason} "
+          f"already_applied={bool(existing_count)}")
+    for record in records:
+        print(record)
+
+
 def _ollama_tags(endpoint: str) -> dict:
     with urllib.request.urlopen(endpoint + "/api/tags", timeout=8) as response:
         return json.loads(response.read())
@@ -185,7 +318,7 @@ def _write_bot_configs(runtime: dict) -> None:
         old_path = directory / "config.json"
         if old_path.exists():
             continue
-        endpoint = OLLAMA_A if index <= 5 else OLLAMA_B
+        endpoint = ollama_endpoint_for_index(index)
         username = f"play{bot.lower()}"
         config = {
             "game_host": GAME_HOST, "game_port": GAME_PORT,
@@ -196,11 +329,13 @@ def _write_bot_configs(runtime: dict) -> None:
             "ollama_lock_dir": str(RUNTIME / "ollama-locks"),
             "ollama_max_concurrent": 2, "inference_timeout_seconds": 110,
             "decision_interval_seconds": 8,
+            "session_heartbeat_interval_seconds": 4,
             "ollama_retry_seconds": 35, "cooldown_seconds": 8,
             "startup_stagger_max_seconds": 0,
             "reconnect_base_seconds": 3, "reconnect_max_seconds": 60,
             "role_name": role, "primary_objective": objective,
             "turn_reserve": 12,
+            "allow_zero_turn_strategy": index in (3, 4, 8, 9),
             "turn_reset_poll_seconds": 30,
             "turn_reserve_priority_prefixes": (
                 ["planet:", "citadel:"] if index in (3, 4) else
@@ -220,6 +355,8 @@ def _write_bot_configs(runtime: dict) -> None:
             "corporation_name": "TWClone Playtest Founders",
             "corporation_partner_name": "TWClone Playtest Founders",
             "corporation_partner_username": "playbot09" if index == 8 else "playbot08",
+            "corporation_meeting_sector": 1,
+            "corporation_creation_fee": 1000,
             "enable_bank_management": True,
             "enable_planet_creation": True,
             "enable_citadel_management": True,
@@ -245,7 +382,11 @@ def configure_bots() -> None:
         path = RUNTIME / "bots" / bot / "config.json"
         config = json.loads(path.read_text())
         config.update({"turn_reserve": 12, "turn_reset_poll_seconds": 30,
-                       "decision_interval_seconds": 8})
+                       "decision_interval_seconds": 8,
+                       "session_heartbeat_interval_seconds": 4,
+                       "ollama_url": ollama_endpoint_for_index(index),
+                       "ollama_model": MODEL,
+                       "allow_zero_turn_strategy": index in (3, 4, 8, 9)})
         config["turn_reserve_priority_prefixes"] = (
             ["planet:", "citadel:"] if index in (3, 4) else
             ["combat:"] if index in (6, 7) else
@@ -256,6 +397,11 @@ def configure_bots() -> None:
             "corporation_name": "TWClone Playtest Founders",
             "corporation_partner_name": "TWClone Playtest Founders",
             "corporation_partner_username": "playbot09" if index == 8 else "playbot08",
+            "corporation_meeting_sector": 1,
+            "corporation_creation_fee": 1000,
+            "allow_corporation_play": index in (8, 9),
+            "corporation_win_condition": index in (8, 9),
+            "corporation_ai_players": 2 if index in (8, 9) else 0,
         })
         path.write_text(json.dumps(config, indent=2) + "\n")
         path.chmod(0o600)
@@ -471,6 +617,7 @@ def status() -> None:
         metrics = state.get("ai_metrics") or {}
         profile = state.get("ollama_last_profile") or {}
         plan = state.get("strategy_plan") or []
+        blocked_objective = state.get("blocked_objective")
         endpoint = cfg["ollama_url"]
         ship = state.get("ship_info") or {}
         sector = state.get("player_location_sector") or info.get("current_sector", "?")
@@ -503,6 +650,12 @@ def status() -> None:
         current_goal = plan[0] if plan else (
             trace[-1].get("goal") if trace else state.get("strategy_plan_source", "?")
         )
+        baseline = state.get("playtest_process_metric_baseline", {}) or {}
+        connection_metrics = {key: max(0, metrics.get(key, 0) - baseline.get(key, 0)) for key in (
+            "tcp_connections_created", "tcp_connections_closed", "tcp_connect_failures",
+            "authentication_attempts", "authentication_successes", "authentication_failures",
+            "server_initiated_disconnects", "client_initiated_disconnects", "network_exceptions",
+            "session_pings_sent", "session_pings_acknowledged", "server_request_deadline_errors")}
         print(f"{bot}: service={active} endpoint={endpoint} model={cfg['ollama_model']} "
               f"sector={sector} ship={ship_id} turns={turns} "
               f"credits={credits} valid_session={db_player.get('session_valid', False)} objective={objective} "
@@ -518,8 +671,13 @@ def status() -> None:
               f"active={profile.get('active_requests', '?')}) "
               f"inference_errors={metrics.get('ollama_errors', 0)} last={last_action} "
               f"progress={json.dumps(categories, sort_keys=True)} "
-              f"goals_completed={metrics.get('goals_completed', 0)} current_goal={current_goal} "
-              f"reconnects={metrics.get('reconnects', 0)}")
+              f"strategic_goals_completed={metrics.get('strategic_goals_completed', 0)} "
+              f"navigation_goals_completed={metrics.get('navigation_goals_completed', 0)} "
+              f"current_goal={current_goal} "
+              f"blocked={json.dumps(blocked_objective, separators=(',', ':')) if blocked_objective else 'none'} "
+              f"historical_legacy_session_clears={metrics.get('reconnects', 0)} "
+              f"session_state_resets={metrics.get('session_state_resets', 0)} "
+              f"connections={json.dumps(connection_metrics, sort_keys=True)}")
     print("Human count reflects valid auth sessions, not live TCP sockets.")
 
 
@@ -590,6 +748,10 @@ def main() -> int:
     reset = sub.add_parser("reset")
     reset.add_argument("--confirm-reset", action="store_true")
     sub.add_parser("configure-bots", help="Apply turn budgeting and role goals without resetting the universe")
+    grant = sub.add_parser("grant-turns", help="Idempotently replenish turns for the ten isolated playtest bots")
+    grant.add_argument("--amount", type=int, default=1000)
+    grant.add_argument("--grant-id", required=True, help="UUID idempotency key; use a new UUID only for a deliberate additional grant")
+    grant.add_argument("--reason", required=True)
     args = parser.parse_args()
     if args.command == "provision":
         provision(args)
@@ -639,6 +801,8 @@ def main() -> int:
         reset_universe(args)
     elif args.command == "configure-bots":
         configure_bots()
+    elif args.command == "grant-turns":
+        grant_playtest_turns(args.amount, args.grant_id, args.reason)
     return 0
 
 

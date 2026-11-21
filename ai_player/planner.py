@@ -774,6 +774,24 @@ class Planner:
                     logger.warning("Goal 'combat: attack' failed: No targets in sector.")
                     return None
 
+            elif goal_type == "combat" and goal_target == "photon":
+                ship = current_state.get("ship_info") or {}
+                targets = current_state.get("adjacent_ship_targets") or []
+                commands = set(current_state.get("server_commands", []))
+                if int(ship.get("photons", 0) or 0) <= 0 or not targets:
+                    return None
+                if commands and "combat.fire_photon" not in commands:
+                    return None
+                target = next((item for item in targets if isinstance(item, dict)
+                               and item.get("ship_id") is not None
+                               and item.get("sector_id") is not None), None)
+                if target:
+                    return {"command": "combat.fire_photon", "data": {
+                        "sector_id": int(target["sector_id"]),
+                        "target_ship_id": int(target["ship_id"]),
+                    }}
+                return None
+
             elif goal_type == "planet" and goal_target == "land":
                 # Check for planet
                 sector_id = str(current_state.get("player_location_sector"))
@@ -843,6 +861,93 @@ class Planner:
                     "name": str(name)[:64],
                     "owner_entity_type": "player",
                 }}
+
+            elif goal_type == "planet" and goal_target == "develop":
+                ship = current_state.get("ship_info") or {}
+                sector = current_state.get("sector_data", {}).get(str(current_sector), {}) or {}
+                planet = current_state.get("planet_info") or {}
+                commands = set(current_state.get("server_commands", []))
+                if ship.get("onplanet"):
+                    planet_id = (planet.get("planet_id", planet.get("id"))
+                                 or ship.get("planet_id"))
+                    if planet_id is None:
+                        return None
+                    if not planet:
+                        return {"command": "planet.info", "data": {"planet_id": int(planet_id)}}
+                    unassigned = int(planet.get("colonists_unassigned", 0) or 0)
+                    if unassigned > 0 and (not commands or "planet.colonists.allocate" in commands):
+                        ore, organic, equipment = int(unassigned * .4), int(unassigned * .2), int(unassigned * .3)
+                        return {"command": "planet.colonists.allocate", "data": {
+                            "planet_id": int(planet_id), "ore": ore, "organics": organic,
+                            "equipment": equipment, "weapons": unassigned - ore - organic - equipment,
+                        }}
+                    if "planet.harvest" in commands and any(
+                            int(planet.get(key, 0) or 0) > 0
+                            for key in ("ore", "organics", "equipment", "weapons")):
+                        return {"command": "planet.harvest", "data": {"planet_id": int(planet_id)}}
+                    return None
+                if sector.get("has_planet"):
+                    planet_id = self._generate_required_field("planet_id", "planet.land", current_state)
+                    if planet_id is not None and (not commands or "planet.land" in commands):
+                        return {"command": "planet.land", "data": {"planet_id": int(planet_id)}}
+                    return None
+                genesis = int(ship.get("genesis_torpedoes", ship.get("genesis", 0)) or 0)
+                if genesis > 0:
+                    if not self.config.get("enable_planet_creation", True):
+                        return None
+                    return self._achieve_goal(current_state, "planet: create")
+                # A planet cannot be created without the required public
+                # Genesis hardware. Let the dedicated prerequisite goal handle
+                # catalog discovery and purchase only at a supported port.
+                return self._achieve_goal(current_state, "hardware: genesis")
+
+            elif goal_type == "hardware" and goal_target == "genesis":
+                if int((current_state.get("ship_info") or {}).get(
+                        "genesis_torpedoes", (current_state.get("ship_info") or {}).get("genesis", 0)) or 0) > 0:
+                    return self._achieve_goal(current_state, "planet: create")
+                current_key = str(current_sector)
+                checked = {str(value) for value in current_state.get("hardware_catalog_checked_sectors", [])}
+                catalogs = current_state.get("hardware_catalog_by_sector", {}) or {}
+                if self._at_port(current_state):
+                    if current_key not in checked:
+                        return {"command": "hardware.list", "data": {}}
+                    catalog = catalogs.get(current_key, current_state.get("hardware_catalog"))
+                else:
+                    catalog = None
+                items = catalog.get("items", []) if isinstance(catalog, dict) else []
+                item = next((value for value in items if isinstance(value, dict)
+                             and str(value.get("code", "")).upper() in ("GENESIS", "GENESIS_TORPEDO")), None)
+                if item and (not current_state.get("server_commands")
+                             or "hardware.buy" in current_state.get("server_commands", [])):
+                    return {"command": "hardware.buy", "data": {"code": item["code"], "quantity": 1}}
+                if self._at_port(current_state):
+                    known = current_state.get("known_ports", {}) or {}
+                    port_sectors = {str(value.get("sector_id")) for value in known.values()
+                                    if isinstance(value, dict) and value.get("sector_id") is not None}
+                    port_sectors.update(str(key) for key in
+                                        (current_state.get("port_info_by_sector", {}) or {}))
+                    port_sectors.update(str(key) for key, value in
+                                        (current_state.get("sector_data", {}) or {}).items()
+                                        if isinstance(value, dict) and value.get("has_port"))
+                    untried = [int(value) for value in port_sectors
+                               if str(value) not in checked and str(value) != current_key]
+                    target = self._nearest_known_sector(current_state, untried)
+                    if target is not None:
+                        return self._achieve_goal(current_state, f"goto: {target}")
+                else:
+                    known = current_state.get("known_ports", {}) or {}
+                    port_sectors = {str(value.get("sector_id")) for value in known.values()
+                                    if isinstance(value, dict) and value.get("sector_id") is not None}
+                    port_sectors.update(str(key) for key in
+                                        (current_state.get("port_info_by_sector", {}) or {}))
+                    port_sectors.update(str(key) for key, value in
+                                        (current_state.get("sector_data", {}) or {}).items()
+                                        if isinstance(value, dict) and value.get("has_port"))
+                    target = self._nearest_known_sector(current_state, port_sectors)
+                    if target is not None:
+                        return self._achieve_goal(current_state, f"goto: {target}")
+                logger.info("Planet objective blocked: no known untried port can supply Genesis hardware.")
+                return None
 
             elif goal_type == "victory" and goal_target == "claim":
                 victory = current_state.get("victory_status") or {}
@@ -937,7 +1042,10 @@ class Planner:
                 if goal_target == "found":
                     if corp_id:
                         online = current_state.get("online_players")
-                        if online is None:
+                        presence_at = float(current_state.get("online_players_refreshed_at", 0) or 0)
+                        presence_ttl = max(5, int(self.config.get(
+                            "corporation_presence_refresh_seconds", 15)))
+                        if online is None or time.time() - presence_at >= presence_ttl:
                             return {"command": "player.list_online", "data": {"page": 1, "limit": 100}}
                         partner = str(self.config.get("corporation_partner_username", "playbot09"))
                         target = next((item for item in online if isinstance(item, dict)
@@ -950,13 +1058,25 @@ class Planner:
                                 }}
                         return None
                     name = str(self.config.get("corporation_name", "TWClone Playtest Founders"))[:64]
+                    fee = max(0, int(self.config.get("corporation_creation_fee", 1000)))
+                    bank_balance = int(current_state.get("bank_balance", 0) or 0)
+                    if bank_balance < fee:
+                        player_credits = int(float(player.get("credits", 0) or 0))
+                        deposit = fee - bank_balance
+                        if player_credits >= deposit and "bank.deposit" in commands:
+                            return {"command": "bank.deposit", "data": {"amount": deposit}}
+                        logger.warning("Corporation creation is blocked: insufficient bank funds or petty cash for the configured fee.")
+                        return None
                     if not commands or "corp.create" in commands:
                         return {"command": "corp.create", "data": {"name": name}}
                 elif goal_target == "join":
                     if corp_id:
                         return {"command": "corp.status", "data": {}}
                     corporations = current_state.get("corporations")
-                    if corporations is None:
+                    refreshed_at = float(current_state.get("corporations_refreshed_at", 0) or 0)
+                    refresh_after = max(5, int(self.config.get(
+                        "corporation_list_refresh_seconds", 30)))
+                    if (corporations is None or time.time() - refreshed_at >= refresh_after):
                         return {"command": "corp.list", "data": {}}
                     wanted = str(self.config.get("corporation_partner_name", "TWClone Playtest Founders"))
                     candidate = next((item for item in corporations if isinstance(item, dict)
@@ -964,13 +1084,62 @@ class Planner:
                     if candidate and (not commands or "corp.join" in commands):
                         return {"command": "corp.join", "data": {"corp_id": int(candidate["corp_id"])}}
                 elif goal_target == "operate" and corp_id:
-                    return {"command": "corp.status", "data": {}}
+                    if current_state.get("corporation_transfer_completed"):
+                        return {"command": "corp.status", "data": {}}
+                    online = current_state.get("online_players")
+                    presence_at = float(current_state.get("online_players_refreshed_at", 0) or 0)
+                    presence_ttl = max(5, int(self.config.get(
+                        "corporation_presence_refresh_seconds", 15)))
+                    if online is None or time.time() - presence_at >= presence_ttl:
+                        return {"command": "player.list_online", "data": {"page": 1, "limit": 100}}
+                    partner = str(self.config.get("corporation_partner_username", "playbot08"))
+                    target = next((item for item in online if isinstance(item, dict)
+                                   and item.get("username") == partner), None)
+                    if not target:
+                        return None
+                    own_name = str(self.config.get("corporation_name", "TWClone Playtest Founders"))
+                    if target.get("corporation") != own_name:
+                        return None
+                    # player.list_online intentionally omits locations. Both
+                    # opted-in playtest members rendezvous at this configured
+                    # sector; this uses normal public navigation and reveals no
+                    # private player location.
+                    meeting_sector = int(self.config.get("corporation_meeting_sector", 1))
+                    if int(current_state.get("player_location_sector") or 0) != meeting_sector:
+                        return self._achieve_goal(current_state, f"goto: {meeting_sector}")
+                    if "corp.member.transfer" in commands:
+                        return {"command": "corp.member.transfer", "data": {
+                            "target_player_id": int(target["player_id"]),
+                            "asset": "credits", "quantity": 1,
+                        }}
                 return None
 
         except Exception as e:
             logger.error(f"Error in _achieve_goal for '{goal_str}': {e}", exc_info=True)
         
         return None # Fallback
+
+    def _playtest_block_reason(self, current_state, goal):
+        """Explain a role objective that has no safe public action available."""
+        normalized = str(goal or "").strip().lower()
+        if normalized.startswith("planet:"):
+            ship = current_state.get("ship_info") or {}
+            sector = current_state.get("sector_data", {}).get(
+                str(current_state.get("player_location_sector")), {}) or {}
+            if ship.get("onplanet"):
+                planet = current_state.get("planet_info") or {}
+                if int(planet.get("colonists_unassigned", 0) or 0) <= 0:
+                    return "landed world has no unassigned colonists or harvestable resources"
+            elif not sector.get("has_planet") and int(ship.get(
+                    "genesis_torpedoes", ship.get("genesis", 0)) or 0) <= 0:
+                return "no Genesis torpedo; must reach a known port that offers one"
+            elif sector.get("has_planet"):
+                return "planet is present but its public identity or landing eligibility is unavailable"
+        if normalized.startswith("corp:"):
+            return "required corporation state or configured partner is not currently available"
+        if normalized.startswith("combat:"):
+            return "no eligible visible target, ammunition or combat capability is available"
+        return "required public action or prerequisite is unavailable in the current observation"
 
     # --- Bootstrap Logic (Priority 0) ---
     def ensure_minimum_world_state(self, current_state):
@@ -1031,7 +1200,23 @@ class Planner:
             if "has_port" not in sector_data:
                 logger.info(f"Bootstrap: Missing port info for sector {current_sector}. Fetching sector.info.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
-            
+
+            # Landing context is not always included in the initial player and
+            # ship snapshots (notably after a bot process restart). Never treat
+            # an absent planet snapshot as zero population/resources: refresh
+            # the authoritative planet record before planning surface actions.
+            ship_info = current_state.get("ship_info") or {}
+            if ship_info.get("onplanet") and not current_state.get("planet_info"):
+                planet_id = ship_info.get("planet_id")
+                if planet_id is None:
+                    objects = sector_data.get("celestial_objects") or []
+                    planet = next((item for item in objects if isinstance(item, dict)
+                                   and item.get("planet_id") is not None), None)
+                    planet_id = planet.get("planet_id") if planet else None
+                if planet_id is not None and "planet.info" in current_state.get("server_commands", []):
+                    logger.info("Bootstrap: Restoring authoritative planet context for landed ship.")
+                    return {"command": "planet.info", "data": {"planet_id": int(planet_id)}}
+
             # NEW: Periodic refresh (every 60 seconds) to detect enemy ships
             # Get the last refresh timestamp for this sector
             last_refresh = sector_data.get("_last_refreshed", 0)
@@ -1107,12 +1292,6 @@ class Planner:
                 logger.debug(f"Bootstrap command '{bootstrap_cmd['command']}' is on cooldown. Waiting.")
                 return None
         
-        # --- Check for turns remaining ---
-        player_turns_remaining = (current_state.get("player_info") or {}).get("player", {}).get("turns_remaining")
-        if player_turns_remaining is not None and player_turns_remaining <= 0:
-            logger.warning("No turns remaining. Skipping command execution.")
-            return None
-
         # --- 1. Check Invariants (Must-Do Actions) ---
 
         invariant_command = self._check_invariants(current_state)
@@ -1124,9 +1303,18 @@ class Planner:
                 logger.debug(f"Invariant command '{invariant_command['command']}' is on cooldown. Waiting.")
                 return None
 
+        # A playtest role goal reserves its chosen opportunity from opportunistic
+        # trading. Otherwise every role can be pulled back into the same trade
+        # loop before its own objective is executed.
+        priority_prefixes = self.config.get("turn_reserve_priority_prefixes", [])
+        preserve_role_goal = bool(
+            self.config.get("playtest_bot") and current_goal
+            and any(str(current_goal).startswith(prefix) for prefix in priority_prefixes)
+        )
+
         # --- 1.6 Tactical Override: Mandatory Survey & Sell ---
         # Prioritize local port interactions over long-distance travel goals.
-        if self._at_port(current_state):
+        if self._at_port(current_state) and not preserve_role_goal:
             # A. Ensure Survey is Complete
             if not self._survey_complete(current_state):
                 if self._is_command_ready("trade.quote", current_state.get("command_retry_info", {})):
@@ -1163,7 +1351,7 @@ class Planner:
 
         # Continue the same cargo route through intermediate sectors. The
         # destination may require several individual public warp commands.
-        else:
+        elif not preserve_role_goal:
             cargo_route = self._find_port_for_cargo(current_state)
             if cargo_route:
                 target_sector, _commodity = cargo_route
@@ -1172,7 +1360,7 @@ class Planner:
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
         # This prevents the bandit picking non-gameplay cmds (e.g. bank.deposit) and stalling.
-        if (not current_goal) and self._at_port(current_state) and self._survey_complete(current_state):
+        if (not current_goal and not preserve_role_goal) and self._at_port(current_state) and self._survey_complete(current_state):
             current_sector = current_state.get("player_location_sector")
             port_id = self._find_port_in_sector(current_state, current_sector)
             if port_id and port_id not in current_state.get("port_trade_blacklist", []):
@@ -1255,6 +1443,14 @@ class Planner:
                         return None
             else:
                 logger.debug(f"Could not find a valid command for goal: {current_goal}. Falling back to stage logic.")
+                if self.config.get("playtest_bot") and self.config.get("role_name"):
+                    reason = self._playtest_block_reason(current_state, current_goal)
+                    self.state_manager.set("blocked_objective", {
+                        "goal": current_goal, "reason": reason, "updated_at": time.time(),
+                    })
+                    logger.warning("PLAYTEST_OBJECTIVE_BLOCKED role=%s goal=%s reason=%s",
+                                   self.config.get("role_name"), current_goal, reason)
+                    return None
         
         # --- 3. Fallback to Stage-Based Logic ---
         

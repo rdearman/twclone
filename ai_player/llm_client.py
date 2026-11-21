@@ -104,7 +104,7 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
                         endpoint=None, error_report=None, request_timeout=None,
                         num_ctx=4096, num_predict=256, temperature=0.3,
                         keep_alive="30m", lock_dir="/tmp/twclone-ollama-slots",
-                        max_concurrent=2):
+                        max_concurrent=2, goal_choices=None):
     """
     Sends a prompt and game state to the Ollama server and gets a response.
     
@@ -145,10 +145,15 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         return None
 
     # --- Build the request payload for Ollama ---
+    goal_choices = [str(value) for value in (goal_choices or [])
+                    if isinstance(value, str) and value.strip()]
+    goal_item_schema = {"type": "string"}
+    if goal_choices:
+        goal_item_schema["enum"] = list(dict.fromkeys(goal_choices))
     plan_schema = {
         "type": "object",
         "properties": {
-            "plan": {"type": "array", "items": {"type": "string"},
+            "plan": {"type": "array", "items": goal_item_schema,
                      "minItems": 1, "maxItems": 5}
         },
         "required": ["plan"],
