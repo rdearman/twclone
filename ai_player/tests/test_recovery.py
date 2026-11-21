@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 from pathlib import Path
@@ -11,6 +12,8 @@ from main import (advance_completed_goals, align_command_idempotency,
                   _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
                   build_uncertain_trade_retry,
                   uncertain_mutation_readback_requests,
+                  population_turn_readback_required,
+                  successful_expense_readbacks,
                   reconcile_planet_transition_receipt,
                   _confirm_planet_landing_readback)  # noqa: E402
 from planner import Planner  # noqa: E402
@@ -293,10 +296,15 @@ def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(
     assert manager.get("strategy_plan") == ["shipyard: recover"]
     assert manager.get("shipyard_recovery_pending_refresh") is True
     assert manager.get("ship_info")["type_id"] == 2
-    assert [command["command"] for command in connection.sent] == ["ship.info", "player.my_info"]
+    assert [item["command"] for item in manager.get("post_mutation_readbacks")] == [
+        "ship.status", "player.my_info"]
+    p = Planner(manager, None, connection, {"playtest_bot": "BOT03"})
+    refresh_command = p.get_next_command(manager.get_all(), "shipyard: recover")
+    assert refresh_command == {"command": "ship.status", "data": {}}
+    manager.add_pending_command("ship-refresh-1", refresh_command)
 
     process_responses(
-        [{"reply_to": connection.sent[0]["id"], "status": "ok", "type": "ship.status",
+        [{"reply_to": "ship-refresh-1", "status": "ok", "type": "ship.status",
           "data": {"ship": {"id": 56, "type_id": 2,
                              "name": "BOT03 Recovery", "holds": 25,
                              "max_holds": 250, "max_genesis": 5}}}],
@@ -305,12 +313,16 @@ def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(
     )
     assert manager.get("shipyard_recovery_pending_refresh") is False
     assert manager.get("ship_info")["holds"] == 25
+    assert [item["command"] for item in manager.get("post_mutation_readbacks")] == [
+        "player.my_info"]
     assert advance_completed_goals(manager.get("strategy_plan"), manager.get_all()) == []
 
 
 def test_hardware_purchase_receipt_refreshes_authoritative_ship_counts(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.set("ship_info", {"id": 84, "fighters": 0, "shields": 0, "credits": 5000})
+    manager.set("player_info", {"player": {"credits": "5000"}})
+    manager.set("server_commands", ["player.my_info", "ship.status"])
     manager.add_pending_command("fighters-1", {
         "command": "hardware.buy", "data": {"item": "FIGHTERS", "quantity": 10},
     })
@@ -324,6 +336,82 @@ def test_hardware_purchase_receipt_refreshes_authoritative_ship_counts(tmp_path)
 
     assert manager.get("ship_info")["fighters"] == 10
     assert manager.get("ship_info")["shields"] == 0
+    assert manager.get("player_info")["player"]["credits"] == "4000"
+    assert [item["command"] for item in manager.get("post_mutation_readbacks")] == [
+        "player.my_info", "ship.status"]
+
+
+def test_ship_sale_receipt_updates_credit_and_replacement_identity(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("player_info", {"player": {"credits": "100", "ship_id": 12}})
+    manager.set("server_commands", ["player.my_info", "ship.status", "ship.list"])
+    manager.add_pending_command("sale-1", {
+        "command": "ship.sell", "data": {"ship_id": 12, "replacement_ship_id": 13},
+    })
+    process_responses(
+        [{"reply_to": "sale-1", "status": "ok", "type": "ship.sold_v1",
+          "data": {"ship_id": 12, "replacement_ship_id": 13,
+                   "updated_credits": 4500, "sale_id": 99}}],
+        None, manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+    assert manager.get("player_info")["player"]["credits"] == "4500"
+    assert manager.get("player_info")["player"]["ship_id"] == 13
+    assert manager.get("fleet_state")["active_ship_id"] == 13
+    assert [item["command"] for item in manager.get("post_mutation_readbacks")] == [
+        "player.my_info", "ship.status", "ship.list"]
+
+
+def test_expense_receipt_gate_blocks_followup_mutation_until_exact_readbacks(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("post_mutation_readbacks", [
+        {"response_type": "player.my_info", "command": "player.my_info", "data": {}},
+        {"response_type": "ship.status", "command": "ship.status", "data": {}},
+    ])
+    manager.set("server_commands", ["player.my_info", "ship.status", "hardware.buy"])
+    p = Planner(manager, None, None, {"playtest_bot": "BOT06"})
+    assert p.get_next_command({**manager.get_all(), "server_commands": [
+        "player.my_info", "ship.status", "hardware.buy"]}, "combat: readiness") == {
+            "command": "player.my_info", "data": {}}
+    assert successful_expense_readbacks("corp.member.transfer", {
+        "player_info": {"player": {"corp_id": 7}}})[-1] == {
+            "response_type": "corp.roster.success", "command": "corp.roster",
+            "data": {"corp_id": 7}}
+
+
+def test_expense_readback_inventory_covers_purchase_and_transfer_families():
+    expected = {
+        "hardware.buy", "shipyard.upgrade", "shipyard.sell", "ship.sell",
+        "ship.transfer", "ship.transfer_cargo", "bank.deposit", "bank.withdraw",
+        "bank.transfer", "corp.member.transfer", "planet.deposit", "planet.withdraw",
+        "planet.harvest",
+    }
+    assert all(successful_expense_readbacks(command, {"planet_info": {"planet_id": 9}},
+                                            {"planet_id": 9}) for command in expected)
+    assert not population_turn_readback_required("ship.list", {})
+
+
+def test_effectiveness_turn_counter_tracks_spend_but_rebases_on_grant_and_reset(tmp_path):
+    path = str(tmp_path / "state.json")
+    manager = StateManager(path, {})
+    manager.update_player_info({"player": {"turns_remaining": 120}})
+    manager.update_player_info({"player": {"turns_remaining": 117}})
+    manager.update_player_info({"player": {"turns_remaining": 1000}})
+    manager.update_player_info({"player": {"turns_remaining": 993}})
+    assert manager.get("ai_metrics")["turns_observed_consumed"] == 10
+    restarted = StateManager(path, {})
+    restarted.update_player_info({"player": {"turns_remaining": 990}})
+    assert restarted.get("ai_metrics")["turns_observed_consumed"] == 13
+
+
+def test_combat_effectiveness_does_not_count_status_as_a_combat_outcome(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.add_pending_command("status-1", {"command": "combat.status", "data": {}})
+    process_responses(
+        [{"reply_to": "status-1", "status": "ok", "type": "combat.status",
+          "data": {"fighters": 5}}],
+        None, manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+    assert manager.get("ai_metrics")["combat_outcomes_recorded"] == 0
 
 
 def test_rejected_planet_landing_preserves_turn_and_landing_state(tmp_path):
@@ -381,8 +469,8 @@ def test_expired_purchase_is_quarantined_until_authoritative_balance_and_ship_re
         ("player.my_info", "player.my_info")]
     manager.record_uncertain_mutation_readback("player.my_info")
     assert [(item["command"], item["response_type"])
-            for item in manager.uncertain_mutation_readbacks()] == [("ship.info", "ship.info")]
-    manager.record_uncertain_mutation_readback("ship.info")
+            for item in manager.uncertain_mutation_readbacks()] == [("ship.status", "ship.status")]
+    manager.record_uncertain_mutation_readback("ship.status")
     assert manager.uncertain_mutation_readbacks() == []
     assert manager.get("uncertain_mutations") == {}
 
@@ -400,18 +488,47 @@ def test_inflight_purchase_after_restart_requires_same_readbacks(tmp_path):
     assert restarted.uncertain_mutation_readbacks()[0]["command"] == "player.my_info"
 
 
+def test_restart_migrates_legacy_ship_info_readback_to_canonical_response(tmp_path):
+    path = str(tmp_path / "legacy-state.json")
+    manager = StateManager(path, {})
+    manager.mark_uncertain_mutation(
+        "legacy-purchase", "hardware.buy", {"code": "FIGHTERS"},
+        readback_requests=uncertain_mutation_readback_requests("hardware.buy"),
+        readback_types=["player.my_info", "ship.status"],
+    )
+    manager.mark_mutation_timed_out("legacy-purchase")
+    saved = json.loads(Path(path).read_text())
+    marker = saved["uncertain_mutations"]["legacy-purchase"]
+    marker["readback_requests"][1] = ["ship.info", "ship.info", {}]
+    marker["readback_types"][1] = "ship.info"
+    marker["contract"] = {"response_types": ["ship.info"]}
+    Path(path).write_text(json.dumps(saved))
+
+    restarted = StateManager(path, {})
+    reads = restarted.uncertain_mutation_readbacks()
+    assert [(item["command"], item["response_type"]) for item in reads] == [
+        ("player.my_info", "player.my_info")]
+    restarted.record_uncertain_mutation_readback("player.my_info")
+    assert [(item["command"], item["response_type"])
+            for item in restarted.uncertain_mutation_readbacks()] == [
+                ("ship.status", "ship.status")]
+    restarted.record_uncertain_mutation_readback("ship.status")
+    assert restarted.uncertain_mutation_readbacks() == []
+    assert restarted.get("uncertain_mutations") == {}
+
+
 def test_expensive_transfer_and_planet_mutations_have_public_readbacks():
     corp_reads = uncertain_mutation_readback_requests(
         "corp.member.transfer", {}, {"player_info": {"player": {"corp_id": 4}}})
     assert [item[1] for item in corp_reads] == [
-        "player.my_info", "ship.info", "corp.status", "corp.balance", "corp.roster"]
+        "player.my_info", "ship.status", "corp.status", "corp.balance", "corp.roster"]
     planet_reads = uncertain_mutation_readback_requests("planet.deposit", {"planet_id": 27})
-    assert [item[1] for item in planet_reads] == ["player.my_info", "ship.info", "planet.info"]
+    assert [item[1] for item in planet_reads] == ["player.my_info", "ship.status", "planet.info"]
     assert [item[1] for item in uncertain_mutation_readback_requests("planet.deposit", {})] == [
-        "player.my_info", "ship.info"]
+        "player.my_info", "ship.status"]
     assert [item[1] for item in uncertain_mutation_readback_requests(
         "planet.genesis_create", {}, {"player_location_sector": 19})] == [
-            "player.my_info", "ship.info", "sector.info"]
+            "player.my_info", "ship.status", "sector.info"]
 
 
 def test_recipient_side_transfer_ambiguity_fails_closed_after_source_readback(tmp_path):
@@ -441,7 +558,7 @@ def test_late_transfer_receipt_releases_manual_ambiguity(tmp_path):
         manual_review_after_readback=True,
     )
     manager.mark_mutation_timed_out("transfer-late")
-    for response_type in ("player.my_info", "ship.info", "corp.status.success",
+    for response_type in ("player.my_info", "ship.status", "corp.status.success",
                           "corp.balance.success", "corp.roster.success"):
         manager.record_uncertain_mutation_readback(response_type)
     assert manager.unresolved_manual_mutations()

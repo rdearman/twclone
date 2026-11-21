@@ -161,7 +161,7 @@ class Planner:
     def _combat_readiness_command(self, current_state):
         """Repair or retreat before taking avoidable combat risk."""
         if str(self.config.get("role_name", "")).strip().lower() not in (
-                "pirate", "bounty hunter"):
+                "pirate", "bounty hunter", "opportunist"):
             return None
         ship = current_state.get("ship_info") or {}
         try:
@@ -440,7 +440,7 @@ class Planner:
             except (TypeError, ValueError):
                 min_holds = 25
             return {"max_genesis": 1, "max_holds": min_holds}
-        if role in ("pirate", "bounty hunter"):
+        if role in ("pirate", "bounty hunter", "opportunist"):
             try:
                 min_fighters = max(1, int(self.config.get("combat_min_fighters", 10)))
                 min_shields = max(0, int(self.config.get("combat_min_shields", 5)))
@@ -1935,6 +1935,20 @@ class Planner:
         """
         Selects the next command, prioritizing the strategic goal.
         """
+
+        # A completed purchase/transfer receipt can omit one of the affected
+        # balances or inventory views. Do not let a new mutation consume the
+        # same stale snapshot before the required public readbacks arrive.
+        pending_refreshes = current_state.get("post_mutation_readbacks") or []
+        if pending_refreshes:
+            refresh = pending_refreshes[0]
+            command_name = refresh.get("command")
+            advertised = set(current_state.get("server_commands", []))
+            if (not command_name or (advertised and command_name not in advertised)
+                    or not self._is_command_ready(command_name,
+                                                  current_state.get("command_retry_info", {}))):
+                return None
+            return {"command": command_name, "data": refresh.get("data", {})}
         
         # --- QA Workflow Mode: Direct Command Execution ---
         # If goal is "execute: <command>", extract and execute the command directly (no overrides)

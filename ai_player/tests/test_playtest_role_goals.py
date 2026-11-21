@@ -662,6 +662,34 @@ def test_combat_role_purchases_missing_equipment_before_resuming_combat():
         "command": "hardware.buy", "data": {"code": "SHIELDS", "quantity": 5}}
 
 
+def test_opportunist_acquires_combat_equipment_before_combat_goals():
+    p = planner({"role_name": "Opportunist", "combat_min_fighters": 10,
+                 "combat_min_shields": 5})
+    state = {
+        "player_location_sector": 409,
+        "sector_data": {"409": {"has_port": True}},
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "shields": 0, "max_fighters": 250, "max_shields": 100},
+        "player_info": {"player": {"credits": "10000"}},
+        "server_commands": ["hardware.list", "hardware.buy", "combat.attack"],
+        "hardware_catalog_checked_sectors": ["409"],
+        "hardware_catalog_by_sector": {"409": {"items": [
+            {"code": "FIGHTERS", "price": 100, "stock_quantity": 10},
+            {"code": "SHIELDS", "price": 100, "stock_quantity": 5},
+        ]}},
+    }
+    assert p._combat_readiness_command(state) == {
+        "command": "hardware.buy", "data": {"code": "FIGHTERS", "quantity": 10}}
+    assert "combat: attack" not in _role_goal_options(
+        "Opportunist", state,
+        {"visible_ship_targets": [{"ship_id": 12, "hostile": True}]}, {})
+    state["ship_info"].update({"fighters": 10, "shields": 5})
+    assert _role_goal_options("Opportunist", state,
+                              {"visible_ship_targets": [{"ship_id": 12, "hostile": True}]}, {}) == [
+                                  "combat: attack"]
+    assert "combat.attack" in _role_action_inventory("Opportunist", ["combat.attack", "trade.buy"])
+
+
 def test_combat_readiness_builds_equipment_incrementally_with_limited_credits():
     p = planner({"role_name": "Pirate", "combat_min_fighters": 10,
                  "combat_min_shields": 5})

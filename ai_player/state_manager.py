@@ -44,6 +44,7 @@ class StateManager:
             "recent_sectors": [],       # NEW: To avoid ping-ponging
             "pending_commands": {},     # NEW: To track sent commands for error correlation
             "uncertain_mutations": {},  # Durable ambiguity markers for every mutating command
+            "post_mutation_readbacks": [],  # Gate new writes until expense receipts are reconciled
             "port_trade_blacklist": [], # NEW: List of ports that failed on trade
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "sector_danger": {},        # Persisted hazard/interdiction risk by sector
@@ -85,6 +86,9 @@ class StateManager:
                 "trade_unprofitable_cycles": 0,
                 "trade_failed_routes": 0,
                 "trade_cargo_utilization_percent": 0.0,
+                "turns_observed_consumed": 0,
+                "new_sectors_discovered": 0,
+                "combat_outcomes_recorded": 0,
                 "planned_route_hops": 0,
                 "completed_warps": 0,
                 "reconnects": 0,
@@ -144,6 +148,45 @@ class StateManager:
         except Exception as e:
             logger.error(f"Error loading state: {e}. Starting fresh.")
             # Don't save here, just use default state
+        self._normalize_legacy_ship_readbacks()
+
+    def _normalize_legacy_ship_readbacks(self):
+        """Migrate ambiguous-write markers to the server's canonical ship.status reply."""
+        changed = False
+        for marker in (self.state.get("uncertain_mutations") or {}).values():
+            if not isinstance(marker, dict):
+                continue
+            requests = marker.get("readback_requests")
+            if isinstance(requests, list):
+                for request in requests:
+                    if (isinstance(request, list) and len(request) >= 2
+                            and request[0] == "ship.info"):
+                        request[0] = "ship.status"
+                        if request[1] == "ship.info":
+                            request[1] = "ship.status"
+                        changed = True
+            types = marker.get("readback_types")
+            if isinstance(types, list) and "ship.info" in types:
+                marker["readback_types"] = [
+                    "ship.status" if value == "ship.info" else value for value in types
+                ]
+                changed = True
+            seen = marker.get("readbacks_seen")
+            if isinstance(seen, list) and "ship.info" in seen:
+                marker["readbacks_seen"] = [
+                    "ship.status" if value == "ship.info" else value for value in seen
+                ]
+                changed = True
+            contract = marker.get("contract")
+            if isinstance(contract, dict) and isinstance(contract.get("response_types"), list):
+                normalized = ["ship.status" if value == "ship.info" else value
+                              for value in contract["response_types"]]
+                if normalized != contract["response_types"]:
+                    contract["response_types"] = normalized
+                    changed = True
+        if changed:
+            logger.info("Normalized legacy ship.info mutation readbacks to ship.status.")
+            self.save_state()
 
     def save_state(self):
         """Saves the current state to the state file."""
@@ -451,15 +494,21 @@ class StateManager:
                 logger.info("Removed stale warp blacklist entries confirmed by sector %s: %s",
                             sector_id, stale_blacklist)
 
-        self.state['sector_data'][str(sector_id)] = enriched_data
+        sector_key = str(sector_id)
+        was_known = (sector_key in self.state['sector_data']
+                     or bool((self.state.get("universe_map") or {}).get(sector_key, {}).get("is_explored")))
+        self.state['sector_data'][sector_key] = enriched_data
         if 'universe_map' not in self.state:
             self.state['universe_map'] = {}
         
-        if str(sector_id) not in self.state['universe_map']:
-            self.state['universe_map'][str(sector_id)] = {}
+        if sector_key not in self.state['universe_map']:
+            self.state['universe_map'][sector_key] = {}
         
         self.state['universe_map'][str(sector_id)]['is_explored'] = True
         self.state['universe_map'][str(sector_id)]['has_port'] = enriched_data.get('has_port', False)
+        if not was_known:
+            metrics = self.state.setdefault("ai_metrics", {})
+            metrics["new_sectors_discovered"] = int(metrics.get("new_sectors_discovered", 0) or 0) + 1
 
         self.save_state()
 
@@ -606,6 +655,8 @@ class StateManager:
             key: value for key, value in outcome.items() if key in allowed
         }})
         del history[:-50]
+        metrics = self.state.setdefault("ai_metrics", {})
+        metrics["combat_outcomes_recorded"] = int(metrics.get("combat_outcomes_recorded", 0) or 0) + 1
         self.save_state()
 
     def record_fleet_snapshot(self, ships):
@@ -973,6 +1024,24 @@ class StateManager:
             p_obj = player_data
 
         if p_obj:
+            turns_value = p_obj.get("turns_remaining")
+            if turns_value is not None:
+                try:
+                    observed_turns = max(0, int(turns_value))
+                    prior_turns = self.state.get("last_observed_turns_remaining")
+                    if prior_turns is not None:
+                        prior_turns = max(0, int(prior_turns))
+                        if observed_turns < prior_turns:
+                            metrics = self.state.setdefault("ai_metrics", {})
+                            metrics["turns_observed_consumed"] = (
+                                int(metrics.get("turns_observed_consumed", 0) or 0)
+                                + prior_turns - observed_turns
+                            )
+                    # Increases are grants or daily resets; rebase without
+                    # counting them as negative consumption.
+                    self.state["last_observed_turns_remaining"] = observed_turns
+                except (TypeError, ValueError):
+                    pass
             if self.state['player_info'] is None:
                 self.state['player_info'] = {}
             

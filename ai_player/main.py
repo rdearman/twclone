@@ -193,7 +193,7 @@ def population_turn_readback_required(command_name, config):
     """Whether a successful command may have consumed a server turn."""
     read_only = {
         "auth.login", "auth.register", "player.my_info", "player.info", "player.ping",
-        "ship.info", "ship.status", "sector.info", "trade.port_info", "trade.quote",
+        "ship.info", "ship.status", "ship.list", "sector.info", "trade.port_info", "trade.quote",
         "bank.balance", "bank.history", "bank.statement", "corp.status", "corp.balance",
         "corp.roster", "corp.list", "ship.inspect", "shipyard.list", "combat.status",
         "planet.info", "trade.history", "trade.offer.list", "notes.list",
@@ -265,23 +265,23 @@ def _confirm_planet_landing_readback(state_manager, response_type):
 def mutation_reconciliation_contract(command_name):
     """Describe authoritative evidence required before clearing ambiguity."""
     contracts = {
-        "trade.buy": ["trade.buy_receipt_v1", "player.my_info", "ship.info"],
-        "trade.sell": ["trade.sell_receipt_v1", "player.my_info", "ship.info"],
-        "move.warp": ["move.result", "player.my_info", "ship.info"],
+        "trade.buy": ["trade.buy_receipt_v1", "player.my_info", "ship.status"],
+        "trade.sell": ["trade.sell_receipt_v1", "player.my_info", "ship.status"],
+        "move.warp": ["move.result", "player.my_info", "ship.status"],
         "bank.deposit": ["bank.balance", "player.my_info"],
         "bank.withdraw": ["bank.balance", "player.my_info"],
-        "ship.upgrade": ["ship.info", "player.my_info"],
-        "planet.land": ["planet.land.success", "player.my_info", "ship.info"],
-        "planet.launch": ["planet.launch.success", "player.my_info", "ship.info"],
-        "port.dock": ["player.dock.v1", "player.my_info", "ship.info"],
-        "move.transwarp": ["move.result", "player.my_info", "ship.info"],
+        "ship.upgrade": ["ship.status", "player.my_info"],
+        "planet.land": ["planet.land.success", "player.my_info", "ship.status"],
+        "planet.launch": ["planet.launch.success", "player.my_info", "ship.status"],
+        "port.dock": ["player.dock.v1", "player.my_info", "ship.status"],
+        "move.transwarp": ["move.result", "player.my_info", "ship.status"],
         "move.autopilot.start": ["move.autopilot.route_v1", "player.my_info"],
         "move.autopilot.control": ["move.autopilot.controlled_v1", "player.my_info"],
         "move.autopilot.stop": ["move.autopilot.stopped_v1", "player.my_info"],
-        "planet.deposit": ["player.planet_transfer.v1", "planet.info", "ship.info"],
-        "planet.withdraw": ["player.planet_transfer.v1", "planet.info", "ship.info"],
+        "planet.deposit": ["player.planet_transfer.v1", "planet.info", "ship.status"],
+        "planet.withdraw": ["player.planet_transfer.v1", "planet.info", "ship.status"],
         "planet.fighters.transfer": ["planet.fighters.transferred_v1", "planet.info"],
-        "planet.colonists.set": ["planet.colonists.set", "planet.info", "player.my_info", "ship.info"],
+        "planet.colonists.set": ["planet.colonists.set", "planet.info", "player.my_info", "ship.status"],
         "planet.colonists.get": ["planet.colonists.get"],
         "planet.colonists.allocate": ["planet.info", "player.my_info"],
         "planet.genesis_create": ["planet.genesis_created_v1", "planet.info", "player.my_info"],
@@ -302,12 +302,12 @@ def mutation_reconciliation_contract(command_name):
         "corp.withdraw": ["corp.withdraw.success", "corp.balance"],
         "corp.set_tax": ["corp.status"],
         "corp.issue_dividend": ["corp.status", "corp.balance"],
-        "hardware.buy": ["ship.info", "player.my_info"],
-        "shipyard.upgrade": ["ship.info", "player.my_info"],
-        "ship.repair": ["ship.info", "player.my_info"],
-        "ship.transfer_cargo": ["ship.info", "player.my_info"],
-        "ship.jettison": ["ship.info"],
-        "ship.rename": ["ship.info"],
+        "hardware.buy": ["ship.status", "player.my_info"],
+        "shipyard.upgrade": ["ship.status", "player.my_info"],
+        "ship.repair": ["ship.status", "player.my_info"],
+        "ship.transfer_cargo": ["ship.status", "player.my_info"],
+        "ship.jettison": ["ship.status"],
+        "ship.rename": ["ship.status"],
         "notes.set": ["player.note.set_v1", "notes.list"],
         "notes.delete": ["player.note.deleted_v1", "notes.list"],
         "fine.pay": ["fine.paid", "player.my_info"],
@@ -315,13 +315,13 @@ def mutation_reconciliation_contract(command_name):
         "trade.offer": ["trade.offer.created_v1", "player.my_info"],
         "trade.accept": ["trade.offer.accepted_v1", "player.my_info"],
         "trade.cancel": ["trade.offer.cancelled_v1", "player.my_info"],
-        "combat.attack.ship": ["combat.ship_damage.v1", "ship.info", "player.my_info"],
-        "combat.attack.port": ["player.port_strike.v1", "player.my_info", "ship.info"],
-        "combat.attack_planet": ["player.attack_planet.v1", "planet.info", "ship.info"],
-        "move.intercept": ["move.result", "player.my_info", "ship.info"],
-        "ship.repair": ["ship.repair", "player.my_info", "ship.info"],
-        "fighters.recall": ["combat.fighters.deployed", "sector.info", "ship.info"],
-        "mines.recall": ["combat.mines.recalled", "sector.info", "ship.info"],
+        "combat.attack.ship": ["combat.ship_damage.v1", "ship.status", "player.my_info"],
+        "combat.attack.port": ["player.port_strike.v1", "player.my_info", "ship.status"],
+        "combat.attack_planet": ["player.attack_planet.v1", "planet.info", "ship.status"],
+        "move.intercept": ["move.result", "player.my_info", "ship.status"],
+        "ship.repair": ["ship.repair", "player.my_info", "ship.status"],
+        "fighters.recall": ["combat.fighters.deployed", "sector.info", "ship.status"],
+        "mines.recall": ["combat.mines.recalled", "sector.info", "ship.status"],
         "notice.ack": ["notice.acknowledged", "notice.list"],
         "nav.avoid.add": ["nav.avoid.add", "nav.avoid.list"],
         "nav.avoid.remove": ["nav.avoid.remove", "nav.avoid.list"],
@@ -339,11 +339,11 @@ def uncertain_mutation_readback_requests(command_name, data=None, current_state=
     data = data or {}
     current_state = current_state or {}
     base = [("player.my_info", "player.my_info", {}),
-            ("ship.info", "ship.info", {})]
+            ("ship.status", "ship.status", {})]
     if command_name in {"hardware.buy", "shipyard.sell", "shipyard.upgrade",
                         "ship.repair", "trade.buy", "trade.sell"}:
         return [("player.my_info", "player.my_info", {}),
-                ("ship.info", "ship.info", {})]
+                ("ship.status", "ship.status", {})]
     if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
         return [("player.my_info", "player.my_info", {}),
                 ("bank.balance", "bank.balance", {})]
@@ -386,6 +386,56 @@ def uncertain_mutation_readback_requests(command_name, data=None, current_state=
     # Conservative fallback for any other state-changing command: refresh
     # account and active-ship state before the planner can submit it again.
     return list(base)
+
+
+def successful_expense_readbacks(command_name, current_state=None, data=None):
+    """Authoritative views needed before planning after expensive writes.
+
+    These are deliberately limited to purchases and ownership/resource
+    transfers. A successful receipt may be sufficient for the immediate UI,
+    but the next strategic action must use refreshed balances and inventory.
+    """
+    state = current_state or {}
+    data = data or {}
+    base = lambda *items: [
+        {"response_type": response_type, "command": command, "data": data}
+        for response_type, command, data in items
+    ]
+    if command_name == "hardware.buy":
+        return base(("player.my_info", "player.my_info", {}),
+                    ("ship.status", "ship.status", {}))
+    if command_name == "shipyard.upgrade":
+        return base(("ship.status", "ship.status", {}),
+                    ("player.my_info", "player.my_info", {}))
+    if command_name in {"ship.sell", "shipyard.sell", "ship.transfer"}:
+        return base(("player.my_info", "player.my_info", {}),
+                    ("ship.status", "ship.status", {}),
+                    ("ship.list.response", "ship.list", {}))
+    if command_name == "ship.transfer_cargo":
+        return base(("ship.status", "ship.status", {}))
+    if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
+        return base(("player.my_info", "player.my_info", {}),
+                    ("bank.balance", "bank.balance", {}))
+    if command_name == "corp.member.transfer":
+        player = ((state.get("player_info") or {}).get("player") or {})
+        corp_id = player.get("corp_id")
+        requests = base(("player.my_info", "player.my_info", {}),
+                        ("ship.status", "ship.status", {}),
+                        ("corp.status.success", "corp.status", {}),
+                        ("corp.balance.success", "corp.balance", {}))
+        if corp_id is not None:
+            requests.append({"response_type": "corp.roster.success",
+                             "command": "corp.roster", "data": {"corp_id": corp_id}})
+        return requests
+    if command_name in {"planet.deposit", "planet.withdraw", "planet.harvest"}:
+        planet_id = data.get("planet_id") or (state.get("planet_info") or {}).get("planet_id")
+        requests = base(("player.my_info", "player.my_info", {}),
+                        ("ship.status", "ship.status", {}))
+        if planet_id is not None:
+            requests.append({"response_type": "planet.info", "command": "planet.info",
+                             "data": {"planet_id": planet_id}})
+        return requests
+    return []
 
 
 def classify_protocol_outcome(response, config):
@@ -849,7 +899,12 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
     if eligible_combat_targets(filtered_state.get("visible_ship_targets"),
                                game_state.get("opponent_model"),
                                float(config.get("combat_target_threat_threshold", 25.0))):
-        options.append("combat: attack")
+        ship = game_state.get("ship_info") or {}
+        combat_ready = (role != "opportunist"
+                        or (int(ship.get("fighters", 0) or 0) >= int(config.get("combat_min_fighters", 10))
+                            and int(ship.get("shields", 0) or 0) >= int(config.get("combat_min_shields", 5))))
+        if combat_ready:
+            options.append("combat: attack")
     if filtered_state.get("current_port"):
         options.extend(("buy: ORE", "sell: ORE"))
     return options[:8] or ["scan: density"]
@@ -864,7 +919,7 @@ def _role_action_inventory(role_name, commands):
     elif role in ("corporation founder", "corporate operative"):
         prefixes = ("corp.", "move.", "sector.")
         extra = {"player.list_online", "player.my_info", "bank.deposit", "bank.balance"}
-    elif role in ("pirate", "bounty hunter"):
+    elif role in ("pirate", "bounty hunter", "opportunist"):
         prefixes = ("combat.", "photon.", "move.", "sector.", "ship.", "hardware.")
         extra = {"ship.info", "ship.status", "player.my_info"}
     elif role in ("trader", "merchant"):
@@ -2632,6 +2687,14 @@ def main(config_path="config.json"):
                 "session_pings_sent", "session_pings_acknowledged", "server_request_deadline_errors",
             )
         })
+        state_manager.set("playtest_effectiveness_baseline", {
+            key: metrics.get(key, 0) for key in (
+                "turns_observed_consumed", "new_sectors_discovered",
+                "trade_cycles_completed", "trade_cycle_profit_credits",
+                "trade_unprofitable_cycles", "trade_navigation_turns",
+                "trade_cargo_utilization_percent", "combat_outcomes_recorded",
+            )
+        })
     game_conn = GameConnection(game_host, game_port, state_manager)
     bug_reporter = BugReporter(bug_path)
     
@@ -3533,12 +3596,39 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         if not isinstance(response_data, dict):
             logger.warning("Expected object payload in %s reply; ignoring malformed payload.", response_type)
             response_data = {}
+        if response.get("status") == "ok" and sent_command:
+            refreshes = successful_expense_readbacks(
+                sent_command.get("command", ""), game_state_before,
+                sent_command.get("data") or {},
+            )
+            advertised = set(game_state_before.get("server_commands") or [])
+            refreshes = [item for item in refreshes
+                         if not advertised or item["command"] in advertised]
+            if refreshes:
+                pending_refreshes = list(state_manager.get("post_mutation_readbacks", []) or [])
+                for item in refreshes:
+                    if item not in pending_refreshes:
+                        pending_refreshes.append(item)
+                state_manager.set("post_mutation_readbacks", pending_refreshes)
+
+        if (response.get("status") == "ok" and sent_command
+                and state_manager.get("post_mutation_readbacks")):
+            pending_refreshes = list(state_manager.get("post_mutation_readbacks", []) or [])
+            matched = next((item for item in pending_refreshes
+                            if item.get("response_type") == response_type
+                            and item.get("command") == sent_command.get("command")), None)
+            if matched:
+                pending_refreshes.remove(matched)
+                state_manager.set("post_mutation_readbacks", pending_refreshes)
         if response_type in ("hardware.purchase_v1", "hardware.buy"):
             # A successful purchase receipt carries authoritative post-purchase
             # ship counts. Reconcile them before the next planning pass; using
             # the pre-purchase snapshot can otherwise buy the same equipment
             # repeatedly with a fresh idempotency key.
             purchased_ship = response_data.get("ship")
+            # Equipment receipts include installed ship values but may omit the
+            # player's post-purchase balance. The mutation gate requires fresh
+            # account and ship views before another costly operation.
             if isinstance(purchased_ship, dict):
                 ship = dict(state_manager.get("ship_info") or {})
                 ship.update(purchased_ship)
@@ -3549,6 +3639,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     if key in response_data:
                         ship[key] = response_data[key]
                 state_manager.update_player_info({"ship": ship})
+            if response_data.get("credits_remaining") is not None:
+                player_info = state_manager.get("player_info") or {}
+                player = dict(player_info.get("player") or {})
+                player["credits"] = str(response_data["credits_remaining"])
+                state_manager.update_player_info({"player": player})
         if response_type == "player.list_online" and isinstance(response_data.get("players"), list):
             state_manager.set("online_players", response_data["players"])
             state_manager.set("online_players_refreshed_at", time.time())
@@ -4136,21 +4231,27 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     })
                     state_manager.update_player_info({"ship": ship})
                     state_manager.set("shipyard_recovery_pending_refresh", True)
-                    for refresh_name in ("ship.info", "player.my_info"):
-                        refresh_id = str(uuid.uuid4())
-                        refresh = {
-                            "id": f"c-shipyard-refresh-{refresh_id[:8]}",
-                            "command": refresh_name,
-                            "data": {},
-                            "meta": {
-                                "client_version": config.get("client_version"),
-                                "idempotency_key": refresh_id,
-                                "session_token": state_manager.get("session_id"),
-                            },
-                        }
-                        if game_conn.send_command(refresh):
-                            state_manager.add_pending_command(refresh["id"], refresh)
-                            state_manager.record_ai_metric("commands_sent")
+
+                elif response_type == "ship.sold_v1":
+                    # The sale receipt is authoritative for proceeds and the
+                    # replacement identity. The full refresh gate obtains the
+                    # replacement ship's capacities before another purchase.
+                    player_info = state_manager.get("player_info") or {}
+                    player = dict(player_info.get("player") or {})
+                    if response_data.get("updated_credits") is not None:
+                        player["credits"] = str(response_data["updated_credits"])
+                    if response_data.get("replacement_ship_id") is not None:
+                        player["ship_id"] = response_data["replacement_ship_id"]
+                    state_manager.update_player_info({"player": player})
+                    fleet = state_manager.get("fleet_state") or {"ships": {}}
+                    ships = dict(fleet.get("ships") or {})
+                    if response_data.get("ship_id") is not None:
+                        ships.pop(str(response_data["ship_id"]), None)
+                    state_manager.set("fleet_state", {
+                        **fleet, "ships": ships,
+                        "active_ship_id": response_data.get("replacement_ship_id",
+                                                             fleet.get("active_ship_id")),
+                    })
 
                 elif response_type == "dock.status_v1":
                     ship = dict(state_manager.get("ship_info") or {})
@@ -4198,7 +4299,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     victory = response_data.get("victory") or response_data.get("game_status")
                     if isinstance(victory, dict):
                         state_manager.set("victory_status", victory)
-                    if response_type.startswith("combat.") or response_type.startswith("player.attack"):
+                    if response_type in {
+                            "combat.attack.result", "combat.photon_fired_v1",
+                            "player.attack_planet.v1"}:
                         state_manager.record_combat_outcome(response_data)
                         target = response_data.get("target_player_id") or response_data.get("player_id")
                         if target is not None:

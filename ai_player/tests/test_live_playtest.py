@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import time
 
 import pytest
 
@@ -17,7 +18,7 @@ def test_playtest_contract_uses_ten_bots_and_fixed_model_on_both_hosts():
     assert all("Primary" in objective or objective for _, objective, _ in live.BOT_ROLES)
 
 
-def test_generated_configs_use_two_independent_ollama_endpoints(tmp_path, monkeypatch):
+def test_generated_configs_use_only_the_approved_z820_ollama_endpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "RUNTIME", tmp_path)
     monkeypatch.setattr(live, "check_ollama", lambda: {"A": {}, "B": {}})
     runtime = {}
@@ -28,7 +29,7 @@ def test_generated_configs_use_two_independent_ollama_endpoints(tmp_path, monkey
         assert config["strategy_mode"] == "ollama"
         assert config["require_llm_decisions"] is True
         assert config["ollama_model"] == "qwen3:8b"
-        assert config["ollama_url"] == (live.OLLAMA_A if index <= 5 else live.OLLAMA_B)
+        assert config["ollama_url"] == live.OLLAMA_B
         assert config["ollama_max_concurrent"] == 2
         assert config["ollama_num_ctx"] == 4096
         assert config["ollama_num_predict"] == 256
@@ -45,7 +46,7 @@ def test_runtime_reconciliation_fixes_bot10_endpoint_without_replacing_identity(
         path = tmp_path / "bots" / f"BOT{index:02d}" / "config.json"
         path.parent.mkdir(parents=True)
         path.write_text(live.json.dumps({
-            "ollama_url": live.OLLAMA_A, "ollama_model": live.MODEL,
+            "ollama_url": "http://old-endpoint.invalid:11434", "ollama_model": live.MODEL,
             "player_username": f"playbot{index:02d}", "player_password": "preserve-this",
             "role_name": live.BOT_ROLES[index - 1][0],
         }))
@@ -98,6 +99,14 @@ def test_dashboard_counts_successful_gameplay_actions_but_not_read_only_queries(
     ]
 
 
+def test_effectiveness_action_window_excludes_older_append_only_log_entries():
+    now = time.time()
+    old = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 3600))
+    recent = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+    assert live.actions_since(now - 10, [(old, "trade.buy"), (recent, "trade.sell")]) == [
+        (recent, "trade.sell")]
+
+
 def test_role_effectiveness_reports_completed_trade_economics_not_activity_only():
     result = live.role_effectiveness_summary("Trader", {
         "trade_cycle_history": [
@@ -112,6 +121,38 @@ def test_role_effectiveness_reports_completed_trade_economics_not_activity_only(
     assert result["navigation_turns_per_cycle"] == 1.5
     assert result["profit_per_navigation_turn"] == 150
     assert result["average_cargo_utilization_percent"] == 60
+
+
+def test_role_effectiveness_normalizes_meaningful_outcomes_by_observed_turns():
+    result = live.role_effectiveness_summary("Trader", {
+        "ai_metrics": {"turns_observed_consumed": 50},
+        "trade_cycle_history": [{"profit": 500, "navigation_turns": 2,
+                                  "cargo_utilization_percent": 80}],
+    }, [("10:00", "trade.buy"), ("10:01", "trade.sell")])
+    assert result["observed_turns_consumed"] == 50
+    assert result["non_navigation_actions_per_100_turns"] == 4
+    assert result["realized_trade_profit_per_100_turns"] == 1000
+    assert result["profitable_cycles_per_100_turns"] == 2
+
+
+def test_role_effectiveness_preserves_net_trade_losses():
+    result = live.role_effectiveness_summary("Trader", {
+        "ai_metrics": {"turns_observed_consumed": 50,
+                       "trade_cycles_completed": 1,
+                       "trade_cycle_profit_credits": -100,
+                       "trade_unprofitable_cycles": 1},
+        "playtest_effectiveness_baseline": {
+            "turns_observed_consumed": 0, "trade_cycles_completed": 0,
+            "trade_cycle_profit_credits": 0, "trade_unprofitable_cycles": 0,
+        },
+    }, [])
+    assert result["realized_trade_profit_credits"] == -100
+    assert result["realized_trade_profit_per_100_turns"] == -200
+
+
+def test_bot_endpoint_assignment_never_selects_local_ollama():
+    assert {live.ollama_endpoint_for_index(index) for index in range(1, 11)} == {
+        "http://192.168.25.20:11434"}
 
 
 def test_turn_grant_is_database_scoped_idempotent_and_audited(tmp_path, monkeypatch):

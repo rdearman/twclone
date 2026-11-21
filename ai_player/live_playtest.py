@@ -31,7 +31,6 @@ DB_PORT = 55639
 GAME_HOST = "192.168.25.5"
 GAME_PORT = 12484
 UNIVERSE_SEED = 2026112001
-OLLAMA_A = "http://192.168.25.5:11434"
 OLLAMA_B = "http://192.168.25.20:11434"
 MODEL = "qwen3:8b"
 MODEL_ID = "500a1f067a9f"
@@ -39,8 +38,9 @@ PLAYTEST_BOT_USERS = tuple(f"playbot{i:02d}" for i in range(1, 11))
 
 
 def ollama_endpoint_for_index(index: int) -> str:
-    """Return the configured five/five Ollama assignment."""
-    return OLLAMA_A if int(index) <= 5 else OLLAMA_B
+    """All playtest inference must use the approved .20 Ollama endpoint."""
+    int(index)  # Validate the caller still supplies a bot index.
+    return OLLAMA_B
 BOT_ROLES = [
     ("Trader", "Maximise credits through profitable public port trades.", "trader"),
     ("Merchant", "Discover and repeat profitable trade routes.", "trader"),
@@ -97,6 +97,22 @@ def completed_gameplay_actions(bot: str, log_text: str) -> list[tuple[str, str]]
     return actions
 
 
+def actions_since(started_at: float | None,
+                  actions: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Filter the append-only service log to the current process window."""
+    if not started_at:
+        return actions
+    result = []
+    for timestamp, command in actions:
+        try:
+            action_time = time.mktime(time.strptime(timestamp, "%Y-%m-%d %H:%M:%S"))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if action_time >= float(started_at):
+            result.append((timestamp, command))
+    return result
+
+
 def role_effectiveness_summary(role: str, state: dict,
                                actions: list[tuple[str, str]]) -> dict:
     """Summarize acknowledged outcomes without treating activity as success."""
@@ -105,7 +121,27 @@ def role_effectiveness_summary(role: str, state: dict,
         category = action_category(command)
         categories[category] = categories.get(category, 0) + 1
     role_key = role.strip().lower()
-    result: dict[str, object] = {"acknowledged_actions": categories}
+    metrics = state.get("ai_metrics") or {}
+    baseline = state.get("playtest_effectiveness_baseline") or {}
+
+    def signed_delta(key):
+        try:
+            return (float(metrics.get(key, 0) or 0)
+                    - float(baseline.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def delta(key):
+        return max(0.0, signed_delta(key))
+
+    turns = int(delta("turns_observed_consumed"))
+    per_100 = lambda value: round(float(value) * 100 / turns, 2) if turns else None
+    result: dict[str, object] = {
+        "acknowledged_actions": categories,
+        "observed_turns_consumed": turns,
+        "non_navigation_actions_per_100_turns": per_100(
+            sum(count for category, count in categories.items() if category != "navigation")),
+    }
     if role_key in ("trader", "merchant"):
         cycles = [row for row in state.get("trade_cycle_history", [])
                   if isinstance(row, dict)]
@@ -113,18 +149,30 @@ def role_effectiveness_summary(role: str, state: dict,
         nav_turns = [int(row.get("navigation_turns", 0) or 0) for row in cycles]
         utilization = [float(row.get("cargo_utilization_percent", 0) or 0)
                        for row in cycles]
+        cycle_count = delta("trade_cycles_completed") if baseline else len(cycles)
+        profit_total = signed_delta("trade_cycle_profit_credits") if baseline else sum(profits)
+        cycle_nav_turns = delta("trade_navigation_turns") if baseline else sum(nav_turns)
+        utilization_total = (delta("trade_cargo_utilization_percent")
+                             if baseline else sum(utilization))
         result.update({
-            "completed_profitable_cycles": sum(value > 0 for value in profits),
-            "completed_unprofitable_cycles": sum(value <= 0 for value in profits),
-            "realized_trade_profit_credits": round(sum(profits), 2),
-            "navigation_turns_per_cycle": round(sum(nav_turns) / len(nav_turns), 2) if nav_turns else None,
-            "profit_per_navigation_turn": round(sum(profits) / max(1, sum(nav_turns)), 2) if cycles else None,
-            "average_cargo_utilization_percent": round(sum(utilization) / len(utilization), 2) if utilization else None,
+            "completed_profitable_cycles": (sum(value > 0 for value in profits)
+                                               if not baseline else max(0, int(cycle_count) - int(delta("trade_unprofitable_cycles")))),
+            "completed_unprofitable_cycles": (sum(value <= 0 for value in profits)
+                                                 if not baseline else int(delta("trade_unprofitable_cycles"))),
+            "realized_trade_profit_credits": round(profit_total, 2),
+            "navigation_turns_per_cycle": round(cycle_nav_turns / cycle_count, 2) if cycle_count else None,
+            "profit_per_navigation_turn": round(profit_total / max(1, cycle_nav_turns), 2) if cycle_count else None,
+            "average_cargo_utilization_percent": round(utilization_total / cycle_count, 2) if cycle_count else None,
+            "realized_trade_profit_per_100_turns": per_100(profit_total),
+            "profitable_cycles_per_100_turns": per_100(
+                sum(value > 0 for value in profits) if not baseline else
+                max(0, int(cycle_count) - int(delta("trade_unprofitable_cycles")))),
         })
     elif role_key in ("coloniser", "colonizer", "industrialist"):
         result.update({
             "authoritatively_tracked_owned_planets": len(state.get("owned_planets", [])),
             "acknowledged_planet_operations": categories.get("planets", 0),
+            "planet_operations_per_100_turns": per_100(categories.get("planets", 0)),
         })
     elif role_key in ("corporation founder", "corporate operative"):
         player = ((state.get("player_info") or {}).get("player") or {})
@@ -132,12 +180,21 @@ def role_effectiveness_summary(role: str, state: dict,
             "corporation_id": player.get("corp_id"),
             "acknowledged_corporation_operations": categories.get("corporations", 0),
             "member_transfer_acknowledged": bool(state.get("corporation_transfer_completed")),
+            "corporation_operations_per_100_turns": per_100(categories.get("corporations", 0)),
         })
-    elif role_key in ("pirate", "bounty hunter"):
-        result.update({"acknowledged_combat_operations": categories.get("combat", 0)})
+    elif role_key in ("pirate", "bounty hunter", "opportunist"):
+        combat_outcomes = int(delta("combat_outcomes_recorded") if baseline
+                              else len(state.get("combat_memory", [])))
+        result.update({"acknowledged_combat_operations": categories.get("combat", 0),
+                       "combat_operations_per_100_turns": per_100(categories.get("combat", 0)),
+                       "recorded_combat_outcomes": combat_outcomes,
+                       "combat_outcomes_per_100_turns": per_100(combat_outcomes)})
     elif role_key == "explorer":
+        discoveries = int(delta("new_sectors_discovered"))
         result.update({"acknowledged_scans": categories.get("scanning", 0),
-                       "acknowledged_warps": categories.get("navigation", 0)})
+                       "acknowledged_warps": categories.get("navigation", 0),
+                       "new_sectors_discovered": discoveries,
+                       "new_discoveries_per_100_turns": per_100(discoveries)})
     else:
         result["acknowledged_objective_actions"] = categories
     return result
@@ -311,7 +368,7 @@ def _ollama_tags(endpoint: str) -> dict:
 
 def check_ollama() -> dict:
     result = {}
-    for name, endpoint in (("A", OLLAMA_A), ("B", OLLAMA_B)):
+    for name, endpoint in (("B", OLLAMA_B),):
         tags = _ollama_tags(endpoint)
         models = {item.get("name"): item.get("digest", "") for item in tags.get("models", [])}
         installed = next((digest for name_, digest in models.items()
@@ -695,7 +752,10 @@ def status() -> None:
             last_action = "?"
             categories = {}
         trace = state.get("decision_trace") or []
-        effectiveness = role_effectiveness_summary(role, state, action_records)
+        current_process_actions = actions_since(
+            state.get("playtest_process_started_at"), action_records
+        )
+        effectiveness = role_effectiveness_summary(role, state, current_process_actions)
         current_goal = plan[0] if plan else (
             trace[-1].get("goal") if trace else state.get("strategy_plan_source", "?")
         )
@@ -735,7 +795,7 @@ def status() -> None:
 def health() -> None:
     runtime = require_runtime()
     status()
-    for name, endpoint in (("Ollama A", OLLAMA_A), ("Ollama B", OLLAMA_B)):
+    for name, endpoint in (("Ollama .20", OLLAMA_B),):
         try:
             tags = json.loads(urllib.request.urlopen(endpoint + "/api/tags", timeout=8).read())
             print(f"{name}: reachable models={','.join(m.get('name', '?') for m in tags.get('models', []))}")
