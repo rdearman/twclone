@@ -2323,6 +2323,31 @@ def build_uncertain_trade_retry(uncertain, session_token, client_version, allowe
     return retry
 
 
+def recover_exact_uncertain_trade_payload(state_manager):
+    """Restore a legacy missing trade payload only from its matching request marker."""
+    uncertain = state_manager.get("uncertain_trade") or {}
+    if not isinstance(uncertain, dict) or uncertain.get("data"):
+        return False
+    command = uncertain.get("command")
+    request_id = str(uncertain.get("request_id") or "")
+    idempotency_key = uncertain.get("idempotency_key")
+    if command not in ("trade.buy", "trade.sell") or not request_id or not idempotency_key:
+        return False
+    marker = (state_manager.get("uncertain_mutations", {}) or {}).get(request_id)
+    if not isinstance(marker, dict) or marker.get("command") != command:
+        return False
+    payload = marker.get("data")
+    if not isinstance(payload, dict) or payload.get("idempotency_key") != idempotency_key:
+        return False
+    if not payload.get("port_id") or not isinstance(payload.get("items"), list):
+        return False
+    restored = dict(uncertain)
+    restored["data"] = copy.deepcopy(payload)
+    state_manager.set("uncertain_trade", restored)
+    logger.warning("Restored exact idempotent trade payload from matching persisted request marker.")
+    return True
+
+
 def advance_completed_goals(strategy_plan, game_state):
     """Remove only the completed plan prefix using freshly observed state."""
     remaining = list(strategy_plan or [])
@@ -2730,6 +2755,7 @@ def main(config_path="config.json"):
     state_manager.set_default("server_capabilities", {})
     state_manager.set_default("ordinary_player_commands", [])
     state_manager.set_default("server_commands", [])
+    recover_exact_uncertain_trade_payload(state_manager)
     # A process may have died after a non-idempotent write reached the server.
     # Never resume its old plan until public authoritative readbacks reconcile it.
     state_manager.recover_uncertain_mutations_after_restart()

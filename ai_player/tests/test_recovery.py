@@ -11,6 +11,7 @@ from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
                   _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
                   build_uncertain_trade_retry,
+                  recover_exact_uncertain_trade_payload,
                   uncertain_mutation_readback_requests,
                   mutation_reconciliation_contract,
                   population_turn_readback_required,
@@ -587,6 +588,34 @@ def test_matching_readback_batches_same_account_view_across_mutations(tmp_path):
         response_data={"player": {"credits": "10"}},
     )
     assert manager.get("uncertain_mutations") == {}
+
+
+def test_legacy_uncertain_trade_payload_restores_only_from_matching_idempotency_marker(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    key = "original-trade-idempotency-key"
+    payload = {"port_id": 9, "sector_id": 41, "items": [{"commodity": "EQU", "quantity": 2}],
+               "idempotency_key": key}
+    manager.mark_uncertain_mutation("trade-1", "trade.sell", payload,
+                                   idempotency_key=key)
+    manager.set("uncertain_trade", {"request_id": "trade-1", "command": "trade.sell",
+                                    "idempotency_key": key})
+
+    assert recover_exact_uncertain_trade_payload(manager)
+    assert manager.get("uncertain_trade")["data"] == payload
+    retry = build_uncertain_trade_retry(manager.get("uncertain_trade"), "session", "test",
+                                        ["trade.sell"])
+    assert retry["meta"]["idempotency_key"] == key
+    assert retry["data"] == payload
+
+
+def test_uncertain_trade_payload_is_not_restored_for_a_different_key(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.mark_uncertain_mutation(
+        "trade-2", "trade.buy", {"port_id": 7, "items": [], "idempotency_key": "marker-key"})
+    manager.set("uncertain_trade", {"request_id": "trade-2", "command": "trade.buy",
+                                    "idempotency_key": "other-key"})
+    assert not recover_exact_uncertain_trade_payload(manager)
+    assert "data" not in manager.get("uncertain_trade")
 
 
 def test_recipient_side_transfer_ambiguity_fails_closed_after_source_readback(tmp_path):
