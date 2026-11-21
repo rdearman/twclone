@@ -151,7 +151,7 @@ class StateManager:
         self._normalize_legacy_ship_readbacks()
 
     def _normalize_legacy_ship_readbacks(self):
-        """Migrate ambiguous-write markers to the server's canonical ship.status reply."""
+        """Migrate old readback labels to the server's canonical reply types."""
         changed = False
         for marker in (self.state.get("uncertain_mutations") or {}).values():
             if not isinstance(marker, dict):
@@ -165,24 +165,41 @@ class StateManager:
                         if request[1] == "ship.info":
                             request[1] = "ship.status"
                         changed = True
+                    if (isinstance(request, list) and len(request) >= 2
+                            and request[0] == "player.my_info"):
+                        request[0] = "player.info"
+                        changed = True
             types = marker.get("readback_types")
-            if isinstance(types, list) and "ship.info" in types:
+            if isinstance(types, list) and ("ship.info" in types or "player.my_info" in types):
                 marker["readback_types"] = [
-                    "ship.status" if value == "ship.info" else value for value in types
+                    {"ship.info": "ship.status", "player.my_info": "player.info"}.get(value, value)
+                    for value in types
                 ]
                 changed = True
             seen = marker.get("readbacks_seen")
-            if isinstance(seen, list) and "ship.info" in seen:
+            if isinstance(seen, list) and ("ship.info" in seen or "player.my_info" in seen):
                 marker["readbacks_seen"] = [
-                    "ship.status" if value == "ship.info" else value for value in seen
+                    {"ship.info": "ship.status", "player.my_info": "player.info"}.get(value, value)
+                    for value in seen
                 ]
                 changed = True
             contract = marker.get("contract")
             if isinstance(contract, dict) and isinstance(contract.get("response_types"), list):
-                normalized = ["ship.status" if value == "ship.info" else value
+                normalized = [{"ship.info": "ship.status", "player.my_info": "player.info"}.get(value, value)
                               for value in contract["response_types"]]
                 if normalized != contract["response_types"]:
                     contract["response_types"] = normalized
+                    changed = True
+        for request in self.state.get("post_mutation_readbacks", []):
+            if isinstance(request, dict):
+                old_type = request.get("response_type")
+                if old_type == "player.my_info":
+                    request["response_type"] = "player.info"
+                    changed = True
+                if old_type == "ship.info":
+                    request["response_type"] = "ship.status"
+                    if request.get("command") == "ship.info":
+                        request["command"] = "ship.status"
                     changed = True
         if changed:
             logger.info("Normalized legacy ship.info mutation readbacks to ship.status.")
@@ -304,16 +321,42 @@ class StateManager:
                     break
         return result
 
-    def record_uncertain_mutation_readback(self, response_type):
-        """Record an authoritative response and release a reconciled mutation."""
+    def record_uncertain_mutation_readback(self, response_type, command=None, data=None,
+                                          response_data=None):
+        """Record readbacks only for matching public request/data snapshots.
+
+        Identical account or ship snapshots can reconcile several old writes
+        at once. Sector, planet, and corporation snapshots remain scoped to
+        their requested entity so one read cannot clear an unrelated write.
+        """
         mutations = self.state.setdefault("uncertain_mutations", {})
         changed = False
+
+        def same_data(left, right):
+            return json.dumps(left or {}, sort_keys=True, separators=(",", ":")) == json.dumps(
+                right or {}, sort_keys=True, separators=(",", ":")
+            )
+
         for request_id, marker in list(mutations.items()):
             if not marker.get("timed_out"):
                 continue
-            required = [item[0] for item in marker.get("readback_requests", [])]
-            if response_type not in required:
+            requests = marker.get("readback_requests", [])
+            matching = next((item for item in requests
+                             if isinstance(item, (list, tuple)) and len(item) >= 3
+                             and item[0] == response_type
+                             and (command is None or item[1] == command)
+                             and (data is None or same_data(item[2], data))), None)
+            if matching is None:
                 continue
+            if isinstance(response_data, dict):
+                target_key = {"sector.info": "sector_id", "planet.info": "planet_id"}.get(command)
+                if target_key and matching[2].get(target_key) is not None:
+                    try:
+                        if int(response_data.get(target_key)) != int(matching[2][target_key]):
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+            required = [item[0] for item in requests]
             seen = marker.setdefault("readbacks_seen", [])
             if response_type not in seen:
                 seen.append(response_type)

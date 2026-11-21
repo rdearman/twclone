@@ -199,6 +199,8 @@ def population_turn_readback_required(command_name, config):
         "planet.info", "trade.history", "trade.offer.list", "notes.list",
         "system.schema", "system.cmd_list", "system.schema_list",
         "player.computer.recommend_routes", "move.autopilot.status",
+        "dock.status", "hardware.list", "shipyard.list", "move.pathfind",
+        "sector.search", "player.list_online", "corp.list", "ferengi.traders",
     }
     return bool(command_name) and command_name not in read_only and not command_name.startswith("system.")
 
@@ -265,31 +267,31 @@ def _confirm_planet_landing_readback(state_manager, response_type):
 def mutation_reconciliation_contract(command_name):
     """Describe authoritative evidence required before clearing ambiguity."""
     contracts = {
-        "trade.buy": ["trade.buy_receipt_v1", "player.my_info", "ship.status"],
-        "trade.sell": ["trade.sell_receipt_v1", "player.my_info", "ship.status"],
-        "move.warp": ["move.result", "player.my_info", "ship.status"],
-        "bank.deposit": ["bank.balance", "player.my_info"],
-        "bank.withdraw": ["bank.balance", "player.my_info"],
-        "ship.upgrade": ["ship.status", "player.my_info"],
-        "planet.land": ["planet.land.success", "player.my_info", "ship.status"],
-        "planet.launch": ["planet.launch.success", "player.my_info", "ship.status"],
-        "port.dock": ["player.dock.v1", "player.my_info", "ship.status"],
-        "move.transwarp": ["move.result", "player.my_info", "ship.status"],
-        "move.autopilot.start": ["move.autopilot.route_v1", "player.my_info"],
-        "move.autopilot.control": ["move.autopilot.controlled_v1", "player.my_info"],
-        "move.autopilot.stop": ["move.autopilot.stopped_v1", "player.my_info"],
+        "trade.buy": ["trade.buy_receipt_v1", "player.info", "ship.status"],
+        "trade.sell": ["trade.sell_receipt_v1", "player.info", "ship.status"],
+        "move.warp": ["move.result", "player.info", "ship.status"],
+        "bank.deposit": ["bank.balance", "player.info"],
+        "bank.withdraw": ["bank.balance", "player.info"],
+        "ship.upgrade": ["ship.status", "player.info"],
+        "planet.land": ["planet.land.success", "player.info", "ship.status"],
+        "planet.launch": ["planet.launch.success", "player.info", "ship.status"],
+        "port.dock": ["player.dock.v1", "player.info", "ship.status"],
+        "move.transwarp": ["move.result", "player.info", "ship.status"],
+        "move.autopilot.start": ["move.autopilot.route_v1", "player.info"],
+        "move.autopilot.control": ["move.autopilot.controlled_v1", "player.info"],
+        "move.autopilot.stop": ["move.autopilot.stopped_v1", "player.info"],
         "planet.deposit": ["player.planet_transfer.v1", "planet.info", "ship.status"],
         "planet.withdraw": ["player.planet_transfer.v1", "planet.info", "ship.status"],
         "planet.fighters.transfer": ["planet.fighters.transferred_v1", "planet.info"],
-        "planet.colonists.set": ["planet.colonists.set", "planet.info", "player.my_info", "ship.status"],
+        "planet.colonists.set": ["planet.colonists.set", "planet.info", "player.info", "ship.status"],
         "planet.colonists.get": ["planet.colonists.get"],
-        "planet.colonists.allocate": ["planet.info", "player.my_info"],
-        "planet.genesis_create": ["planet.genesis_created_v1", "planet.info", "player.my_info"],
-        "planet.create": ["planet.genesis_created_v1", "planet.info", "player.my_info"],
+        "planet.colonists.allocate": ["planet.info", "player.info"],
+        "planet.genesis_create": ["planet.genesis_created_v1", "planet.info", "player.info"],
+        "planet.create": ["planet.genesis_created_v1", "planet.info", "player.info"],
         "citadel.build": ["citadel.upgrade_started", "planet.info"],
         "citadel.upgrade": ["citadel.upgrade_started", "planet.info"],
-        "planet.market.sell": ["planet.info", "player.my_info"],
-        "planet.market.buy_order": ["planet.info", "player.my_info"],
+        "planet.market.sell": ["planet.info", "player.info"],
+        "planet.market.buy_order": ["planet.info", "player.info"],
         "bank.transfer": ["bank.balance", "bank.statement"],
         "corp.create": ["corp.create.success", "corp.status"],
         "corp.invite": ["corp.invite.success", "corp.status"],
@@ -302,24 +304,24 @@ def mutation_reconciliation_contract(command_name):
         "corp.withdraw": ["corp.withdraw.success", "corp.balance"],
         "corp.set_tax": ["corp.status"],
         "corp.issue_dividend": ["corp.status", "corp.balance"],
-        "hardware.buy": ["ship.status", "player.my_info"],
-        "shipyard.upgrade": ["ship.status", "player.my_info"],
-        "ship.repair": ["ship.status", "player.my_info"],
-        "ship.transfer_cargo": ["ship.status", "player.my_info"],
+        "hardware.buy": ["ship.status", "player.info"],
+        "shipyard.upgrade": ["ship.status", "player.info"],
+        "ship.repair": ["ship.status", "player.info"],
+        "ship.transfer_cargo": ["ship.status", "player.info"],
         "ship.jettison": ["ship.status"],
         "ship.rename": ["ship.status"],
         "notes.set": ["player.note.set_v1", "notes.list"],
         "notes.delete": ["player.note.deleted_v1", "notes.list"],
-        "fine.pay": ["fine.paid", "player.my_info"],
-        "bounty.post": ["bounty.list", "player.my_info"],
-        "trade.offer": ["trade.offer.created_v1", "player.my_info"],
-        "trade.accept": ["trade.offer.accepted_v1", "player.my_info"],
-        "trade.cancel": ["trade.offer.cancelled_v1", "player.my_info"],
-        "combat.attack.ship": ["combat.ship_damage.v1", "ship.status", "player.my_info"],
-        "combat.attack.port": ["player.port_strike.v1", "player.my_info", "ship.status"],
+        "fine.pay": ["fine.paid", "player.info"],
+        "bounty.post": ["bounty.list", "player.info"],
+        "trade.offer": ["trade.offer.created_v1", "player.info"],
+        "trade.accept": ["trade.offer.accepted_v1", "player.info"],
+        "trade.cancel": ["trade.offer.cancelled_v1", "player.info"],
+        "combat.attack.ship": ["combat.ship_damage.v1", "ship.status", "player.info"],
+        "combat.attack.port": ["player.port_strike.v1", "player.info", "ship.status"],
         "combat.attack_planet": ["player.attack_planet.v1", "planet.info", "ship.status"],
-        "move.intercept": ["move.result", "player.my_info", "ship.status"],
-        "ship.repair": ["ship.repair", "player.my_info", "ship.status"],
+        "move.intercept": ["move.result", "player.info", "ship.status"],
+        "ship.repair": ["ship.repair", "player.info", "ship.status"],
         "fighters.recall": ["combat.fighters.deployed", "sector.info", "ship.status"],
         "mines.recall": ["combat.mines.recalled", "sector.info", "ship.status"],
         "notice.ack": ["notice.acknowledged", "notice.list"],
@@ -338,14 +340,14 @@ def uncertain_mutation_readback_requests(command_name, data=None, current_state=
     """
     data = data or {}
     current_state = current_state or {}
-    base = [("player.my_info", "player.my_info", {}),
+    base = [("player.info", "player.my_info", {}),
             ("ship.status", "ship.status", {})]
     if command_name in {"hardware.buy", "shipyard.sell", "shipyard.upgrade",
                         "ship.repair", "trade.buy", "trade.sell"}:
-        return [("player.my_info", "player.my_info", {}),
+        return [("player.info", "player.my_info", {}),
                 ("ship.status", "ship.status", {})]
     if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
-        return [("player.my_info", "player.my_info", {}),
+        return [("player.info", "player.my_info", {}),
                 ("bank.balance", "bank.balance", {})]
     if command_name.startswith("planet.") or command_name.startswith("citadel."):
         planet_id = data.get("planet_id")
@@ -402,24 +404,24 @@ def successful_expense_readbacks(command_name, current_state=None, data=None):
         for response_type, command, data in items
     ]
     if command_name == "hardware.buy":
-        return base(("player.my_info", "player.my_info", {}),
+        return base(("player.info", "player.my_info", {}),
                     ("ship.status", "ship.status", {}))
     if command_name == "shipyard.upgrade":
         return base(("ship.status", "ship.status", {}),
-                    ("player.my_info", "player.my_info", {}))
+                    ("player.info", "player.my_info", {}))
     if command_name in {"ship.sell", "shipyard.sell", "ship.transfer"}:
-        return base(("player.my_info", "player.my_info", {}),
+        return base(("player.info", "player.my_info", {}),
                     ("ship.status", "ship.status", {}),
                     ("ship.list.response", "ship.list", {}))
     if command_name == "ship.transfer_cargo":
         return base(("ship.status", "ship.status", {}))
     if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
-        return base(("player.my_info", "player.my_info", {}),
+        return base(("player.info", "player.my_info", {}),
                     ("bank.balance", "bank.balance", {}))
     if command_name == "corp.member.transfer":
         player = ((state.get("player_info") or {}).get("player") or {})
         corp_id = player.get("corp_id")
-        requests = base(("player.my_info", "player.my_info", {}),
+        requests = base(("player.info", "player.my_info", {}),
                         ("ship.status", "ship.status", {}),
                         ("corp.status.success", "corp.status", {}),
                         ("corp.balance.success", "corp.balance", {}))
@@ -429,7 +431,7 @@ def successful_expense_readbacks(command_name, current_state=None, data=None):
         return requests
     if command_name in {"planet.deposit", "planet.withdraw", "planet.harvest"}:
         planet_id = data.get("planet_id") or (state.get("planet_info") or {}).get("planet_id")
-        requests = base(("player.my_info", "player.my_info", {}),
+        requests = base(("player.info", "player.my_info", {}),
                         ("ship.status", "ship.status", {}))
         if planet_id is not None:
             requests.append({"response_type": "planet.info", "command": "planet.info",
@@ -3761,7 +3763,12 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             # ack was late, the durable request ID still identifies it.
             state_manager.resolve_uncertain_mutation(request_id)
         if response.get("status") == "ok":
-            state_manager.record_uncertain_mutation_readback(response_type)
+            state_manager.record_uncertain_mutation_readback(
+                response_type,
+                command=(sent_command or {}).get("command"),
+                data=(sent_command or {}).get("data"),
+                response_data=response_data,
+            )
 
         if config.get("qa_mode"):
             bug_reporter.log_response(response)
