@@ -790,7 +790,7 @@ int repo_stardock_get_player_ship_info(db_t *db, int32_t player_id, db_res_t **o
 int repo_stardock_get_shipyard_inventory(db_t *db, int32_t port_id, db_res_t **out_res)
 {
     /* SQL_VERBATIM: Q9 */
-    const char *sql = "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets "
+    const char *sql = "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets, st.maxphotons "
                       "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.shiptypes_id "
                       "WHERE si.port_id = {1} AND si.enabled = {2} AND st.enabled = {3};";
     char sql_converted[1024];

@@ -28,6 +28,7 @@ from v3_capabilities import (
     capability_snapshot,
     build_player_command,
     normalize_command_catalogue,
+    eligible_combat_targets,
 )
 
 # --- Standard Logging Setup ---
@@ -208,6 +209,10 @@ def reconcile_planet_transition_receipt(state_manager, response_type, response_d
         if planet_id is not None:
             ship["planet_id"] = int(planet_id)
             state_manager.set("planet_info", None)
+            state_manager.set("planet_landing_pending_refresh", {
+                "planet_id": int(planet_id), "player_confirmed": False,
+                "ship_confirmed": False,
+            })
         state_manager.update_player_info({"ship": ship})
         return "landed", planet_id
     if response_type == "planet.launch.success":
@@ -216,8 +221,42 @@ def reconcile_planet_transition_receipt(state_manager, response_type, response_d
         ship.pop("planet_id", None)
         state_manager.update_player_info({"ship": ship})
         state_manager.set("planet_info", None)
+        state_manager.set("planet_landing_pending_refresh", None)
         return "launched", None
     return None, None
+
+
+def _confirm_planet_landing_readback(state_manager, response_type):
+    """Unlock planet actions only after both public identity snapshots match."""
+    pending = state_manager.get("planet_landing_pending_refresh")
+    if not isinstance(pending, dict):
+        return False
+    pending = dict(pending)
+    if response_type in ("player.my_info", "player.info"):
+        pending["player_confirmed"] = True
+    elif response_type in ("ship.info", "ship.status"):
+        pending["ship_confirmed"] = True
+    state_manager.set("planet_landing_pending_refresh", pending)
+    if not (pending.get("player_confirmed") and pending.get("ship_confirmed")):
+        return False
+    player = ((state_manager.get("player_info") or {}).get("player") or {})
+    ship = state_manager.get("ship_info") or {}
+    active_ship_id = player.get("ship_id")
+    ship_id = ship.get("id", ship.get("ship_id"))
+    landed_planet = ship.get("planet_id", ship.get("last_planet_id"))
+    if landed_planet is None:
+        landed_planet = player.get("last_planet_id")
+    try:
+        valid = (int(active_ship_id) == int(ship_id)
+                 and bool(ship.get("onplanet"))
+                 and int(landed_planet) == int(pending.get("planet_id")))
+    except (TypeError, ValueError):
+        valid = False
+    if valid:
+        state_manager.set("planet_landing_pending_refresh", None)
+        state_manager.set("planet_info", None)
+        return True
+    return False
 
 
 def mutation_reconciliation_contract(command_name):
@@ -239,7 +278,8 @@ def mutation_reconciliation_contract(command_name):
         "planet.deposit": ["player.planet_transfer.v1", "planet.info", "ship.info"],
         "planet.withdraw": ["player.planet_transfer.v1", "planet.info", "ship.info"],
         "planet.fighters.transfer": ["planet.fighters.transferred_v1", "planet.info"],
-        "planet.colonists.set": ["planet.info", "player.my_info"],
+        "planet.colonists.set": ["planet.colonists.set", "planet.info", "player.my_info", "ship.info"],
+        "planet.colonists.get": ["planet.colonists.get"],
         "planet.colonists.allocate": ["planet.info", "player.my_info"],
         "planet.genesis_create": ["planet.genesis_created_v1", "planet.info", "player.my_info"],
         "planet.create": ["planet.genesis_created_v1", "planet.info", "player.my_info"],
@@ -296,6 +336,42 @@ def classify_protocol_outcome(response, config):
     if isinstance(response, dict) and response.get("status") == "error":
         return "infrastructure_or_protocol_error"
     return "success" if isinstance(response, dict) and response.get("status") == "ok" else "unknown"
+
+
+def _remember_owned_planet(state_manager, planet):
+    """Persist only server-confirmed player/corporation planet ownership."""
+    if not isinstance(planet, dict):
+        return
+    player = ((state_manager.get("player_info") or {}).get("player") or {})
+    try:
+        player_id = int(player.get("player_id", player.get("id", 0)) or 0)
+        corp_id = int(player.get("corp_id", 0) or 0)
+        planet_id = int(planet.get("planet_id", planet.get("id", 0)) or 0)
+        sector_id = int(planet.get("sector_id", 0) or 0)
+        owner_id = int(planet.get("owner_id", 0) or 0)
+    except (TypeError, ValueError):
+        return
+    owner_type = str(planet.get("owner_type", "")).lower()
+    owned = ((owner_type == "player" and player_id > 0 and owner_id == player_id)
+             or (owner_type in ("corp", "corporation") and corp_id > 0 and owner_id == corp_id))
+    planets = []
+    for item in state_manager.get("owned_planets") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            existing_id = int(item.get("planet_id", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if existing_id != planet_id:
+            planets.append(item)
+    if owned and planet_id > 0 and sector_id > 0:
+        planets.insert(0, {
+            "planet_id": planet_id, "sector_id": sector_id,
+            "owner_type": owner_type, "owner_id": owner_id,
+            "name": str(planet.get("name") or "")[:64],
+            "confirmed_at": time.time(),
+        })
+    state_manager.set("owned_planets", planets[:20])
 
 # --- Game Connection Class ---
 class GameConnection:
@@ -526,44 +602,67 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
     sector = (game_state.get("sector_data") or {}).get(str(sector_id), {}) or {}
     commands = set(game_state.get("server_commands") or [])
 
+    # Ship recovery is role-independent. A lost ship must not leave a bot's
+    # saved pirate, trade, or planet plan issuing actions from an escape pod.
+    recovery_check = getattr(Planner, "_needs_ship_recovery", None)
+    if callable(recovery_check) and recovery_check(game_state):
+        return ["shipyard: recover"]
+
     def supports(*names):
         return not commands or any(name in commands for name in names)
 
-    if role == "coloniser":
+    if role in ("coloniser", "industrialist"):
         ship = game_state.get("ship_info") or {}
         genesis = int(ship.get("genesis_torpedoes", ship.get("genesis", 0)) or 0)
+        max_genesis = ship.get("max_genesis")
+        if max_genesis is not None:
+            try:
+                if int(max_genesis) < 1:
+                    return ["shipyard: recover"]
+            except (TypeError, ValueError):
+                return []
         if (game_state.get("shipyard_recovery_pending_refresh")
                 or (int(ship.get("holds", 0) or 0) <= 0 and supports("shipyard.list", "shipyard.upgrade"))):
             return ["shipyard: recover"]
-        if sector.get("has_planet") or ship.get("onplanet"):
+        owned_planets = game_state.get("owned_planets") or []
+        owned_sectors = {str(item.get("sector_id")) for item in owned_planets
+                         if isinstance(item, dict) and item.get("sector_id") is not None}
+        if (ship.get("onplanet") or str(sector_id) in owned_sectors
+                or (int(sector_id or 0) == 1 and bool(owned_planets))):
             return ["planet: develop"] if supports(
-                "planet.land", "planet.harvest", "planet.colonists.allocate") else []
+                "planet.land", "planet.colonists.get", "planet.colonists.set",
+                "planet.harvest", "planet.colonists.allocate") else []
+        if owned_planets:
+            ship_colonists = Planner._ship_colonist_count(ship)
+            if ship_colonists > 0:
+                target = min(owned_planets, key=lambda item: abs(
+                    int(item.get("sector_id", 1)) - int(sector_id or 1)))
+                return [f"goto: {int(target['sector_id'])}"]
+            return ["goto: 1"]
         options = []
-        if genesis and supports("planet.genesis_create", "planet.create"):
+        if (genesis and sector.get("is_msl") is False and not sector.get("has_planet")
+                and int(sector_id or 0) > 10
+                and supports("planet.genesis_create", "planet.create")):
             options.append("planet: create")
         elif (not genesis and supports("hardware.list", "hardware.buy")
               and (filtered_state.get("current_port") or filtered_state.get("known_port_sector_ids"))):
             options.append("hardware: genesis")
-        for known_id, details in (game_state.get("sector_data") or {}).items():
-            if (isinstance(details, dict) and details.get("has_planet")
-                    and str(known_id) != str(sector_id)):
+        elif genesis and sector.get("has_planet"):
+            empty_targets = [sid for sid, details in (game_state.get("sector_data") or {}).items()
+                             if isinstance(details, dict) and not details.get("has_planet")]
+            if empty_targets:
                 try:
-                    options.append(f"goto: {int(known_id)}")
+                    options.append(f"goto: {int(empty_targets[0])}")
+                except (TypeError, ValueError):
+                    pass
+        for known_id, details in (game_state.get("sector_data") or {}).items():
+            if isinstance(details, dict) and not details.get("has_planet") and int(known_id or 0) > 10:
+                try:
+                    if genesis:
+                        options.append(f"goto: {int(known_id)}")
                 except (TypeError, ValueError):
                     continue
         return list(dict.fromkeys(options[:8])) or (["scan: density"] if supports("sector.scan.density") else [])
-    if role == "industrialist":
-        ship = game_state.get("ship_info") or {}
-        if (game_state.get("shipyard_recovery_pending_refresh")
-                or (int(ship.get("holds", 0) or 0) <= 0 and supports("shipyard.list", "shipyard.upgrade"))):
-            return ["shipyard: recover"]
-        if sector.get("has_planet") or ship.get("onplanet"):
-            return ["planet: develop"] if supports(
-                "planet.land", "planet.harvest", "planet.colonists.allocate") else []
-        known_planets = [f"goto: {sid}" for sid, details in (game_state.get("sector_data") or {}).items()
-                         if isinstance(details, dict) and details.get("has_planet")
-                         and str(sid) != str(sector_id)]
-        return known_planets[:4]
     if role == "corporation founder":
         if bool(game_state.get("corporation_transfer_completed")):
             return []
@@ -579,6 +678,26 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
             return []
         return ["corp: join" if not int(player.get("corp_id", 0) or 0) else "corp: operate"]
     if role in ("pirate", "bounty hunter"):
+        ship = game_state.get("ship_info") or {}
+        try:
+            required_fighters = max(1, int(config.get("combat_min_fighters", 10)))
+            required_shields = max(0, int(config.get("combat_min_shields", 5)))
+            if ((ship.get("max_fighters") is not None
+                 and int(ship["max_fighters"]) < required_fighters)
+                    or (ship.get("max_shields") is not None
+                        and int(ship["max_shields"]) < required_shields)):
+                return ["shipyard: recover"]
+        except (TypeError, ValueError):
+            return []
+        # Do not offer combat to an unarmed hull. The planner's survival path
+        # seeks legal hardware and exposes combat again only after an
+        # authoritative ship snapshot confirms that equipment was installed.
+        try:
+            if (int(ship.get("fighters", 0) or 0) < required_fighters
+                    or int(ship.get("shields", 0) or 0) < required_shields):
+                return []
+        except (TypeError, ValueError):
+            return []
         try:
             protected_here = 1 <= int(sector_id) <= 10
         except (TypeError, ValueError):
@@ -592,11 +711,16 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
             return [f"goto: {sid}" for sid in
                     filtered_state.get("unexplored_adjacent_sector_ids", [])[:4]] or (
                         ["scan: density"] if supports("sector.scan.density") else [])
+        threat_threshold = float(config.get("combat_target_threat_threshold", 25.0))
         photons = int((filtered_state.get("ship") or {}).get("photons", 0) or 0)
-        if photons > 0 and filtered_state.get("adjacent_ship_targets") and supports("combat.fire_photon"):
+        adjacent_targets = eligible_combat_targets(
+            filtered_state.get("adjacent_ship_targets"), game_state.get("opponent_model"),
+            threat_threshold,
+        )
+        if photons > 0 and adjacent_targets and supports("combat.fire_photon"):
             return ["combat: photon"]
         targets = filtered_state.get("visible_ship_targets") or []
-        if any(not item.get("is_derelict") for item in targets) and supports("combat.attack", "combat.attack.ship"):
+        if eligible_combat_targets(targets, game_state.get("opponent_model"), threat_threshold) and supports("combat.attack", "combat.attack.ship"):
             return ["combat: attack"]
         search = [f"goto: {sid}" for sid in filtered_state.get("unexplored_adjacent_sector_ids", [])[:4]]
         if supports("sector.scan.density"):
@@ -624,7 +748,9 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
     options = []
     if sector.get("has_planet"):
         options.append("planet: develop")
-    if filtered_state.get("visible_ship_targets"):
+    if eligible_combat_targets(filtered_state.get("visible_ship_targets"),
+                               game_state.get("opponent_model"),
+                               float(config.get("combat_target_threat_threshold", 25.0))):
         options.append("combat: attack")
     if filtered_state.get("current_port"):
         options.extend(("buy: ORE", "sell: ORE"))
@@ -770,8 +896,9 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     own_ship_id = s_obj.get("ship_id", s_obj.get("id", p_obj.get("ship_id")))
     visible_ships = sector_data.get("ships_present") or sector_data.get("ships") or []
     filtered_state["visible_ship_targets"] = [
-        {key: ship[key] for key in ("ship_id", "id", "is_npc", "is_derelict",
-                                    "owner_type", "hostile", "alignment") if key in ship}
+        {key: ship[key] for key in ("ship_id", "id", "player_id", "name", "is_npc",
+                                    "is_derelict", "owner_type", "hostile", "is_hostile",
+                                    "alignment") if key in ship}
         for ship in visible_ships
         if isinstance(ship, dict)
         and str(ship.get("ship_id", ship.get("id", ""))) != str(own_ship_id)
@@ -787,7 +914,8 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
                 continue
             adjacent_targets.append({
                 "ship_id": ship_id, "sector_id": int(adjacent_sector),
-                "is_npc": ship.get("is_npc"), "hostile": ship.get("hostile"),
+                "player_id": ship.get("player_id"), "is_npc": ship.get("is_npc"),
+                "hostile": ship.get("hostile"), "is_hostile": ship.get("is_hostile"),
                 "shields": ship.get("shields"), "owner_type": ship.get("owner_type"),
             })
             if len(adjacent_targets) >= 8:
@@ -1622,9 +1750,28 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
 
 def select_strategy_plan(game_state, config, state_manager, planner):
     """Select a local plan or optionally ask Ollama for high-level strategy."""
+    # Strategy planning is also used with small protocol adapters and test
+    # planners.  Recovery requirements are optional metadata for those
+    # implementations; don't make selecting a strategy depend on a concrete
+    # Planner class.
+    requirements_reader = getattr(planner, "_recovery_capability_requirements", None)
+    requirements = requirements_reader() if callable(requirements_reader) else {}
+    game_state["ship_recovery_requirements"] = requirements
+    state_manager.set("ship_recovery_requirements", requirements)
     mode = config.get("strategy_mode", "ollama")
     if mode not in ("deterministic", "ollama"):
         raise ValueError(f"Unknown strategy_mode: {mode!r}")
+    recovery_check = getattr(planner, "_needs_ship_recovery", None)
+    if callable(recovery_check) and recovery_check(game_state):
+        state_manager.set("strategy_plan_source", "controller_priority")
+        state_manager.set("strategy_inference_status", {
+            "status": "preempted", "reason": "shipyard: recover",
+        })
+        state_manager.record_decision({
+            "goal": "shipyard: recover", "reason": "active ship requires recovery",
+            "source": "controller",
+        })
+        return ["shipyard: recover"]
     strict_llm = bool(config.get("require_llm_decisions", False))
     now = time.time()
     retry_after = float(state_manager.get("ollama_retry_after", 0) or 0)
@@ -1765,6 +1912,12 @@ def quarantine_timed_out_trades(state_manager, expired_commands):
                 return
             state_manager.set("uncertain_trade", {
                 "request_id": request_id, "command": command["command"],
+                # Retain the exact original payload and key so reconnect
+                # recovery can safely replay through the server's idempotency
+                # contract instead of either guessing or abandoning the bot.
+                "data": dict(command.get("data") or {}),
+                "idempotency_key": ((command.get("meta") or {}).get("idempotency_key")
+                                    or (command.get("data") or {}).get("idempotency_key")),
             })
             return
         if command.get("command") == "move.warp":
@@ -1846,9 +1999,33 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
             return response_type == "sector.density.scan"
         
         elif goal_type == "planet" and goal_target == "land":
-            # Landing is complete only after the public land command succeeds;
-            # an information read alone must not advance this goal.
-            return response_type == "planet.land" and response_data.get("status") == "landed"
+            # The V3 server returns planet.land.success. Do not keep replaying
+            # the turn-consuming landing mutation while the authoritative ship
+            # and planet identities refresh.
+            ship = game_state.get("ship_info") or {}
+            if game_state.get("planet_landing_pending_refresh"):
+                return False
+            player = (game_state.get("player_info") or {}).get("player") or {}
+            active_ship = player.get("ship_id")
+            ship_id = ship.get("id", ship.get("ship_id"))
+            landed_planet = ship.get("planet_id", ship.get("last_planet_id"))
+            if not landed_planet:
+                landed_planet = player.get("last_planet_id")
+            try:
+                authoritative_landed = (
+                    bool(ship.get("onplanet"))
+                    and int(active_ship) == int(ship_id)
+                    and int(landed_planet) > 0
+                )
+            except (TypeError, ValueError):
+                authoritative_landed = False
+            if response_type == "planet.land.success":
+                requested = response_data.get("planet_id")
+                try:
+                    return authoritative_landed and int(requested) == int(landed_planet)
+                except (TypeError, ValueError):
+                    return False
+            return response_type in ("state.snapshot", "player.my_info", "ship.info", "ship.status") and authoritative_landed
 
         elif goal_type == "planet" and goal_target == "info":
             return response_type == "planet.info"
@@ -1857,11 +2034,48 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
             return response_type in ("bank.deposit.confirmed", "bank.balance")
 
         elif goal_type == "planet" and goal_target == "create":
-            return response_type in ("planet.genesis_created_v1", "planet.create.success")
+            if response_type not in ("planet.genesis_created_v1", "planet.create.success"):
+                return False
+            player = (game_state.get("player_info") or {}).get("player") or {}
+            try:
+                player_id = int(player.get("player_id", player.get("id", 0)) or 0)
+                return (str(response_data.get("owner_type", "")).lower() == "player"
+                        and int(response_data.get("owner_id", 0) or 0) == player_id
+                        and player_id > 0)
+            except (TypeError, ValueError):
+                return False
 
         elif goal_type == "planet" and goal_target == "develop":
-            return response_type in ("planet.colonists.allocate", "planet.harvest",
-                                     "planet.harvest_v1")
+            planet = game_state.get("planet_info") or {}
+            player = (game_state.get("player_info") or {}).get("player") or {}
+            try:
+                player_id = int(player.get("player_id", player.get("id", 0)) or 0)
+                corp_id = int(player.get("corp_id", 0) or 0)
+                owner_id = int(planet.get("owner_id", 0) or 0)
+            except (TypeError, ValueError):
+                return False
+            owner_type = str(planet.get("owner_type", "")).lower()
+            owned = ((owner_type == "player" and player_id > 0 and owner_id == player_id)
+                     or (owner_type in ("corp", "corporation") and corp_id > 0 and owner_id == corp_id))
+            if response_type in ("planet.genesis_created_v1", "planet.create.success"):
+                try:
+                    return (str(response_data.get("owner_type", "")).lower() == "player"
+                            and player_id > 0
+                            and int(response_data.get("owner_id", 0) or 0) == player_id)
+                except (TypeError, ValueError):
+                    return False
+            if not owned:
+                return False
+            try:
+                population = int(planet.get("population", 0) or 0)
+                workers = sum(int(planet.get(key, 0) or 0) for key in (
+                    "colonists_ore", "colonists_org", "colonists_eq", "colonists_weapons"))
+            except (TypeError, ValueError):
+                population = workers = 0
+            return (response_type == "state.snapshot" and (population > 0 or workers > 0)) or (
+                response_type in ("planet.colonists.allocate", "planet.harvest", "planet.harvest_v1")
+                and (population > 0 or workers > 0)
+            )
 
         elif goal_type == "hardware" and goal_target == "genesis":
             return (response_type in ("hardware.buy", "hardware.purchase_v1")
@@ -1869,16 +2083,25 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
                         "genesis_torpedoes", (game_state.get("ship_info") or {}).get("genesis", 0)) or 0) > 0)
 
         elif goal_type == "shipyard" and goal_target == "recover":
-            if (response_type == "shipyard.upgraded_v1"
-                    and response_data.get("ship_id") is not None
-                    and response_data.get("new_type_id") is not None):
-                return True
             ship = game_state.get("ship_info") or {}
             try:
                 has_holds = int(ship.get("holds", 0) or 0) > 0
             except (TypeError, ValueError):
                 has_holds = False
-            return has_holds and response_type in ("shipyard.upgraded_v1", "state.snapshot")
+            requirements_met = True
+            for capability, minimum in (game_state.get("ship_recovery_requirements") or {}).items():
+                try:
+                    if int(ship.get(capability, -1)) < int(minimum):
+                        requirements_met = False
+                        break
+                except (TypeError, ValueError):
+                    requirements_met = False
+                    break
+            # Shipyard acknowledgement only confirms the purchase. Recovery
+            # completes after an authoritative ship status satisfies the
+            # role's capacity requirements.
+            return (has_holds and requirements_met
+                    and response_type in ("ship.status", "state.snapshot"))
 
         elif goal_type == "combat" and goal_target == "photon":
             return response_type == "combat.photon_fired_v1"
@@ -1922,6 +2145,27 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
     
     return False
+
+
+def build_uncertain_trade_retry(uncertain, session_token, client_version, allowed_commands=None):
+    """Rebuild an ambiguous trade only when its exact idempotent request is saved."""
+    if not isinstance(uncertain, dict):
+        return None
+    command = uncertain.get("command")
+    data = uncertain.get("data")
+    key = uncertain.get("idempotency_key")
+    if command not in ("trade.buy", "trade.sell") or not isinstance(data, dict) or not key:
+        return None
+    try:
+        retry = build_player_command(
+            command, data, session_token, client_version, allowed_commands, str(key),
+        )
+    except (TypeError, ValueError):
+        return None
+    original_request_id = uncertain.get("request_id")
+    if original_request_id:
+        retry["id"] = str(original_request_id)
+    return retry
 
 
 def advance_completed_goals(strategy_plan, game_state):
@@ -2027,7 +2271,8 @@ AI_SCHEMA_BOOTSTRAP_COMMANDS = frozenset({
     "move.autopilot.start", "move.autopilot.status", "move.autopilot.stop",
     "trade.port_info", "trade.quote", "trade.buy", "trade.sell",
     "bank.balance", "bank.deposit", "bank.withdraw", "planet.info", "planet.land",
-    "planet.launch", "planet.genesis_create", "planet.harvest", "planet.colonists.allocate",
+    "planet.launch", "planet.genesis_create", "planet.harvest",
+    "planet.colonists.get", "planet.colonists.set", "planet.colonists.allocate",
     "hardware.list", "hardware.buy", "dock.status", "shipyard.list", "shipyard.upgrade",
     "ship.claim", "player.list_online", "corp.create", "corp.list",
     "corp.invite", "corp.join", "corp.member.transfer", "corp.status",
@@ -2063,8 +2308,26 @@ def schema_commands_to_fetch(commands, cached_schemas=None, include_all=False):
     return [
         command for command in commands
         if (include_all or command in AI_SCHEMA_BOOTSTRAP_COMMANDS)
-        and command not in cached_schemas
+        and not cached_schemas.get(command)
     ]
+
+
+def reconcile_warp_readback(uncertain_warp, observed_sector):
+    """Classify an uncertain movement from authoritative player state."""
+    if not isinstance(uncertain_warp, dict) or observed_sector is None:
+        return None
+    try:
+        observed = int(observed_sector)
+        target = int(uncertain_warp.get("to_sector_id"))
+        origin_value = uncertain_warp.get("from_sector_id")
+        origin = int(origin_value) if origin_value is not None else None
+    except (TypeError, ValueError):
+        return None
+    if observed == target:
+        return "arrived"
+    if origin is not None and observed == origin:
+        return "not_moved"
+    return "moved_elsewhere"
 
 
 def _canonicalize_strategy_goal(goal, goal_options, game_state):
@@ -2284,6 +2547,7 @@ def main(config_path="config.json"):
     
     # --- FIX: Pass bandit_policy and config to Planner ---
     planner = Planner(state_manager, bug_reporter, bandit_policy, config)
+    state_manager.set("ship_recovery_requirements", planner._recovery_capability_requirements())
     
     state_manager.set_default("strategy_plan", [])
     state_manager.set_default("session_id", None)
@@ -2519,8 +2783,33 @@ def main(config_path="config.json"):
                 continue
 
             if game_state.get("uncertain_trade"):
-                logger.error("Trade outcome is uncertain; gameplay is paused pending operator reconciliation.")
-                time.sleep(10)
+                uncertain = game_state.get("uncertain_trade") or {}
+                if state_manager.get("pending_commands"):
+                    time.sleep(0.5)
+                    continue
+                retry = build_uncertain_trade_retry(
+                    uncertain, game_state.get("session_id"), config.get("client_version"),
+                    game_state.get("server_commands"),
+                )
+                if retry is None:
+                    logger.error(
+                        "Trade outcome is uncertain and exact idempotent request data is unavailable; "
+                        "gameplay remains paused for safe reconciliation."
+                    )
+                    time.sleep(10)
+                    continue
+                if game_conn.send_command(retry):
+                    state_manager.set("uncertain_trade", {
+                        **uncertain, "request_id": retry["id"],
+                        "reconcile_attempts": int(uncertain.get("reconcile_attempts", 0)) + 1,
+                    })
+                    state_manager.add_pending_command(retry["id"], retry)
+                    state_manager.record_ai_metric("commands_sent")
+                    state_manager.record_ai_metric("trade_retries")
+                    logger.warning("Replaying uncertain trade with its exact saved payload and original idempotency key.")
+                else:
+                    logger.warning("Could not send idempotent trade retry; will reconcile after reconnect.")
+                time.sleep(0.5)
                 continue
 
             if game_state.get("uncertain_warp"):
@@ -2528,50 +2817,28 @@ def main(config_path="config.json"):
                 if state_manager.get("pending_commands"):
                     time.sleep(0.5)
                     continue
-                target_sector = uncertain.get("to_sector_id")
-                idempotency_key = uncertain.get("idempotency_key")
                 request_id = f"c-warp-reconcile-{uuid.uuid4().hex[:8]}"
-                if idempotency_key and target_sector is not None:
-                    retry = {
-                        "id": request_id,
-                        "command": "move.warp",
-                        "data": {"to_sector_id": target_sector},
-                        "meta": {
-                            "client_version": config.get("client_version"),
-                            "idempotency_key": idempotency_key,
-                            "session_token": game_state.get("session_id"),
-                        },
-                    }
-                    if game_conn.send_command(retry):
-                        state_manager.set("uncertain_warp", {
-                            **uncertain, "request_id": request_id,
-                            "reconcile_attempts": int(uncertain.get("reconcile_attempts", 0)) + 1,
-                        })
-                        state_manager.add_pending_command(request_id, retry)
-                        state_manager.record_ai_metric("commands_sent")
-                        state_manager.record_ai_metric("warp_retries")
-                        logger.warning("Retrying uncertain warp with the original idempotency key.")
-                    else:
-                        logger.warning("Could not send idempotent warp retry; will reconnect and retry later.")
-                elif not uncertain.get("readback_request_id"):
-                    # Legacy state written before idempotency was persisted cannot
-                    # be replayed safely. Read the authoritative player location,
-                    # then release the hold only after that response arrives.
-                    readback = {
-                        "id": request_id,
-                        "command": "player.my_info",
-                        "data": {},
-                        "meta": {"client_version": config.get("client_version"),
-                                 "session_token": game_state.get("session_id")},
-                    }
-                    if game_conn.send_command(readback):
-                        uncertain["readback_request_id"] = request_id
-                        state_manager.set("uncertain_warp", uncertain)
-                        state_manager.add_pending_command(request_id, readback)
-                        state_manager.record_ai_metric("commands_sent")
-                        logger.info("Reconciling legacy uncertain warp by authenticated player-state readback.")
+                # A lost movement reply is not safe to replay: the server may
+                # have committed the move even when the client missed its ack.
+                # Read authoritative location first; only then can planning
+                # issue a fresh move from the confirmed sector.
+                readback = {
+                    "id": request_id,
+                    "command": "player.my_info",
+                    "data": {},
+                    "meta": {"client_version": config.get("client_version"),
+                             "session_token": game_state.get("session_id")},
+                }
+                if game_conn.send_command(readback):
+                    state_manager.set("uncertain_warp", {
+                        **uncertain, "readback_request_id": request_id,
+                        "readback_attempts": int(uncertain.get("readback_attempts", 0)) + 1,
+                    })
+                    state_manager.add_pending_command(request_id, readback)
+                    state_manager.record_ai_metric("commands_sent")
+                    logger.info("Reconciling uncertain warp from authoritative player-state readback.")
                 else:
-                    time.sleep(1)
+                    logger.warning("Could not read back uncertain warp; will retry the state read after reconnect.")
                 continue
 
             # Reconcile a server-persisted autopilot route after each login.
@@ -2929,12 +3196,14 @@ def main(config_path="config.json"):
                     state_manager.set("uncertain_trade", {
                         "request_id": full_command["id"], "command": command_name,
                         "idempotency_key": idempotency_key,
+                        "data": dict(data_payload),
                     })
                 elif command_name == "move.warp":
                     state_manager.set("uncertain_warp", {
                         "request_id": full_command["id"], "command": command_name,
                         "idempotency_key": idempotency_key,
                         "to_sector_id": data_payload.get("to_sector_id"),
+                        "from_sector_id": game_state.get("player_location_sector"),
                     })
 
                 if game_conn.send_command(full_command):
@@ -3103,6 +3372,22 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         if not isinstance(response_data, dict):
             logger.warning("Expected object payload in %s reply; ignoring malformed payload.", response_type)
             response_data = {}
+        if response_type in ("hardware.purchase_v1", "hardware.buy"):
+            # A successful purchase receipt carries authoritative post-purchase
+            # ship counts. Reconcile them before the next planning pass; using
+            # the pre-purchase snapshot can otherwise buy the same equipment
+            # repeatedly with a fresh idempotency key.
+            purchased_ship = response_data.get("ship")
+            if isinstance(purchased_ship, dict):
+                ship = dict(state_manager.get("ship_info") or {})
+                ship.update(purchased_ship)
+                state_manager.update_player_info({"ship": ship})
+            elif any(key in response_data for key in ("fighters", "shields", "photons", "credits")):
+                ship = dict(state_manager.get("ship_info") or {})
+                for key in ("fighters", "shields", "photons"):
+                    if key in response_data:
+                        ship[key] = response_data[key]
+                state_manager.update_player_info({"ship": ship})
         if response_type == "player.list_online" and isinstance(response_data.get("players"), list):
             state_manager.set("online_players", response_data["players"])
             state_manager.set("online_players_refreshed_at", time.time())
@@ -3133,8 +3418,12 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             planet = response_data.get("planet", response_data)
             if isinstance(planet, dict):
                 state_manager.set("planet_info", planet)
+                _remember_owned_planet(state_manager, planet)
         elif response_type in ("planet.genesis_created_v1", "planet.create.success"):
-            state_manager.set("planet_info", response_data.get("planet", response_data))
+            planet = response_data.get("planet", response_data)
+            state_manager.set("planet_info", planet)
+            if isinstance(planet, dict):
+                _remember_owned_planet(state_manager, planet)
             for refresh_name in ("sector.info", "player.my_info"):
                 refresh_id = f"c-solo-{uuid.uuid4().hex[:8]}"
                 refresh = {
@@ -3147,6 +3436,30 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         "session_token": state_manager.get("session_id"),
                     },
                 }
+                if game_conn and game_conn.send_command(refresh):
+                    state_manager.add_pending_command(refresh_id, refresh)
+                    state_manager.record_ai_metric("commands_sent")
+        elif response_type == "planet.colonists.get":
+            state_manager.set("planet_colonist_state", response_data)
+        elif response_type == "planet.colonists.set":
+            transfer_state = dict(response_data)
+            state_manager.set("planet_colonist_state", transfer_state)
+            ship = dict(state_manager.get("ship_info") or {})
+            if transfer_state.get("ship_colonists") is not None:
+                ship["colonists"] = transfer_state["ship_colonists"]
+                state_manager.update_player_info({"ship": ship})
+            planet_id = transfer_state.get("planet_id")
+            refreshes = [("planet.info", {"planet_id": planet_id}), ("ship.info", {})]
+            for refresh_name, refresh_data in refreshes:
+                refresh_id = f"c-colonist-refresh-{uuid.uuid4().hex[:8]}"
+                refresh = {
+                    "id": refresh_id, "command": refresh_name, "data": refresh_data,
+                    "meta": {"client_version": config.get("client_version"),
+                             "idempotency_key": str(uuid.uuid4()),
+                             "session_token": state_manager.get("session_id")},
+                }
+                if refresh_name == "planet.info" and int(planet_id or 0) == 1:
+                    continue
                 if game_conn and game_conn.send_command(refresh):
                     state_manager.add_pending_command(refresh_id, refresh)
                     state_manager.record_ai_metric("commands_sent")
@@ -3418,6 +3731,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         # Server might return flat data, wrap it if so
                         response_data = {"player": response_data}
                     state_manager.update_player_info(response_data)
+                    _confirm_planet_landing_readback(state_manager, response_type)
                     if config.get("population_mode") and not config.get("qa_mode"):
                         state_manager.set("population_turns_unverified", False)
 
@@ -3425,6 +3739,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     ship_obj = response_data.get("ship", response_data)
                     # update_player_info expects {"ship": {...}}
                     state_manager.update_player_info({"ship": ship_obj})
+                    _confirm_planet_landing_readback(state_manager, response_type)
                     if response_type in ("ship.info", "ship.status"):
                         state_manager.set("shipyard_recovery_pending_refresh", False)
                     if isinstance(ship_obj, dict):
@@ -3436,7 +3751,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     transition, planet_id = reconcile_planet_transition_receipt(
                         state_manager, response_type, response_data
                     )
-                    refresh_names = (("planet.info",) if transition == "landed"
+                    refresh_names = (("player.my_info", "ship.info") if transition == "landed"
                                      and planet_id is not None else
                                      ("player.my_info", "ship.info") if transition == "launched" else ())
                     for refresh_name in refresh_names:
@@ -3991,7 +4306,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             if (expected_receipt and isinstance(uncertain, dict) and uncertain.get("request_id") == request_id
                     and ((response.get("status") == "ok" and response_type == expected_receipt
                           and response_data.get("lines") and response_data.get("credits_remaining") is not None)
-                         or response.get("status") == "refused")):
+                         # A correlated explicit protocol failure is not an
+                         # ambiguous timeout: the server has returned the
+                         # transaction result (including rollback failures).
+                         or response.get("status") in ("refused", "error"))):
                 state_manager.set("uncertain_trade", None)
             warp = state_manager.get("uncertain_warp") or {}
             if (command_name == "move.warp" and isinstance(warp, dict) and warp.get("request_id") == request_id
@@ -4004,17 +4322,28 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                          # limiter closes the connection.
                          or response.get("status") in ("refused", "error"))):
                 state_manager.set("uncertain_warp", None)
-            legacy_warp = state_manager.get("uncertain_warp") or {}
+            readback_warp = state_manager.get("uncertain_warp") or {}
             if (command_name in ("player.my_info", "player.info")
-                    and isinstance(legacy_warp, dict)
-                    and legacy_warp.get("readback_request_id") == request_id
+                    and isinstance(readback_warp, dict)
+                    and readback_warp.get("readback_request_id") == request_id
                     and response.get("status") == "ok"):
                 readback_player = response_data.get("player", response_data)
-                observed_sector = readback_player.get("current_sector", readback_player.get("sector_id"))
+                observed_sector = readback_player.get(
+                    "current_sector", readback_player.get("sector_id", readback_player.get("sector")))
                 if observed_sector is not None:
                     state_manager.set("player_location_sector", observed_sector)
+                    outcome = reconcile_warp_readback(readback_warp, observed_sector)
+                    target_sector = readback_warp.get("to_sector_id")
+                    if outcome == "arrived":
+                        logger.info("Uncertain warp confirmed at destination sector %s.", target_sector)
+                    elif outcome == "not_moved":
+                        logger.info("Uncertain warp did not move; planner may safely re-evaluate from sector %s.",
+                                    observed_sector)
+                    else:
+                        logger.warning("Uncertain warp resolved at unexpected sector %s; discarding stale route.",
+                                       observed_sector)
+                        state_manager.set("current_path", [])
                     state_manager.set("uncertain_warp", None)
-                    logger.info("Legacy warp reconciled from authoritative player sector %s.", observed_sector)
 
         # In live audit mode, verify every successful movement/trade against
         # fresh public player and ship reads. Refusals are logged as refusals

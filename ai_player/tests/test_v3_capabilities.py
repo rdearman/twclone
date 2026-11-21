@@ -10,6 +10,7 @@ from v3_capabilities import (  # noqa: E402
     capability_snapshot,
     is_safe_player_command,
     normalize_command_catalogue,
+    eligible_combat_targets,
 )
 
 
@@ -80,3 +81,15 @@ def test_exhaustive_qa_inventory_excludes_destructive_actions():
     assert "ship.self_destruct" not in inventory
     assert "corp.dissolve" not in inventory
     assert "player.rankings" in inventory
+
+
+def test_combat_targets_require_public_hostility_or_npc_evidence():
+    unidentified = {"ship_id": 10, "is_derelict": False}
+    derelict = {"ship_id": 11, "is_derelict": True, "is_npc": True}
+    hostile = {"ship_id": 12, "hostile": True}
+    npc = {"ship_id": 13, "is_npc": True}
+    observed_threat = {"ship_id": 14}
+    assert eligible_combat_targets(
+        [unidentified, derelict, hostile, npc, observed_threat],
+        {"14": {"threat_score": 50}},
+    ) == [hostile, npc, observed_threat]

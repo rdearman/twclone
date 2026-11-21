@@ -138,6 +138,8 @@ json_t *schema_port_upgrade (void);
 json_t *schema_combat_attack_port (void);
 json_t *schema_planet_deposit (void);
 json_t *schema_planet_colonists_allocate (void);
+json_t *schema_planet_colonists_get (void);
+json_t *schema_planet_colonists_set (void);
 json_t *schema_planet_withdraw (void);
 json_t *schema_planet_genesis_create (void);
 json_t *schema_player_set_trade_account_preference (void);

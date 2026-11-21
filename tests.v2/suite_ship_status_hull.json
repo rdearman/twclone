@@ -23,7 +23,8 @@
       "user": "status_player",
       "expect": { "status": "ok", "type": "ship.status" },
       "asserts": [
-        { "path": "data.ship.hull", "op": "==", "value": 73 }
+        { "path": "data.ship.hull", "op": "==", "value": 73 },
+        { "path": "data.ship.genesis", "op": "exists" }
       ]
     }
   ]

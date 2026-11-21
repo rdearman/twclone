@@ -93,7 +93,7 @@ def test_role_observation_is_compact_and_includes_objective_turns_capabilities_a
     manager.set("command_retry_info", {"trade.buy": {"failures": 2}})
     state = _game_state()
     state["ship_info"]["genesis_torpedoes"] = 1
-    state["sector_data"] = {str(i): {} for i in range(1, 501)}
+    state["sector_data"] = {str(i): {"is_msl": False} for i in range(1, 501)}
     observed = {}
 
     def fake_ollama(_state, _model, _key, override_prompt=None, **_kwargs):

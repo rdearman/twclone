@@ -41,6 +41,14 @@ class ServerVisibilityContractTests(unittest.TestCase):
         self.assertIn('json_object_del (port, "type")', scan_builder)
         self.assertIn("through sector scans", scan_builder)
 
+    def test_sector_scan_exposes_authoritative_msl_membership_fail_closed(self):
+        start = self.server_source.index("json_t *\nbuild_sector_scan_json")
+        end = self.server_source.index("static int\nsector_is_current_or_adjacent", start)
+        scan_builder = self.server_source[start:end]
+        self.assertIn("db_planets_is_msl_sector (db, sector_id, &is_msl)", scan_builder)
+        self.assertIn('"is_msl", json_boolean (is_msl)', scan_builder)
+        self.assertIn("json_decref (root);", scan_builder)
+
     def test_scan_fails_closed_on_visibility_query_errors(self):
         """A DB visibility error must not produce a partial scan payload."""
         start = self.server_source.index("json_t *\nbuild_sector_scan_json")
@@ -48,6 +56,7 @@ class ServerVisibilityContractTests(unittest.TestCase):
         scan_builder = self.server_source[start:end]
 
         for query in (
+            "db_planets_is_msl_sector",
             "db_adjacent_sectors_json",
             "db_ships_at_sector_json",
             "db_ports_at_sector_json",

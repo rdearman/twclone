@@ -1,6 +1,7 @@
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+import pytest
 
 
 AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
@@ -205,3 +206,38 @@ def test_trade_cost_basis_and_realized_profit_include_receipt_fees(tmp_path):
     assert profit == 35.6
     assert manager.get("ship_info")["cargo"] == []
     assert manager.get("player_info")["player"]["credits"] == "1034.40"
+
+
+def test_trade_cycle_records_realized_profit_navigation_turns_and_cargo_utilization(tmp_path):
+    manager = StateManager(str(tmp_path / "route-state.json"), config={})
+    manager.set("ship_info", {"id": 39, "holds": 10, "cargo": []})
+    manager.set("player_location_sector", 7)
+    manager.set("player_info", {"player": {"credits": "5000.00", "turns_remaining": 100}})
+    manager.set("port_info_by_sector", {"7": {"port_id": 9}, "12": {"port_id": 10}})
+    manager.update_cargo_after_buy(
+        [{"commodity": "ORE", "quantity": 4, "unit_price": 100, "value": "400.00"}],
+        port_id=9, credits_remaining="4596.00", fees="4.00",
+    )
+    manager.record_ai_metric("completed_warps", 3)
+    manager.set("player_location_sector", 12)
+    profit = manager.update_cargo_after_sell(
+        [{"commodity": "ORE", "quantity": 4, "unit_price": 120, "value": "480.00"}],
+        port_id=10, credits_remaining="5071.20", fees="4.80",
+    )
+    assert profit == 71.2
+    metrics = manager.get("ai_metrics")
+    assert metrics["trade_cycles_completed"] == 1
+    assert metrics["trade_cycle_profit_credits"] == 71.2
+    assert metrics["trade_navigation_turns"] == 3
+    assert metrics["trade_cargo_utilization_percent"] == 40.0
+    cycle = manager.get("trade_cycle_history")[-1]
+    assert cycle["profit_per_navigation_turn"] == pytest.approx(71.2 / 3)
+    assert cycle["buy_sector"] == 7 and cycle["sell_sector"] == 12
+
+
+def test_retry_schema_fetch_when_persisted_schema_is_null():
+    commands = ["planet.colonists.get", "planet.colonists.set"]
+    assert main.schema_commands_to_fetch(
+        commands,
+        {"planet.colonists.get": None, "planet.colonists.set": None},
+    ) == commands

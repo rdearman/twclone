@@ -122,8 +122,35 @@ def test_planet_land_goal_completes_only_after_authoritative_landing_response():
     assert not is_goal_complete(
         "planet: land", {}, {"planet_id": 321}, "planet.info"
     )
+    assert not is_goal_complete(
+        "planet: land", {}, {"planet_id": 321}, "planet.land.success"
+    )
+    landed = {
+        "player_info": {"player": {"ship_id": 17, "last_planet_id": 321}},
+        "ship_info": {"id": 17, "onplanet": 1, "planet_id": 321},
+    }
     assert is_goal_complete(
-        "planet: land", {}, {"planet_id": 321, "status": "landed"}, "planet.land"
+        "planet: land", landed, {"planet_id": 321}, "planet.land.success"
+    )
+    assert not is_goal_complete(
+        "planet: land", {**landed, "player_info": {"player": {"ship_id": 18}}},
+        {"planet_id": 321}, "planet.land.success"
+    )
+
+
+def test_planet_development_completion_requires_authoritative_ownership_or_population():
+    state = {"player_info": {"player": {"player_id": 44}},
+             "planet_info": {"planet_id": 90, "owner_type": "", "owner_id": 0,
+                             "population": 0, "colonists_unassigned": 0}}
+    assert not is_goal_complete("planet: develop", state, {"planet_id": 90}, "planet.harvest")
+    state["planet_info"] = {**state["planet_info"], "owner_type": "player", "owner_id": 44}
+    assert not is_goal_complete("planet: develop", state, {}, "state.snapshot")
+    state["planet_info"]["population"] = 9
+    state["planet_info"]["colonists_unassigned"] = 9
+    assert is_goal_complete("planet: develop", state, {}, "state.snapshot")
+    assert is_goal_complete(
+        "planet: develop", state, {"owner_type": "player", "owner_id": 44},
+        "planet.genesis_created_v1",
     )
     assert not is_goal_complete(
         "planet: land", {}, {"planet_id": 321, "status": "refused"}, "planet.land"
@@ -174,7 +201,7 @@ def test_solo_policy_creates_planet_then_maintains_landed_citadel():
     planner.config.update({"solo_empire_mode": True, "enable_planet_creation": True})
     create_state = {
         "player_location_sector": 12,
-        "sector_data": {"12": {"has_planet": False, "adjacent": [13, 14]}},
+        "sector_data": {"12": {"has_planet": False, "is_msl": False, "adjacent": [13, 14]}},
         "ship_info": {"genesis_torpedoes": 1, "onplanet": 0},
         "server_commands": ["planet.genesis_create"],
     }
@@ -239,7 +266,7 @@ def test_endgame_claim_preempts_growth_when_server_authorizes_victory():
 
 def test_combat_readiness_repairs_at_port_and_avoids_threatened_exit():
     planner = make_planner()
-    planner.config.update({"combat_min_hull_ratio": 0.65})
+    planner.config.update({"combat_min_hull_ratio": 0.65, "role_name": "Bounty hunter"})
     state = {
         "ship_info": {"hull": 40, "max_hull": 100},
         "player_location_sector": 10,
@@ -251,6 +278,99 @@ def test_combat_readiness_repairs_at_port_and_avoids_threatened_exit():
     state["ship_info"]["hull"] = 100
     state["opponent_model"] = {"p1": {"sector_id": 20, "threat_score": 100}}
     assert planner._get_next_warp_target(state) == 30
+
+
+def test_combat_readiness_uses_v3_hardware_codes_and_checks_affordability():
+    planner = make_planner()
+    planner.config["role_name"] = "Bounty hunter"
+    state = {
+        "player_location_sector": 440,
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "max_fighters": 40, "shields": 0, "max_shields": 20},
+        "player_info": {"player": {"credits": "10000.00"}},
+        "sector_data": {"440": {"has_port": True}},
+        "server_commands": ["hardware.list", "hardware.buy"],
+        "hardware_catalog_checked_sectors": [],
+    }
+    assert planner._combat_readiness_command(state) == {"command": "hardware.list", "data": {}}
+    state["hardware_catalog_checked_sectors"] = ["440"]
+    state["hardware_catalog_by_sector"] = {"440": {"items": [
+        {"code": "FIGHTERS", "price": 100, "stock_quantity": 100},
+        {"code": "SHIELDS", "price": 200, "stock_quantity": 20},
+    ]}}
+    assert planner._combat_readiness_command(state) == {
+        "command": "hardware.buy", "data": {"code": "FIGHTERS", "quantity": 10}}
+    state["ship_info"]["fighters"] = 10
+    assert planner._combat_readiness_command(state) == {
+        "command": "hardware.buy", "data": {"code": "SHIELDS", "quantity": 5}}
+    state["player_info"]["player"]["credits"] = "10.00"
+    assert planner._combat_readiness_command(state) is None
+
+
+def test_combat_readiness_does_not_treat_explicit_zero_stock_as_unlimited():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 440,
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "max_fighters": 40, "shields": 0, "max_shields": 20},
+        "player_info": {"player": {"credits": "10000.00"}},
+        "sector_data": {"440": {"has_port": True}},
+        "server_commands": ["hardware.list", "hardware.buy"],
+        "hardware_catalog_checked_sectors": ["440"],
+        "hardware_catalog_by_sector": {"440": {"items": [
+            {"code": "FIGHTERS", "price": 100, "stock_quantity": 0,
+             "max_purchase": 40},
+        ]}},
+    }
+    assert planner._combat_readiness_command(state) is None
+
+
+def test_combat_role_recovers_to_hull_with_minimum_weapon_capacity():
+    planner = make_planner()
+    planner.config.update({"role_name": "Pirate", "combat_min_fighters": 10,
+                           "combat_min_shields": 5})
+    state = {
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "max_fighters": 0, "shields": 0, "max_shields": 0},
+    }
+    planner._achieve_goal = lambda _state, goal: {"goal": goal}
+    assert planner._combat_readiness_command(state) == {"goal": "shipyard: recover"}
+
+
+def test_combat_payload_selects_only_the_publicly_eligible_target():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 399,
+        "ship_info": {"id": 1, "hull": 100, "fighters": 20},
+        "sector_data": {"399": {"ships_present": [
+            {"ship_id": 2, "name": "ordinary player"},
+            {"ship_id": 3, "name": "identified hostile", "hostile": True},
+        ]}},
+        "server_commands": ["combat.attack"],
+    }
+    planner.state_manager.get_all.return_value = state
+    planner.state_manager.get_schema.return_value = {
+        "type": "object", "required": ["target_ship_id"],
+        "properties": {"target_ship_id": {"type": "integer"}},
+    }
+    assert planner._achieve_goal(state, "combat: attack") == {
+        "command": "combat.attack", "data": {}}
+    assert planner._build_payload("combat.attack", state) == {"target_ship_id": 3}
+
+
+def test_combat_goal_skips_unidentified_or_underpowered_targets():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 399,
+        "ship_info": {"id": 1, "hull": 100, "max_hull": 100, "fighters": 20},
+        "sector_data": {"399": {"ships_present": [{"ship_id": 2, "name": "Unknown"}]}},
+        "server_commands": ["combat.attack"],
+    }
+    assert planner._achieve_goal(state, "combat: attack") is None
+    state["sector_data"]["399"]["ships_present"][0]["hostile"] = True
+    assert planner._achieve_goal(state, "combat: attack") == {"command": "combat.attack", "data": {}}
+    state["ship_info"]["fighters"] = 0
+    assert planner._achieve_goal(state, "combat: attack") is None
 
 
 def test_state_manager_persists_market_forecast_opponents_and_restart_plan():
@@ -384,7 +504,7 @@ def test_explicit_combat_goal_is_refused_in_fedspace():
     assert planner._achieve_goal(state, "combat: attack") is None
 
 
-def test_combat_target_uses_visible_ship_id_and_excludes_own_ship():
+def test_combat_target_rejects_unidentified_ship_and_excludes_own_ship():
     planner = make_planner()
     state = {
         "player_location_sector": 50,
@@ -394,7 +514,7 @@ def test_combat_target_uses_visible_ship_id_and_excludes_own_ship():
         },
     }
 
-    assert planner._generate_required_field("target_ship_id", "combat.attack", state) == 900
+    assert planner._generate_required_field("target_ship_id", "combat.attack", state) is None
 
 
 def test_payload_builder_blocks_direct_combat_commands_in_fedspace():

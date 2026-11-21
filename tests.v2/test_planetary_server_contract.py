@@ -60,6 +60,20 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("repo_corp_check_member_role", handler)
         self.assertIn("revalidates ownership, landing, available", handler)
 
+    def test_colonist_transfer_commands_publish_actionable_request_schemas(self):
+        self.assertIn('"planet.colonists.get", cmd_planet_colonists_get', self.loop)
+        self.assertIn('"planet.colonists.set", cmd_planet_colonists_set', self.loop)
+        get_entry = self.loop.split('"planet.colonists.get", cmd_planet_colonists_get', 1)[1].split("\n", 2)[1]
+        set_entry = self.loop.split('"planet.colonists.set", cmd_planet_colonists_set', 1)[1].split("\n", 2)[1]
+        self.assertIn("schema_planet_colonists_get", get_entry)
+        self.assertIn("schema_planet_colonists_set", set_entry)
+        get_schema = self.schemas.split("schema_planet_colonists_get (void)", 1)[1].split("schema_planet_colonists_set", 1)[0]
+        set_schema = self.schemas.split("schema_planet_colonists_set (void)", 1)[1].split("schema_planet_colonists_allocate", 1)[0]
+        self.assertIn('"planet_id"', get_schema)
+        self.assertIn('"planet_id"', set_schema)
+        self.assertIn('"quantity"', set_schema)
+        self.assertIn('"pickup", "dropoff"', set_schema)
+
     def test_galactic_exchange_sale_is_ring_fenced_and_liquidity_backed(self):
         sale = self.planets.split("cmd_planet_market_sell", 1)[1].split(
             "cmd_planet_market_buy_order", 1

@@ -1,4 +1,5 @@
 #include "db/repo/repo_universe.h"
+#include "db/repo/repo_planets.h"
 #include "ship_personality.h"
 #include "db/repo/repo_players.h"
 #include "db/repo/repo_cmd.h"
@@ -860,6 +861,16 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
       return NULL;
     }
   json_object_set_new (root, "sector_id", json_integer (sector_id));
+  /* MSL membership is public sector state and is required by clients that
+   * need to evaluate planet-creation eligibility before spending a Genesis
+   * torpedo.  Fail closed if authoritative zone state cannot be read. */
+  bool is_msl = false;
+  if (db_planets_is_msl_sector (db, sector_id, &is_msl) != 0)
+    {
+      json_decref (root);
+      return NULL;
+    }
+  json_object_set_new (root, "is_msl", json_boolean (is_msl));
   json_object_set (root, "name", json_object_get (basic, "name"));
   json_object_set (root, "beacon", json_object_get (basic, "beacon"));
   json_decref (basic);

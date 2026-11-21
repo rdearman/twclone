@@ -12,6 +12,7 @@ Get detailed info about the current sector or a directly adjacent sector.
 {
   "sector_id": 1,
   "name": "Sol",
+  "is_msl": false,
   "adjacent_sectors": [...],
   "celestial_objects": [...],
   "ports": [...],
@@ -19,6 +20,11 @@ Get detailed info about the current sector or a directly adjacent sector.
   "players_present": [...]
 }
 ```
+
+`is_msl` is the authoritative public Major Space Lanes membership flag for
+this sector. It is included in detailed sector information and scans so
+clients can check planet-creation and asset-deployment restrictions before
+issuing those actions.
 
 ### `sector.scan` / `move.scan`
 `move.scan`: Summary scan (counts).

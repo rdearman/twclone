@@ -3726,6 +3726,35 @@ schema_planet_harvest_response (void)
 
 
 json_t *
+schema_planet_colonists_get (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  schema_nav_add_field (properties, "planet_id", "integer", 1);
+  schema_nav_require (required, "planet_id");
+  return schema_nav_request ("ge://schema/planet.colonists.get.json",
+                             properties, required);
+}
+
+json_t *
+schema_planet_colonists_set (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  schema_nav_add_field (properties, "planet_id", "integer", 1);
+  json_t *action = json_object ();
+  json_object_set_new (action, "type", json_string ("string"));
+  json_object_set_new (action, "enum", json_pack ("[s,s]", "pickup", "dropoff"));
+  json_object_set_new (properties, "action", action);
+  schema_nav_add_field (properties, "quantity", "integer", 1);
+  schema_nav_require (required, "planet_id");
+  schema_nav_require (required, "action");
+  schema_nav_require (required, "quantity");
+  return schema_nav_request ("ge://schema/planet.colonists.set.json",
+                             properties, required);
+}
+
+json_t *
 schema_planet_colonists_allocate (void)
 {
   json_t *props = json_object ();

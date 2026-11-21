@@ -79,6 +79,12 @@ class StateManager:
                 "commands_timed_out": 0,
                 "trade_profit_credits": 0,
                 "trade_sales": 0,
+                "trade_cycles_completed": 0,
+                "trade_cycle_profit_credits": 0.0,
+                "trade_navigation_turns": 0,
+                "trade_unprofitable_cycles": 0,
+                "trade_failed_routes": 0,
+                "trade_cargo_utilization_percent": 0.0,
                 "planned_route_hops": 0,
                 "completed_warps": 0,
                 "reconnects": 0,
@@ -353,6 +359,28 @@ class StateManager:
             enriched_data['adjacent'] = enriched_data['adjacent_sectors']
             logger.info(f"Normalized adjacent_sectors for sector {sector_id}. Keys: {enriched_data.keys()}")
 
+        # A no-link refusal can arrive after a lost movement acknowledgement,
+        # when the server has already advanced the player. Do not let the
+        # resulting stale-location blacklist override a fresh authoritative
+        # sector scan that confirms the outbound link exists.
+        adjacent = enriched_data.get('adjacent')
+        if isinstance(adjacent, list) and 'warp_blacklist' in self.state:
+            confirmed_links = {
+                str(item.get('to_sector', item.get('to_sector_id')) if isinstance(item, dict) else item)
+                for item in adjacent
+                if (item.get('to_sector', item.get('to_sector_id')) if isinstance(item, dict) else item)
+                is not None
+            }
+            stale_blacklist = [value for value in self.state.get('warp_blacklist', [])
+                               if str(value) in confirmed_links]
+            if stale_blacklist:
+                self.state['warp_blacklist'] = [
+                    value for value in self.state.get('warp_blacklist', [])
+                    if str(value) not in confirmed_links
+                ]
+                logger.info("Removed stale warp blacklist entries confirmed by sector %s: %s",
+                            sector_id, stale_blacklist)
+
         self.state['sector_data'][str(sector_id)] = enriched_data
         if 'universe_map' not in self.state:
             self.state['universe_map'] = {}
@@ -626,6 +654,35 @@ class StateManager:
             gross_values.append(max(Decimal("0"), gross or Decimal("0")))
         gross_total = sum(gross_values, Decimal("0"))
 
+        # Start a durable trade-cycle record from the actual purchase receipt.
+        # Navigation is counted from server-confirmed warps, not planned paths.
+        cycle = self.state.get("trade_cycle")
+        if not isinstance(cycle, dict):
+            player = ((self.state.get("player_info") or {}).get("player") or {})
+            try:
+                turns_at_start = int(player.get("turns_remaining", 0) or 0)
+            except (TypeError, ValueError):
+                turns_at_start = 0
+            purchased_units = sum(int(item.get("units", item.get("quantity", 0)) or 0)
+                                  for item in items_bought if isinstance(item, dict))
+            capacity = int((self.state.get("ship_info") or {}).get("holds", 0) or 0)
+            self.state["trade_cycle"] = {
+                "buy_sector": self.state.get("player_location_sector"),
+                "buy_port_id": port_id,
+                "started_at": time.time(),
+                "turns_at_start": turns_at_start,
+                "warps_at_start": int((self.state.get("ai_metrics") or {}).get("completed_warps", 0) or 0),
+                "holds": capacity,
+                "units_purchased": purchased_units,
+                "realized_profit": 0.0,
+                "failed_or_unprofitable": False,
+            }
+        else:
+            cycle["units_purchased"] = int(cycle.get("units_purchased", 0) or 0) + sum(
+                int(item.get("units", item.get("quantity", 0)) or 0)
+                for item in items_bought if isinstance(item, dict)
+            )
+
         for item_index, item in enumerate(items_bought):
             commodity = canon_commodity(item.get("commodity"))
             # Note: trade.buy_receipt_v1 uses "units" not "quantity"!
@@ -671,6 +728,8 @@ class StateManager:
                 "commodity": commodity,
                 "type": "buy"
             }
+
+        self.save_state()
         self.state["cargo_metadata"] = [
             dict(item) for item in self.state["ship_info"].get("cargo", [])
             if isinstance(item, dict)
@@ -783,13 +842,52 @@ class StateManager:
                 if str((port or {}).get("port_id")) == str(origin_port):
                     buy_sector = sector_id
                     break
-            if buy_sector is not None and self.state.get("player_location_sector") is not None:
+            if (buy_sector is not None and self.state.get("player_location_sector") is not None
+                    and total_profit > 0):
                 self.record_trade_route({
                     "buy_sector": buy_sector,
                     "sell_sector": self.state.get("player_location_sector"),
                     "commodity": commodity_sold,
                     "profit": total_profit,
                 })
+
+        cycle = self.state.get("trade_cycle")
+        if isinstance(cycle, dict):
+            cycle["realized_profit"] = float(cycle.get("realized_profit", 0) or 0) + float(total_profit)
+            cargo_left = any(
+                isinstance(item, dict) and float(item.get("quantity", 0) or 0) > 0
+                for item in self.state["ship_info"].get("cargo", [])
+            )
+            if not cargo_left:
+                current_warps = int((self.state.get("ai_metrics") or {}).get("completed_warps", 0) or 0)
+                try:
+                    warps_at_start = int(cycle.get("warps_at_start", current_warps))
+                except (TypeError, ValueError):
+                    warps_at_start = current_warps
+                navigation_turns = max(0, current_warps - warps_at_start)
+                holds = max(0, int(cycle.get("holds", 0) or 0))
+                purchased = max(0, int(cycle.get("units_purchased", 0) or 0))
+                utilization = min(100.0, 100.0 * purchased / holds) if holds else 0.0
+                profit = float(cycle["realized_profit"])
+                metrics = self.state.setdefault("ai_metrics", {})
+                metrics["trade_cycles_completed"] = metrics.get("trade_cycles_completed", 0) + 1
+                metrics["trade_cycle_profit_credits"] = metrics.get("trade_cycle_profit_credits", 0.0) + profit
+                metrics["trade_navigation_turns"] = metrics.get("trade_navigation_turns", 0) + navigation_turns
+                metrics["trade_cargo_utilization_percent"] = metrics.get("trade_cargo_utilization_percent", 0.0) + utilization
+                if profit <= 0:
+                    metrics["trade_unprofitable_cycles"] = metrics.get("trade_unprofitable_cycles", 0) + 1
+                history = self.state.setdefault("trade_cycle_history", [])
+                history.append({
+                    "buy_sector": cycle.get("buy_sector"),
+                    "sell_sector": self.state.get("player_location_sector"),
+                    "profit": profit,
+                    "navigation_turns": navigation_turns,
+                    "profit_per_navigation_turn": profit / max(1, navigation_turns),
+                    "cargo_utilization_percent": utilization,
+                    "completed_at": time.time(),
+                })
+                self.state["trade_cycle_history"] = history[-50:]
+                self.state["trade_cycle"] = None
 
         logger.info(f"Cargo updated after sell. Profit: {total_profit}. New cargo: {self.state['ship_info']['cargo']}")
         self.save_state()
@@ -1126,6 +1224,12 @@ class StateManager:
     def record_trade_failure(self, port_id, command_name, error_code, error_message):
         """Records a trade command failure and updates blacklists as appropriate."""
         logger.warning(f"Trade command '{command_name}' failed at port {port_id} with code {error_code}: {error_message}")
+        metrics = self.state.setdefault("ai_metrics", {})
+        metrics["trade_failed_routes"] = metrics.get("trade_failed_routes", 0) + 1
+        cycle = self.state.get("trade_cycle")
+        if isinstance(cycle, dict):
+            cycle["failed_or_unprofitable"] = True
+        self.save_state()
         
         # Add to port_trade_blacklist for specific errors
         if error_code == 1701: # Port is not buying this commodity right now.

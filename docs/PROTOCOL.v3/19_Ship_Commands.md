@@ -12,6 +12,13 @@ Get detailed status of the player's current ship, including cargo.
 
 **Response type**: `ship.status`
 
+The authenticated ship snapshot includes current equipment and the ship type's
+public capability limits (`max_holds`, `max_fighters`, `max_shields`,
+`max_genesis`, and `max_photons`). These values describe the configured hull;
+they do not grant or install equipment. `genesis` reports the number of
+Genesis torpedoes currently installed, separately from the `max_genesis` hull
+capacity, so clients can avoid purchases the server will reject.
+
 **Response data**:
 ```json
 {
@@ -23,6 +30,7 @@ Get detailed status of the player's current ship, including cargo.
     "holds": 10,
     "fighters": 1,
     "shields": 1,
+    "genesis": 1,
     "onplanet": 0,
     "ported": 0,
     "cargo": [
@@ -172,6 +180,11 @@ the seller's 6000-bp payout and new-hull trade-in factor. The purchase preserves
 the used ship's ID, condition and installed equipment, removes its listing and
 makes it the active ship atomically. The former active hull remains owned but
 non-primary. The response includes the consumed `used_inventory_id`.
+
+Each entry in `shipyard.list_v1.data.available` includes the same configured
+capability limits (`max_holds`, `max_fighters`, `max_shields`, `max_genesis`,
+and `max_photons`) alongside its existing price and eligibility fields. Clients
+can use these public values to choose an eligible hull for a gameplay goal.
 
 ### `ship.sell` and `shipyard.sell`
 These command names invoke the same standalone sale operation. The authenticated

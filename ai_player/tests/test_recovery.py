@@ -9,7 +9,9 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
                   _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
-                  reconcile_planet_transition_receipt)  # noqa: E402
+                  build_uncertain_trade_retry,
+                  reconcile_planet_transition_receipt,
+                  _confirm_planet_landing_readback)  # noqa: E402
 from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
 from bug_reporter import BugReporter  # noqa: E402
@@ -79,10 +81,34 @@ class QuietBandit:
 def test_timed_out_trade_quarantine_survives_restart(tmp_path):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
-    quarantine_timed_out_trades(manager, [("buy-1", {"command": "trade.buy", "meta": {"session_token": "secret"}})])
+    command = {
+        "command": "trade.buy",
+        "data": {"port_id": 3, "items": [{"commodity": "ORE", "quantity": 1}],
+                 "idempotency_key": "stable-key"},
+        "meta": {"session_token": "secret", "idempotency_key": "stable-key"},
+    }
+    quarantine_timed_out_trades(manager, [("buy-1", command)])
     restored = StateManager(str(path), {})
-    assert restored.get("uncertain_trade") == {"request_id": "buy-1", "command": "trade.buy"}
+    assert restored.get("uncertain_trade") == {
+        "request_id": "buy-1", "command": "trade.buy",
+        "data": command["data"], "idempotency_key": "stable-key",
+    }
     assert "secret" not in path.read_text()
+
+
+def test_uncertain_trade_retry_reuses_exact_payload_and_idempotency_key():
+    marker = {
+        "request_id": "buy-1", "command": "trade.buy", "idempotency_key": "stable-key",
+        "data": {"port_id": 3, "items": [{"commodity": "ORE", "quantity": 1}],
+                 "idempotency_key": "stable-key"},
+    }
+    retry = build_uncertain_trade_retry(marker, "session", "test-client", ["trade.buy"])
+    assert retry == {
+        "id": "buy-1", "command": "trade.buy", "data": marker["data"],
+        "meta": {"client_version": "test-client", "idempotency_key": "stable-key",
+                 "session_token": "session"},
+    }
+    assert build_uncertain_trade_retry({**marker, "data": None}, "session", "test-client") is None
 
 
 def test_read_timeout_does_not_quarantine_gameplay(tmp_path):
@@ -143,14 +169,20 @@ def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
     assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
 
 
-def test_landing_and_launch_receipts_update_context_without_waiting_for_refresh(tmp_path):
+def test_landing_receipt_waits_for_matching_player_and_ship_readbacks(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
-    manager.update_player_info({"ship": {"id": 56, "onplanet": 0}})
+    manager.update_player_info({"player": {"player_id": 4, "ship_id": 56},
+                                "ship": {"id": 56, "onplanet": 0}})
     assert reconcile_planet_transition_receipt(
         manager, "planet.land.success", {"planet_id": 62}
     ) == ("landed", 62)
     assert manager.get("ship_info")["onplanet"] == 1
     assert manager.get("ship_info")["planet_id"] == 62
+    assert manager.get("planet_landing_pending_refresh") is not None
+    assert not _confirm_planet_landing_readback(manager, "player.my_info")
+    assert manager.get("planet_landing_pending_refresh")["player_confirmed"]
+    assert _confirm_planet_landing_readback(manager, "ship.info")
+    assert manager.get("planet_landing_pending_refresh") is None
 
     assert reconcile_planet_transition_receipt(
         manager, "planet.launch.success", {}
@@ -242,6 +274,7 @@ def test_successful_strategy_goal_increments_completion_metric(tmp_path):
 def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.set("ship_info", {"id": 56, "type_id": 23, "name": "Escape Pod", "holds": 0})
+    manager.set("ship_recovery_requirements", {"max_genesis": 1, "max_holds": 25})
     manager.set("strategy_plan", ["shipyard: recover"])
     manager.add_pending_command("upgrade-1", {
         "command": "shipyard.upgrade", "data": {"new_type_id": 2},
@@ -256,7 +289,7 @@ def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(
         {"client_version": "test"}, None,
     )
 
-    assert manager.get("strategy_plan") == []
+    assert manager.get("strategy_plan") == ["shipyard: recover"]
     assert manager.get("shipyard_recovery_pending_refresh") is True
     assert manager.get("ship_info")["type_id"] == 2
     assert [command["command"] for command in connection.sent] == ["ship.info", "player.my_info"]
@@ -264,12 +297,32 @@ def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(
     process_responses(
         [{"reply_to": connection.sent[0]["id"], "status": "ok", "type": "ship.status",
           "data": {"ship": {"id": 56, "type_id": 2,
-                             "name": "BOT03 Recovery", "holds": 10}}}],
+                             "name": "BOT03 Recovery", "holds": 25,
+                             "max_holds": 250, "max_genesis": 5}}}],
         connection, manager, UnusedBugReporter(), QuietBandit(),
         {"client_version": "test"}, None,
     )
     assert manager.get("shipyard_recovery_pending_refresh") is False
-    assert manager.get("ship_info")["holds"] == 10
+    assert manager.get("ship_info")["holds"] == 25
+    assert advance_completed_goals(manager.get("strategy_plan"), manager.get_all()) == []
+
+
+def test_hardware_purchase_receipt_refreshes_authoritative_ship_counts(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("ship_info", {"id": 84, "fighters": 0, "shields": 0, "credits": 5000})
+    manager.add_pending_command("fighters-1", {
+        "command": "hardware.buy", "data": {"item": "FIGHTERS", "quantity": 10},
+    })
+
+    process_responses(
+        [{"reply_to": "fighters-1", "status": "ok", "type": "hardware.purchase_v1",
+          "data": {"ship": {"id": 84, "fighters": 10, "shields": 0},
+                   "credits_remaining": 4000}}],
+        None, manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+
+    assert manager.get("ship_info")["fighters"] == 10
+    assert manager.get("ship_info")["shields"] == 0
 
 
 def test_rejected_planet_landing_preserves_turn_and_landing_state(tmp_path):
@@ -557,6 +610,17 @@ def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
     assert manager.get("player_info")["player"]["credits"] == "900"
 
 
+def test_correlated_explicit_trade_error_resolves_uncertain_marker(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("uncertain_trade", {"request_id": "sell-1", "command": "trade.sell"})
+    manager.add_pending_command("sell-1", {"command": "trade.sell", "data": {"port_id": 1}})
+    process_responses([{"reply_to": "sell-1", "status": "error", "type": "error",
+                        "error": {"code": 500, "message": "Transaction failed"}, "data": None}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_trade") is None
+    assert manager.get("trade_successful") is False
+
+
 def test_interrupted_warp_reconciles_after_restart_and_late_reply(tmp_path):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
@@ -605,6 +669,31 @@ def test_explicit_warp_error_resolves_uncertainty_instead_of_retrying_forever(tm
 
     assert manager.get("uncertain_warp") is None
     assert "24" in {str(value) for value in manager.get("warp_blacklist", [])}
+
+
+def test_uncertain_warp_readback_accepts_committed_move_without_blacklisting_target(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("player_location_sector", 75)
+    manager.set("uncertain_warp", {
+        "from_sector_id": 75, "to_sector_id": 102,
+        "readback_request_id": "warp-readback",
+    })
+    manager.add_pending_command("warp-readback", {"command": "player.my_info", "data": {}})
+
+    process_responses([{"reply_to": "warp-readback", "status": "ok", "type": "player.info",
+                        "data": {"player": {"id": 108, "sector": 102}}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+
+    assert manager.get("uncertain_warp") is None
+    assert manager.get("player_location_sector") == 102
+    assert 102 not in {int(value) for value in manager.get("warp_blacklist", [])}
+
+
+def test_authoritative_sector_scan_clears_stale_warp_blacklist_entry(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("warp_blacklist", [102, 999])
+    manager.update_sector_data(75, {"adjacent_sectors": [{"to_sector": 102}, {"to_sector": 305}]})
+    assert manager.get("warp_blacklist") == [999]
 
 
 def test_planet_info_receipt_is_reconciled_outside_population_mode(tmp_path):

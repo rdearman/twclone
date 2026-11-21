@@ -779,9 +779,27 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
     }
   int has_long_range_scanner =
     (int) db_res_col_i64 (scanner_res, 9, &scanner_err);
+  int genesis = (int) db_res_col_i64 (scanner_res, 3, &scanner_err);
+  int max_holds = (int) db_res_col_i64 (scanner_res, 10, &scanner_err);
+  int max_fighters = (int) db_res_col_i64 (scanner_res, 11, &scanner_err);
+  int max_shields = (int) db_res_col_i64 (scanner_res, 12, &scanner_err);
+  int max_genesis = (int) db_res_col_i64 (scanner_res, 13, &scanner_err);
+  int max_photons = (int) db_res_col_i64 (scanner_res, 26, &scanner_err);
   db_res_finalize (scanner_res);
   if (json_object_set_new (ship_status, "has_long_range_scanner",
-				   json_boolean (has_long_range_scanner != 0)) != 0)
+			   json_boolean (has_long_range_scanner != 0)) != 0
+      || json_object_set_new (ship_status, "genesis",
+			      json_integer (genesis)) != 0
+      || json_object_set_new (ship_status, "max_holds",
+				      json_integer (max_holds)) != 0
+      || json_object_set_new (ship_status, "max_fighters",
+				      json_integer (max_fighters)) != 0
+      || json_object_set_new (ship_status, "max_shields",
+				      json_integer (max_shields)) != 0
+      || json_object_set_new (ship_status, "max_genesis",
+				      json_integer (max_genesis)) != 0
+      || json_object_set_new (ship_status, "max_photons",
+				      json_integer (max_photons)) != 0)
     {
       json_decref (ship_status);
       json_decref (player_info);

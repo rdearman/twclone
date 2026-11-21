@@ -1023,6 +1023,20 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (ship_obj, "trade_in_value",
 			   json_integer (trade_in_value));
       json_object_set_new (ship_obj, "net_cost", json_integer (net_cost));
+      /* Shipyard capability values are already public ship-type data used by
+       * server eligibility checks. Publish them so clients can select a hull
+       * that can perform their intended gameplay instead of buying by price
+       * alone (for example, a coloniser needs Genesis capacity). */
+      json_object_set_new (ship_obj, "max_holds",
+			   json_integer (db_res_col_i64 (res_inventory, 6, &err)));
+      json_object_set_new (ship_obj, "max_fighters",
+			   json_integer (db_res_col_i64 (res_inventory, 7, &err)));
+      json_object_set_new (ship_obj, "max_shields",
+			   json_integer (db_res_col_i64 (res_inventory, 8, &err)));
+      json_object_set_new (ship_obj, "max_genesis",
+			   json_integer (db_res_col_i64 (res_inventory, 9, &err)));
+      json_object_set_new (ship_obj, "max_photons",
+			   json_integer (db_res_col_i64 (res_inventory, 18, &err)));
       // Eligibility Checks
       if (!db_res_col_is_null (res_inventory, 3)
 	  && player_alignment < (int) db_res_col_i64 (res_inventory, 3, &err))
