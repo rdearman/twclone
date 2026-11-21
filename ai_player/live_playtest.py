@@ -338,7 +338,7 @@ def _write_bot_configs(runtime: dict) -> None:
             "allow_zero_turn_strategy": index in (3, 4, 8, 9),
             "turn_reset_poll_seconds": 30,
             "turn_reserve_priority_prefixes": (
-                ["planet:", "citadel:"] if index in (3, 4) else
+                ["shipyard:", "planet:", "citadel:"] if index in (3, 4) else
                 ["combat:"] if index in (6, 7) else
                 ["corp:", "planet:"] if index in (8, 9) else
                 ["combat:", "planet:"] if index == 10 else []
@@ -388,7 +388,7 @@ def configure_bots() -> None:
                        "ollama_model": MODEL,
                        "allow_zero_turn_strategy": index in (3, 4, 8, 9)})
         config["turn_reserve_priority_prefixes"] = (
-            ["planet:", "citadel:"] if index in (3, 4) else
+            ["shipyard:", "planet:", "citadel:"] if index in (3, 4) else
             ["combat:"] if index in (6, 7) else
             ["corp:", "planet:"] if index in (8, 9) else
             ["combat:", "planet:"] if index == 10 else []

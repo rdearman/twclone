@@ -505,7 +505,7 @@ def _start_llm_keepalive(game_conn, state_manager, config):
 STRATEGIC_ACTION_ORDER = (
     "move.warp", "move.transwarp", "move.pathfind", "sector.info", "sector.scan",
     "sector.scan.density", "trade.port_info", "trade.quote", "trade.buy", "trade.sell",
-    "hardware.list", "hardware.buy", "shipyard.list", "shipyard.upgrade", "ship.repair",
+    "hardware.list", "hardware.buy", "dock.status", "shipyard.list", "shipyard.upgrade", "ship.repair",
     "planet.genesis_create", "planet.land", "planet.info", "planet.harvest",
     "planet.colonists.allocate", "planet.fighters.transfer", "citadel.build",
     "citadel.upgrade", "corp.create", "corp.list", "corp.invite", "corp.join",
@@ -532,6 +532,9 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
     if role == "coloniser":
         ship = game_state.get("ship_info") or {}
         genesis = int(ship.get("genesis_torpedoes", ship.get("genesis", 0)) or 0)
+        if (game_state.get("shipyard_recovery_pending_refresh")
+                or (int(ship.get("holds", 0) or 0) <= 0 and supports("shipyard.list", "shipyard.upgrade"))):
+            return ["shipyard: recover"]
         if sector.get("has_planet") or ship.get("onplanet"):
             return ["planet: develop"] if supports(
                 "planet.land", "planet.harvest", "planet.colonists.allocate") else []
@@ -550,7 +553,11 @@ def _role_goal_options(role_name, game_state, filtered_state, config):
                     continue
         return list(dict.fromkeys(options[:8])) or (["scan: density"] if supports("sector.scan.density") else [])
     if role == "industrialist":
-        if sector.get("has_planet") or (game_state.get("ship_info") or {}).get("onplanet"):
+        ship = game_state.get("ship_info") or {}
+        if (game_state.get("shipyard_recovery_pending_refresh")
+                or (int(ship.get("holds", 0) or 0) <= 0 and supports("shipyard.list", "shipyard.upgrade"))):
+            return ["shipyard: recover"]
+        if sector.get("has_planet") or ship.get("onplanet"):
             return ["planet: develop"] if supports(
                 "planet.land", "planet.harvest", "planet.colonists.allocate") else []
         known_planets = [f"goto: {sid}" for sid, details in (game_state.get("sector_data") or {}).items()
@@ -629,7 +636,7 @@ def _role_action_inventory(role_name, commands):
     role = str(role_name or "").strip().lower()
     if role in ("coloniser", "industrialist"):
         prefixes = ("planet.", "citadel.", "hardware.", "shipyard.", "move.", "sector.")
-        extra = {"ship.claim", "ship.info", "ship.status", "ship.repair", "player.my_info"}
+        extra = {"dock.status", "ship.claim", "ship.info", "ship.status", "ship.repair", "player.my_info"}
     elif role in ("corporation founder", "corporate operative"):
         prefixes = ("corp.", "move.", "sector.")
         extra = {"player.list_online", "player.my_info", "bank.deposit", "bank.balance"}
@@ -1448,7 +1455,7 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
         can_trade = filtered_game_state.get("can_trade_at_current_location", False)
         has_cargo = bool((filtered_game_state.get("ship") or {}).get("cargo"))
         
-        goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat|bank|citadel|fleet|corp|diplomacy|hardware)\s*:\s*(.+)$', re.IGNORECASE)
+        goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat|bank|citadel|fleet|corp|diplomacy|hardware|shipyard)\s*:\s*(.+)$', re.IGNORECASE)
 
         for raw_goal in raw_plan:
             goal = _canonicalize_strategy_goal(
@@ -1537,6 +1544,10 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
             elif verb == "hardware":
                 if arg.lower() in ("genesis", "fighters", "photon"):
                     validated_plan.append(f"hardware: {arg.lower()}")
+
+            elif verb == "shipyard":
+                if arg.lower() == "recover":
+                    validated_plan.append("shipyard: recover")
             
             else:
                 logger.debug(f"Skipping unknown verb: {verb}")
@@ -1857,6 +1868,18 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
                     or int((game_state.get("ship_info") or {}).get(
                         "genesis_torpedoes", (game_state.get("ship_info") or {}).get("genesis", 0)) or 0) > 0)
 
+        elif goal_type == "shipyard" and goal_target == "recover":
+            if (response_type == "shipyard.upgraded_v1"
+                    and response_data.get("ship_id") is not None
+                    and response_data.get("new_type_id") is not None):
+                return True
+            ship = game_state.get("ship_info") or {}
+            try:
+                has_holds = int(ship.get("holds", 0) or 0) > 0
+            except (TypeError, ValueError):
+                has_holds = False
+            return has_holds and response_type in ("shipyard.upgraded_v1", "state.snapshot")
+
         elif goal_type == "combat" and goal_target == "photon":
             return response_type == "combat.photon_fired_v1"
 
@@ -1981,14 +2004,31 @@ def discard_protected_combat_goals(strategy_plan, game_state):
     return retained
 
 
+ROLE_GATED_GOAL_PREFIXES = (
+    "planet:", "shipyard:", "hardware:", "combat:", "corp:",
+    "citadel:", "fleet:", "diplomacy:",
+)
+
+
+def discard_unavailable_role_goal_plan(strategy_plan, available_goals):
+    """Drop a persisted role goal when current authoritative state forbids it."""
+    if not isinstance(strategy_plan, list) or not strategy_plan:
+        return []
+    first = str(strategy_plan[0]).strip().lower()
+    allowed = {str(goal).strip().lower() for goal in (available_goals or [])}
+    if first.startswith(ROLE_GATED_GOAL_PREFIXES) and first not in allowed:
+        return []
+    return list(strategy_plan)
+
+
 AI_SCHEMA_BOOTSTRAP_COMMANDS = frozenset({
     "player.my_info", "ship.info", "ship.status", "sector.info",
-    "sector.scan.density", "move.warp", "move.pathfind",
+    "sector.search", "sector.scan.density", "move.warp", "move.pathfind",
     "move.autopilot.start", "move.autopilot.status", "move.autopilot.stop",
     "trade.port_info", "trade.quote", "trade.buy", "trade.sell",
     "bank.balance", "bank.deposit", "bank.withdraw", "planet.info", "planet.land",
-    "planet.genesis_create", "planet.harvest", "planet.colonists.allocate",
-    "hardware.list", "hardware.buy", "shipyard.list", "shipyard.upgrade",
+    "planet.launch", "planet.genesis_create", "planet.harvest", "planet.colonists.allocate",
+    "hardware.list", "hardware.buy", "dock.status", "shipyard.list", "shipyard.upgrade",
     "ship.claim", "player.list_online", "corp.create", "corp.list",
     "corp.invite", "corp.join", "corp.member.transfer", "corp.status",
     "combat.attack", "combat.fire_photon", "combat.deploy_fighters",
@@ -2071,10 +2111,12 @@ def _canonicalize_strategy_goal(goal, goal_options, game_state):
         return canonical
     # Existing goal syntax is normalized only when its semantic goal is in
     # this role's advertised choice set.
-    match = re.match(r"^(goto|buy|sell|scan|planet|combat|bank|citadel|fleet|corp|diplomacy|hardware)[.:](.+)$", value)
+    match = re.match(r"^(goto|buy|sell|scan|planet|combat|bank|citadel|fleet|corp|diplomacy|hardware|shipyard)[.:](.+)$", value)
     if match:
         verb, arg = match.groups()
         goal_aliases = {
+            ("shipyard", "list"): "shipyard: recover",
+            ("shipyard", "upgrade"): "shipyard: recover",
             ("planet", "land"): "planet: develop",
             ("planet", "info"): "planet: develop",
             ("planet", "harvest"): "planet: develop",
@@ -2090,6 +2132,36 @@ def _canonicalize_strategy_goal(goal, goal_options, game_state):
         canonical = goal_aliases.get((verb, arg), f"{verb}: {arg}")
         return canonical if canonical in choices else None
     return None
+
+
+def normalize_shipyard_catalog(response_type, response_data, refreshed_at=None):
+    """Normalize the public V3 shipyard response without treating hulls as fleet."""
+    if response_type not in ("shipyard.list_v1", "shipyard.list") or not isinstance(response_data, dict):
+        return None
+    catalog = dict(response_data)
+    catalog["available"] = catalog.get("available", catalog.get("ships", []))
+    if not isinstance(catalog["available"], list):
+        catalog["available"] = []
+    if not isinstance(catalog.get("used_available"), list):
+        catalog["used_available"] = []
+    catalog["_refreshed_at"] = time.time() if refreshed_at is None else float(refreshed_at)
+    return catalog
+
+
+def normalize_public_shipyard_search(response_type, response_data):
+    """Keep only Stardock port matches returned by the public search command."""
+    if response_type != "sector.search_results_v1" or not isinstance(response_data, dict):
+        return []
+    items = response_data.get("items", [])
+    if not isinstance(items, list):
+        return []
+    return [
+        item for item in items
+        if isinstance(item, dict)
+        and item.get("kind") == "port"
+        and str(item.get("name") or "").strip().lower() == "stardock"
+        and item.get("sector_id") is not None
+    ]
 
 
 def should_attempt_registration(config, state_manager):
@@ -2601,6 +2673,23 @@ def main(config_path="config.json"):
             strategy_plan = game_state.get("strategy_plan", [])
             valid_plan = discard_stale_exploration_goals(strategy_plan, game_state)
             valid_plan = discard_protected_combat_goals(valid_plan, game_state)
+            if config.get("playtest_bot") and valid_plan:
+                role_options = _role_goal_options(
+                    config.get("role_name"), game_state,
+                    {
+                        "current_port": (game_state.get("port_info_by_sector") or {}).get(
+                            str(game_state.get("player_location_sector"))),
+                        "known_port_sector_ids": list((game_state.get("known_ports") or {}).keys()),
+                    },
+                    config,
+                )
+                role_valid_plan = discard_unavailable_role_goal_plan(valid_plan, role_options)
+                if role_valid_plan != valid_plan:
+                    logger.info(
+                        "Dropping persisted role goal %s; current public state permits %s.",
+                        valid_plan[0], role_options,
+                    )
+                valid_plan = role_valid_plan
             if valid_plan != strategy_plan:
                 if valid_plan != discard_stale_exploration_goals(strategy_plan, game_state):
                     logger.warning("Dropping persisted exploration goals for already-known non-port sectors.")
@@ -3336,6 +3425,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     ship_obj = response_data.get("ship", response_data)
                     # update_player_info expects {"ship": {...}}
                     state_manager.update_player_info({"ship": ship_obj})
+                    if response_type in ("ship.info", "ship.status"):
+                        state_manager.set("shipyard_recovery_pending_refresh", False)
                     if isinstance(ship_obj, dict):
                         state_manager.record_fleet_snapshot([ship_obj])
                     if response_type == "ship.claimed":
@@ -3534,13 +3625,59 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         if isinstance(public_players, list):
                             state_manager.record_opponent_observation(public_players, sector_id=sector_id)
 
-                elif response_type == "shipyard.list":
-                    # Store available ships for bootstrap ship claiming
-                    ships = response_data.get("ships", [])
-                    if ships:
-                        state_manager.set("shipyard_list", ships)
-                        state_manager.record_fleet_snapshot(ships)
-                        logger.info(f"Bootstrap: Received shipyard list with {len(ships)} available ships.")
+                elif response_type == "sector.search_results_v1":
+                    # This is a public result from the authenticated sector.search
+                    # command, not an inferred scan or hidden database lookup.
+                    shipyards = normalize_public_shipyard_search(response_type, response_data)
+                    state_manager.set("shipyard_search_results", shipyards)
+                    state_manager.set("shipyard_search_complete", True)
+
+                elif response_type in ("shipyard.list_v1", "shipyard.list"):
+                    # V3 publishes a catalogue with `available` and
+                    # `used_available`; it is not an owned-fleet snapshot.
+                    catalog = normalize_shipyard_catalog(response_type, response_data)
+                    state_manager.set("shipyard_catalog", catalog)
+                    available = catalog["available"]
+                    state_manager.set("shipyard_list", available)
+                    logger.info("Shipyard catalogue refreshed at sector %s (%d hulls, %d used).",
+                                catalog.get("sector_id"),
+                                len(available) if isinstance(available, list) else 0,
+                                len(catalog.get("used_available", []) or []))
+
+                elif response_type == "shipyard.upgraded_v1":
+                    # The receipt confirms the mutation but omits capacity.
+                    # Store only fields the server returned, then hold this
+                    # goal until a fresh ship snapshot arrives. Otherwise a
+                    # stale zero-hold snapshot can buy another upgrade using
+                    # a new idempotency key.
+                    ship = dict(state_manager.get("ship_info") or {})
+                    ship.update({
+                        "id": response_data.get("ship_id"),
+                        "type_id": response_data.get("new_type_id"),
+                        "name": response_data.get("new_ship_name"),
+                    })
+                    state_manager.update_player_info({"ship": ship})
+                    state_manager.set("shipyard_recovery_pending_refresh", True)
+                    for refresh_name in ("ship.info", "player.my_info"):
+                        refresh_id = str(uuid.uuid4())
+                        refresh = {
+                            "id": f"c-shipyard-refresh-{refresh_id[:8]}",
+                            "command": refresh_name,
+                            "data": {},
+                            "meta": {
+                                "client_version": config.get("client_version"),
+                                "idempotency_key": refresh_id,
+                                "session_token": state_manager.get("session_id"),
+                            },
+                        }
+                        if game_conn.send_command(refresh):
+                            state_manager.add_pending_command(refresh["id"], refresh)
+                            state_manager.record_ai_metric("commands_sent")
+
+                elif response_type == "dock.status_v1":
+                    ship = dict(state_manager.get("ship_info") or {})
+                    ship["ported"] = response_data.get("port_id", 0)
+                    state_manager.set("ship_info", ship)
 
                 elif response_type == "trade.port_info":
                     port_id = response_data.get("port", {}).get("id")

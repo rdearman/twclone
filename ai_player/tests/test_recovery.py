@@ -239,6 +239,39 @@ def test_successful_strategy_goal_increments_completion_metric(tmp_path):
     assert manager.get("ai_metrics")["goals_completed"] == 1
 
 
+def test_shipyard_upgrade_receipt_ends_retry_and_refreshes_before_next_purchase(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("ship_info", {"id": 56, "type_id": 23, "name": "Escape Pod", "holds": 0})
+    manager.set("strategy_plan", ["shipyard: recover"])
+    manager.add_pending_command("upgrade-1", {
+        "command": "shipyard.upgrade", "data": {"new_type_id": 2},
+    })
+    connection = FakeConnection()
+
+    process_responses(
+        [{"reply_to": "upgrade-1", "status": "ok", "type": "shipyard.upgraded_v1",
+          "data": {"ship_id": 56, "new_type_id": 2,
+                   "new_ship_name": "BOT03 Recovery", "credits_spent": 15950}}],
+        connection, manager, UnusedBugReporter(), QuietBandit(),
+        {"client_version": "test"}, None,
+    )
+
+    assert manager.get("strategy_plan") == []
+    assert manager.get("shipyard_recovery_pending_refresh") is True
+    assert manager.get("ship_info")["type_id"] == 2
+    assert [command["command"] for command in connection.sent] == ["ship.info", "player.my_info"]
+
+    process_responses(
+        [{"reply_to": connection.sent[0]["id"], "status": "ok", "type": "ship.status",
+          "data": {"ship": {"id": 56, "type_id": 2,
+                             "name": "BOT03 Recovery", "holds": 10}}}],
+        connection, manager, UnusedBugReporter(), QuietBandit(),
+        {"client_version": "test"}, None,
+    )
+    assert manager.get("shipyard_recovery_pending_refresh") is False
+    assert manager.get("ship_info")["holds"] == 10
+
+
 def test_rejected_planet_landing_preserves_turn_and_landing_state(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.set("strategy_plan", ["planet: land", "survey: port"])

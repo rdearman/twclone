@@ -7,7 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from planner import Planner
 from main import (_canonicalize_strategy_goal, _role_action_inventory,
                   _role_goal_options, discard_protected_combat_goals,
-                  is_goal_complete)
+                  discard_unavailable_role_goal_plan, is_goal_complete,
+                  normalize_public_shipyard_search, normalize_shipyard_catalog,
+                  schema_commands_to_fetch)
 
 
 def planner(config):
@@ -78,6 +80,175 @@ def test_coloniser_uses_catalogue_before_buying_genesis_hardware():
         "4": {"items": [{"code": "GENESIS", "stock_quantity": 3}]}}
     assert p._achieve_goal(state, "hardware:genesis") == {
         "command": "hardware.buy", "data": {"code": "GENESIS", "quantity": 1}}
+
+
+def test_escape_pod_coloniser_launches_and_prioritizes_public_shipyard_recovery():
+    p = planner({})
+    game = {
+        "player_location_sector": 62,
+        "player_info": {"player": {"turns_remaining": 900, "credits": "10000000"}},
+        "ship_info": {"id": 56, "type_id": 23, "name": "Escape Pod", "holds": 0,
+                       "onplanet": 1, "genesis": 0},
+        "sector_data": {"62": {"has_planet": True}},
+        "server_commands": ["planet.launch", "move.warp", "shipyard.list", "shipyard.upgrade"],
+    }
+    assert _role_goal_options("Coloniser", game, {}, {}) == ["shipyard: recover"]
+    assert p._achieve_goal(game, "shipyard: recover") == {"command": "planet.launch", "data": {}}
+
+
+def test_escape_pod_recovery_uses_only_a_publicly_observed_stardock():
+    class MapState:
+        def get(self, _key, default=None):
+            return default
+        def find_path(self, _start, _target):
+            return []
+
+    p = Planner(MapState(), None, None, {})
+    state = {
+        "player_location_sector": 62,
+        "ship_info": {"id": 56, "type_id": 23, "holds": 0, "onplanet": 0},
+        "sector_data": {
+            "62": {"sector_id": 62, "adjacent": [14]},
+            "440": {"sector_id": 440, "ports": [{"name": "Stardock", "port_id": 190}]},
+        },
+        "server_commands": ["move.warp", "move.pathfind", "shipyard.list", "shipyard.upgrade"],
+    }
+    assert p._achieve_goal(state, "shipyard: recover") == {
+        "command": "move.pathfind", "data": {"from_sector_id": 62, "to_sector_id": 440}}
+
+
+def test_escape_pod_recovery_uses_documented_public_search_before_exploration():
+    p = planner({})
+    state = {
+        "player_location_sector": 62,
+        "ship_info": {"id": 56, "type_id": 23, "holds": 0, "onplanet": 0},
+        "sector_data": {"62": {"sector_id": 62, "adjacent": [14]}},
+        "shipyard_search_complete": False,
+        "server_commands": ["sector.search", "move.warp", "shipyard.list", "shipyard.upgrade"],
+    }
+    assert p._achieve_goal(state, "shipyard: recover") == {
+        "command": "sector.search", "data": {"q": "Stardock", "type": "port", "limit": 20}}
+    state["shipyard_search_complete"] = True
+    assert p._achieve_goal(state, "shipyard: recover")["command"] == "move.warp"
+
+
+def test_public_shipyard_search_results_are_scoped_to_stardock_port_matches():
+    assert normalize_public_shipyard_search("sector.search_results_v1", {
+        "items": [
+            {"kind": "port", "name": "Stardock", "sector_id": 440},
+            {"kind": "sector", "name": "Stardock", "sector_id": 441},
+            {"kind": "port", "name": "Trading Post", "sector_id": 442},
+            {"kind": "port", "name": "stardock", "sector_id": 443},
+            {"kind": "port", "name": "Stardock"},
+        ]
+    }) == [
+        {"kind": "port", "name": "Stardock", "sector_id": 440},
+        {"kind": "port", "name": "stardock", "sector_id": 443},
+    ]
+    assert normalize_public_shipyard_search("unexpected", {"items": [
+        {"kind": "port", "name": "Stardock", "sector_id": 440}
+    ]}) == []
+
+
+def test_escape_pod_recovery_docks_then_reads_the_v3_shipyard_catalogue():
+    p = planner({})
+    state = {
+        "player_location_sector": 440,
+        "ship_info": {"id": 56, "type_id": 23, "holds": 0, "onplanet": 0, "ported": 0},
+        "sector_data": {"440": {"sector_id": 440, "ports": [{"name": "Stardock"}]}},
+        "server_commands": ["dock.status", "shipyard.list", "shipyard.upgrade"],
+    }
+    assert p._achieve_goal(state, "shipyard: recover") == {
+        "command": "dock.status", "data": {"action": "dock"}}
+    state["ship_info"]["ported"] = 190
+    assert p._achieve_goal(state, "shipyard: recover") == {"command": "shipyard.list", "data": {}}
+
+
+def test_escape_pod_recovery_selects_an_affordable_eligible_hull_from_v3_available_field():
+    p = planner({})
+    state = {
+        "player_location_sector": 440,
+        "player_info": {"player": {"credits": "1000000"}},
+        "ship_info": {"id": 56, "type_id": 23, "name": "Escape Pod", "holds": 0, "ported": 190},
+        "sector_data": {"440": {"sector_id": 440, "ports": [{"name": "Stardock"}]}},
+        "shipyard_catalog": {
+            "sector_id": 440,
+            "available": [
+                {"type_id": 23, "type": "Escape Pod", "eligible": True, "net_cost": 0},
+                {"type_id": 2, "type": "Scout", "eligible": False, "net_cost": 500},
+                {"type_id": 7, "type": "Merchant", "eligible": True, "net_cost": 25000},
+            ],
+        },
+        "server_commands": ["dock.status", "shipyard.list", "shipyard.upgrade"],
+    }
+    assert p._achieve_goal(state, "shipyard: recover") == {
+        "command": "shipyard.upgrade",
+        "data": {"new_type_id": 7, "new_ship_name": "Playtest Recovery"},
+    }
+    assert is_goal_complete("shipyard: recover", {
+        "ship_info": {"holds": 20},
+    }, {}, "shipyard.upgraded_v1")
+
+
+def test_shipyard_recovery_completes_from_success_receipt_even_before_ship_refresh():
+    assert is_goal_complete("shipyard: recover", {
+        "ship_info": {"id": 56, "holds": 0},
+    }, {"ship_id": 56, "new_type_id": 2}, "shipyard.upgraded_v1")
+    assert not is_goal_complete("shipyard: recover", {
+        "ship_info": {"id": 56, "holds": 0},
+    }, {"ship_id": 56}, "shipyard.upgraded_v1")
+
+
+def test_recovery_waits_for_authoritative_ship_refresh_after_upgrade():
+    p = planner({})
+    state = {
+        "player_location_sector": 440,
+        "ship_info": {"id": 56, "type_id": 2, "holds": 0, "ported": 190},
+        "shipyard_recovery_pending_refresh": True,
+        "server_commands": ["ship.info", "shipyard.upgrade"],
+    }
+    assert _role_goal_options("Coloniser", state, {}, {}) == ["shipyard: recover"]
+    assert p._achieve_goal(state, "shipyard: recover") == {"command": "ship.info", "data": {}}
+
+
+def test_v3_shipyard_list_response_normalizes_available_catalog_without_fleet_side_effects():
+    catalog = normalize_shipyard_catalog("shipyard.list_v1", {
+        "sector_id": 440, "is_shipyard": True,
+        "available": [{"type_id": 7, "eligible": True}],
+        "used_available": [{"used_inventory_id": 4}],
+    }, refreshed_at=123.0)
+    assert catalog == {
+        "sector_id": 440, "is_shipyard": True,
+        "available": [{"type_id": 7, "eligible": True}],
+        "used_available": [{"used_inventory_id": 4}],
+        "_refreshed_at": 123.0,
+    }
+    assert normalize_shipyard_catalog("shipyard.list_v1", {"ships": "invalid"})["available"] == []
+    assert normalize_shipyard_catalog("shipyard.list", {"ships": [{"type_id": 2}]})["available"] == [{"type_id": 2}]
+    assert normalize_shipyard_catalog("shipyard.upgraded_v1", {}) is None
+
+
+def test_persisted_planet_goal_is_replaced_after_authoritative_ship_state_changes():
+    assert discard_unavailable_role_goal_plan(
+        ["planet: develop", "goto: 62"], ["shipyard: recover"]
+    ) == []
+    assert discard_unavailable_role_goal_plan(
+        ["shipyard: recover", "goto: 440"], ["shipyard: recover"]
+    ) == ["shipyard: recover", "goto: 440"]
+    assert discard_unavailable_role_goal_plan(
+        ["goto: 440", "planet: develop"], ["shipyard: recover"]
+    ) == ["goto: 440", "planet: develop"]
+
+
+def test_ship_recovery_actions_fetch_public_schemas_before_execution():
+    missing = schema_commands_to_fetch(
+        ["planet.launch", "dock.status", "shipyard.list", "shipyard.upgrade"],
+        cached_schemas={},
+    )
+    assert "planet.launch" in missing
+    assert "dock.status" in missing
+    assert "shipyard.list" in missing
+    assert "shipyard.upgrade" in missing
 
 
 def test_bounty_role_maps_adjacent_observed_target_to_explicit_photon_protocol():

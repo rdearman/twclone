@@ -266,6 +266,56 @@ class Planner:
             ranked.append((hops, target))
         return min(ranked)[1] if ranked else None
 
+    @staticmethod
+    def _public_shipyard_sectors(current_state):
+        """Find shipyards only from public observations or protocol search results."""
+        found = set()
+        for sector_key, sector in (current_state.get("sector_data") or {}).items():
+            if not isinstance(sector, dict):
+                continue
+            ports = sector.get("ports") or []
+            for port in ports:
+                if not isinstance(port, dict):
+                    continue
+                name = str(port.get("name") or "").strip().lower()
+                if name == "stardock" or port.get("is_shipyard") is True:
+                    try:
+                        found.add(int(sector.get("sector_id", sector_key)))
+                    except (TypeError, ValueError):
+                        pass
+            if sector.get("is_shipyard") is True:
+                try:
+                    found.add(int(sector.get("sector_id", sector_key)))
+                except (TypeError, ValueError):
+                    pass
+        for sector_key, port in (current_state.get("port_info_by_sector") or {}).items():
+            if not isinstance(port, dict):
+                continue
+            if str(port.get("name") or "").strip().lower() == "stardock" or port.get("is_shipyard") is True:
+                try:
+                    found.add(int(port.get("sector_id", sector_key)))
+                except (TypeError, ValueError):
+                    pass
+        catalog = current_state.get("shipyard_catalog") or {}
+        if isinstance(catalog, dict) and catalog.get("is_shipyard") is True:
+            try:
+                found.add(int(catalog.get("sector_id")))
+            except (TypeError, ValueError):
+                pass
+        # sector.search is an ordinary, documented V3 command. Keep search
+        # results separate from locally observed sectors so the bot never
+        # mistakes a global catalog response for a scan of its surroundings.
+        for item in current_state.get("shipyard_search_results") or []:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("name") or "").strip().lower() != "stardock":
+                continue
+            try:
+                found.add(int(item.get("sector_id")))
+            except (TypeError, ValueError):
+                pass
+        return sorted(found)
+
     def handle_trade_response(self, sent_command: dict, resp: dict):
         """Processes trade command responses and informs state manager of failures."""
         command_name = sent_command.get("command", "unknown")
@@ -477,6 +527,97 @@ class Planner:
                     logger.info(f"Goto {target_sector} path unknown; exploring via warp to {chosen}.")
                     return {"command": "move.warp", "data": {"to_sector_id": chosen}}
                 
+                return None
+
+            if goal_type == "shipyard" and goal_target.lower() == "recover":
+                ship = current_state.get("ship_info") or {}
+                commands = set(current_state.get("server_commands") or [])
+                if current_state.get("shipyard_recovery_pending_refresh"):
+                    if not commands or "ship.info" in commands:
+                        return {"command": "ship.info", "data": {}}
+                    return None
+                if ship.get("onplanet"):
+                    if not commands or "planet.launch" in commands:
+                        return {"command": "planet.launch", "data": {}}
+                    return None
+
+                current_sector_id = int(current_sector) if current_sector is not None else None
+                shipyard_sectors = self._public_shipyard_sectors(current_state)
+                if current_sector_id not in shipyard_sectors:
+                    target = self._nearest_known_sector(current_state, shipyard_sectors)
+                    if target is not None:
+                        return self._achieve_goal(current_state, f"goto: {target}")
+                    if (not current_state.get("shipyard_search_complete")
+                            and (not commands or "sector.search" in commands)):
+                        return {"command": "sector.search", "data": {
+                            "q": "Stardock", "type": "port", "limit": 20}}
+                    target = self._get_next_warp_target(current_state)
+                    if target is not None and (not commands or "move.warp" in commands):
+                        return {"command": "move.warp", "data": {"to_sector_id": int(target)}}
+                    if not commands or "sector.scan.density" in commands:
+                        return {"command": "sector.scan.density", "data": {}}
+                    return None
+
+                if not bool(ship.get("ported")):
+                    if not commands or "dock.status" in commands:
+                        return {"command": "dock.status", "data": {"action": "dock"}}
+                    return None
+
+                catalog = current_state.get("shipyard_catalog") or {}
+                try:
+                    catalog_sector = int(catalog.get("sector_id"))
+                except (AttributeError, TypeError, ValueError):
+                    catalog_sector = None
+                if catalog_sector != current_sector_id:
+                    if not commands or "shipyard.list" in commands:
+                        return {"command": "shipyard.list", "data": {}}
+                    return None
+
+                player = (current_state.get("player_info") or {}).get("player", {})
+                try:
+                    credits = int(float(player.get("credits", 0) or 0))
+                    current_type = int(ship.get("type_id", 0) or 0)
+                except (TypeError, ValueError):
+                    return None
+                available = catalog.get("available") or []
+                candidates = []
+                for hull in available:
+                    if not isinstance(hull, dict) or not hull.get("eligible"):
+                        continue
+                    try:
+                        type_id = int(hull.get("type_id"))
+                        price = int(hull.get("net_cost", hull.get("shipyard_price", hull.get("base_price", 0))) or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    hull_name = str(hull.get("type") or hull.get("name") or "")
+                    if type_id == current_type or "escape pod" in hull_name.lower() or price < 0 or price > credits:
+                        continue
+                    candidates.append((price, type_id, hull_name))
+                if candidates and (not commands or "shipyard.upgrade" in commands):
+                    price, type_id, hull_name = min(candidates)
+                    bot_name = str(self.config.get("playtest_bot") or "Playtest")[:24]
+                    return {"command": "shipyard.upgrade", "data": {
+                        "new_type_id": type_id,
+                        "new_ship_name": f"{bot_name} Recovery"[:32],
+                    }}
+
+                used = catalog.get("used_available") or []
+                used_candidates = []
+                for hull in used:
+                    if not isinstance(hull, dict):
+                        continue
+                    try:
+                        inventory_id = int(hull.get("used_inventory_id"))
+                        price = int(hull.get("price", 0) or 0)
+                        used_ship_id = int(hull.get("ship_id", 0) or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    hull_name = str(hull.get("ship_type") or hull.get("name") or "")
+                    if used_ship_id != int(ship.get("id", 0) or 0) and "escape pod" not in hull_name.lower() and 0 <= price <= credits:
+                        used_candidates.append((price, inventory_id))
+                if used_candidates and (not commands or "shipyard.upgrade" in commands):
+                    _, inventory_id = min(used_candidates)
+                    return {"command": "shipyard.upgrade", "data": {"used_inventory_id": inventory_id}}
                 return None
 
             elif goal_type == "sell":
