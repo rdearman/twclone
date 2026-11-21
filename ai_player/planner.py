@@ -260,9 +260,14 @@ class Planner:
                 max_purchase = int(item.get("max_purchase", needed) or 0)
                 quantity = max(0, min(needed, max_purchase,
                                       stock if stock is not None else needed))
+                # Build a viable kit incrementally when the bot cannot afford
+                # the full target in one transaction. Each receipt refreshes
+                # authoritative ship state before the next purchase decision.
+                affordable = credits // unit_price if unit_price > 0 else 0
+                quantity = min(quantity, affordable)
             except (TypeError, ValueError):
                 return None
-            if quantity <= 0 or unit_price <= 0 or quantity * unit_price > credits:
+            if quantity <= 0 or unit_price <= 0:
                 return None
             if not self._is_command_ready("hardware.buy", current_state.get("command_retry_info", {})):
                 return None

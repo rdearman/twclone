@@ -662,6 +662,45 @@ def test_combat_role_purchases_missing_equipment_before_resuming_combat():
         "command": "hardware.buy", "data": {"code": "SHIELDS", "quantity": 5}}
 
 
+def test_combat_readiness_builds_equipment_incrementally_with_limited_credits():
+    p = planner({"role_name": "Pirate", "combat_min_fighters": 10,
+                 "combat_min_shields": 5})
+    state = {
+        "player_location_sector": 440,
+        "sector_data": {"440": {"has_port": True}},
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "max_fighters": 100, "shields": 0, "max_shields": 20},
+        "player_info": {"player": {"credits": "250.00"}},
+        "server_commands": ["hardware.list", "hardware.buy"],
+        "hardware_catalog_checked_sectors": ["440"],
+        "hardware_catalog_by_sector": {"440": {"items": [
+            {"code": "FIGHTERS", "price": 100, "stock_quantity": 100,
+             "max_purchase": 100},
+        ]}},
+    }
+    assert p._combat_readiness_command(state) == {
+        "command": "hardware.buy", "data": {"code": "FIGHTERS", "quantity": 2}}
+
+
+def test_combat_readiness_waits_when_one_unit_is_unaffordable():
+    p = planner({"role_name": "Bounty hunter", "combat_min_fighters": 10,
+                 "combat_min_shields": 5})
+    state = {
+        "player_location_sector": 440,
+        "sector_data": {"440": {"has_port": True}},
+        "ship_info": {"hull": 100, "max_hull": 100, "fighters": 0,
+                      "max_fighters": 100, "shields": 0, "max_shields": 20},
+        "player_info": {"player": {"credits": "99.00"}},
+        "server_commands": ["hardware.list", "hardware.buy"],
+        "hardware_catalog_checked_sectors": ["440"],
+        "hardware_catalog_by_sector": {"440": {"items": [
+            {"code": "FIGHTERS", "price": 100, "stock_quantity": 100,
+             "max_purchase": 100},
+        ]}},
+    }
+    assert p._combat_readiness_command(state) is None
+
+
 def test_class0_catalog_routes_combat_role_to_known_stardock_instead_of_retrying_buy():
     p = planner({"role_name": "Bounty hunter", "combat_min_fighters": 10,
                  "combat_min_shields": 5})

@@ -98,6 +98,22 @@ def test_dashboard_counts_successful_gameplay_actions_but_not_read_only_queries(
     ]
 
 
+def test_role_effectiveness_reports_completed_trade_economics_not_activity_only():
+    result = live.role_effectiveness_summary("Trader", {
+        "trade_cycle_history": [
+            {"profit": 500, "navigation_turns": 2, "cargo_utilization_percent": 80},
+            {"profit": -50, "navigation_turns": 1, "cargo_utilization_percent": 40},
+        ]
+    }, [("10:00", "move.warp"), ("10:01", "trade.buy"),
+        ("10:02", "trade.sell")])
+    assert result["completed_profitable_cycles"] == 1
+    assert result["completed_unprofitable_cycles"] == 1
+    assert result["realized_trade_profit_credits"] == 450
+    assert result["navigation_turns_per_cycle"] == 1.5
+    assert result["profit_per_navigation_turn"] == 150
+    assert result["average_cargo_utilization_percent"] == 60
+
+
 def test_turn_grant_is_database_scoped_idempotent_and_audited(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "RUNTIME", tmp_path)
     (tmp_path / "playtest.json").write_text(live.json.dumps({

@@ -97,6 +97,52 @@ def completed_gameplay_actions(bot: str, log_text: str) -> list[tuple[str, str]]
     return actions
 
 
+def role_effectiveness_summary(role: str, state: dict,
+                               actions: list[tuple[str, str]]) -> dict:
+    """Summarize acknowledged outcomes without treating activity as success."""
+    categories: dict[str, int] = {}
+    for _, command in actions:
+        category = action_category(command)
+        categories[category] = categories.get(category, 0) + 1
+    role_key = role.strip().lower()
+    result: dict[str, object] = {"acknowledged_actions": categories}
+    if role_key in ("trader", "merchant"):
+        cycles = [row for row in state.get("trade_cycle_history", [])
+                  if isinstance(row, dict)]
+        profits = [float(row.get("profit", 0) or 0) for row in cycles]
+        nav_turns = [int(row.get("navigation_turns", 0) or 0) for row in cycles]
+        utilization = [float(row.get("cargo_utilization_percent", 0) or 0)
+                       for row in cycles]
+        result.update({
+            "completed_profitable_cycles": sum(value > 0 for value in profits),
+            "completed_unprofitable_cycles": sum(value <= 0 for value in profits),
+            "realized_trade_profit_credits": round(sum(profits), 2),
+            "navigation_turns_per_cycle": round(sum(nav_turns) / len(nav_turns), 2) if nav_turns else None,
+            "profit_per_navigation_turn": round(sum(profits) / max(1, sum(nav_turns)), 2) if cycles else None,
+            "average_cargo_utilization_percent": round(sum(utilization) / len(utilization), 2) if utilization else None,
+        })
+    elif role_key in ("coloniser", "colonizer", "industrialist"):
+        result.update({
+            "authoritatively_tracked_owned_planets": len(state.get("owned_planets", [])),
+            "acknowledged_planet_operations": categories.get("planets", 0),
+        })
+    elif role_key in ("corporation founder", "corporate operative"):
+        player = ((state.get("player_info") or {}).get("player") or {})
+        result.update({
+            "corporation_id": player.get("corp_id"),
+            "acknowledged_corporation_operations": categories.get("corporations", 0),
+            "member_transfer_acknowledged": bool(state.get("corporation_transfer_completed")),
+        })
+    elif role_key in ("pirate", "bounty hunter"):
+        result.update({"acknowledged_combat_operations": categories.get("combat", 0)})
+    elif role_key == "explorer":
+        result.update({"acknowledged_scans": categories.get("scanning", 0),
+                       "acknowledged_warps": categories.get("navigation", 0)})
+    else:
+        result["acknowledged_objective_actions"] = categories
+    return result
+
+
 def run(args: list[str], *, check: bool = True, capture: bool = False,
         cwd: Path | None = None, env: dict | None = None):
     return subprocess.run(args, check=check, text=True,
@@ -615,6 +661,7 @@ def status() -> None:
         cfg = json.loads((RUNTIME / "bots" / bot / "config.json").read_text())
         info = (state.get("player_info") or {}).get("player") or {}
         metrics = state.get("ai_metrics") or {}
+        mutation_markers = state.get("uncertain_mutations") or {}
         profile = state.get("ollama_last_profile") or {}
         plan = state.get("strategy_plan") or []
         blocked_objective = state.get("blocked_objective")
@@ -634,6 +681,7 @@ def status() -> None:
         # systemd's append-only capture survives an individual bot restart;
         # main.py's state log is intentionally a fresh per-process snapshot.
         bot_log = RUNTIME / "bots" / bot / "process.log"
+        action_records = []
         try:
             action_records = completed_gameplay_actions(bot, bot_log.read_text(errors="replace"))
             completed_actions = len(action_records)
@@ -647,6 +695,7 @@ def status() -> None:
             last_action = "?"
             categories = {}
         trace = state.get("decision_trace") or []
+        effectiveness = role_effectiveness_summary(role, state, action_records)
         current_goal = plan[0] if plan else (
             trace[-1].get("goal") if trace else state.get("strategy_plan_source", "?")
         )
@@ -671,11 +720,13 @@ def status() -> None:
               f"active={profile.get('active_requests', '?')}) "
               f"inference_errors={metrics.get('ollama_errors', 0)} last={last_action} "
               f"progress={json.dumps(categories, sort_keys=True)} "
+              f"role_effectiveness={json.dumps(effectiveness, sort_keys=True)} "
               f"strategic_goals_completed={metrics.get('strategic_goals_completed', 0)} "
               f"navigation_goals_completed={metrics.get('navigation_goals_completed', 0)} "
               f"current_goal={current_goal} "
               f"blocked={json.dumps(blocked_objective, separators=(',', ':')) if blocked_objective else 'none'} "
               f"historical_legacy_session_clears={metrics.get('reconnects', 0)} "
+              f"mutation_reconciliation_pending={len(mutation_markers)} "
               f"session_state_resets={metrics.get('session_state_resets', 0)} "
               f"connections={json.dumps(connection_metrics, sort_keys=True)}")
     print("Human count reflects valid auth sessions, not live TCP sockets.")

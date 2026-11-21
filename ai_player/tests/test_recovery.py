@@ -10,6 +10,7 @@ from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
                   _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
                   build_uncertain_trade_retry,
+                  uncertain_mutation_readback_requests,
                   reconcile_planet_transition_receipt,
                   _confirm_planet_landing_readback)  # noqa: E402
 from planner import Planner  # noqa: E402
@@ -363,6 +364,98 @@ def test_atomic_state_save_keeps_previous_state_when_serialization_fails(tmp_pat
 def test_persisted_goto_goal_completes_with_string_or_numeric_sector_id():
     assert is_goal_complete("goto: 42", {"player_location_sector": "42"}, {}, "state.snapshot")
     assert is_goal_complete("goto: 42", {}, {"to_sector_id": "42"}, "move.result")
+
+
+def test_expired_purchase_is_quarantined_until_authoritative_balance_and_ship_reads(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    requests = uncertain_mutation_readback_requests("hardware.buy", {"code": "FIGHTERS"})
+    manager.mark_uncertain_mutation(
+        "purchase-1", "hardware.buy", {"code": "FIGHTERS", "quantity": 10},
+        idempotency_key="stable-purchase-key", readback_requests=requests,
+        readback_types=[item[0] for item in requests],
+    )
+    manager.mark_mutation_timed_out("purchase-1")
+
+    pending = manager.uncertain_mutation_readbacks()
+    assert [(item["command"], item["response_type"]) for item in pending] == [
+        ("player.my_info", "player.my_info")]
+    manager.record_uncertain_mutation_readback("player.my_info")
+    assert [(item["command"], item["response_type"])
+            for item in manager.uncertain_mutation_readbacks()] == [("ship.info", "ship.info")]
+    manager.record_uncertain_mutation_readback("ship.info")
+    assert manager.uncertain_mutation_readbacks() == []
+    assert manager.get("uncertain_mutations") == {}
+
+
+def test_inflight_purchase_after_restart_requires_same_readbacks(tmp_path):
+    path = str(tmp_path / "state.json")
+    manager = StateManager(path, {})
+    manager.mark_uncertain_mutation(
+        "purchase-1", "hardware.buy", {"code": "SHIELDS"},
+        idempotency_key="stable-key",
+        readback_requests=uncertain_mutation_readback_requests("hardware.buy"),
+    )
+    restarted = StateManager(path, {})
+    restarted.recover_uncertain_mutations_after_restart()
+    assert restarted.uncertain_mutation_readbacks()[0]["command"] == "player.my_info"
+
+
+def test_expensive_transfer_and_planet_mutations_have_public_readbacks():
+    corp_reads = uncertain_mutation_readback_requests(
+        "corp.member.transfer", {}, {"player_info": {"player": {"corp_id": 4}}})
+    assert [item[1] for item in corp_reads] == [
+        "player.my_info", "ship.info", "corp.status", "corp.balance", "corp.roster"]
+    planet_reads = uncertain_mutation_readback_requests("planet.deposit", {"planet_id": 27})
+    assert [item[1] for item in planet_reads] == ["player.my_info", "ship.info", "planet.info"]
+    assert [item[1] for item in uncertain_mutation_readback_requests("planet.deposit", {})] == [
+        "player.my_info", "ship.info"]
+    assert [item[1] for item in uncertain_mutation_readback_requests(
+        "planet.genesis_create", {}, {"player_location_sector": 19})] == [
+            "player.my_info", "ship.info", "sector.info"]
+
+
+def test_recipient_side_transfer_ambiguity_fails_closed_after_source_readback(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    requests = uncertain_mutation_readback_requests(
+        "corp.member.transfer", {"target_player_id": 9, "asset": "fighters", "quantity": 2},
+        {"player_info": {"player": {"corp_id": 3}}})
+    manager.mark_uncertain_mutation(
+        "transfer-1", "corp.member.transfer", {"target_player_id": 9},
+        readback_requests=requests, manual_review_after_readback=True,
+    )
+    manager.mark_mutation_timed_out("transfer-1")
+    while (next_read := manager.uncertain_mutation_readbacks()):
+        manager.record_uncertain_mutation_readback(next_read[0]["response_type"])
+    unresolved = manager.unresolved_manual_mutations()
+    assert len(unresolved) == 1
+    assert unresolved[0]["request_id"] == "transfer-1"
+    assert manager.uncertain_mutation_readbacks() == []
+
+
+def test_late_transfer_receipt_releases_manual_ambiguity(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.mark_uncertain_mutation(
+        "transfer-late", "corp.member.transfer", {"target_player_id": 9},
+        readback_requests=uncertain_mutation_readback_requests(
+            "corp.member.transfer", {}, {"player_info": {"player": {"corp_id": 3}}}),
+        manual_review_after_readback=True,
+    )
+    manager.mark_mutation_timed_out("transfer-late")
+    for response_type in ("player.my_info", "ship.info", "corp.status.success",
+                          "corp.balance.success", "corp.roster.success"):
+        manager.record_uncertain_mutation_readback(response_type)
+    assert manager.unresolved_manual_mutations()
+
+    process_responses(
+        [{"reply_to": "transfer-late", "status": "ok",
+          "type": "corp.member.asset_transferred_v1",
+          "data": {"sender_player_id": 8, "recipient_player_id": 9,
+                   "asset": "fighters", "quantity": 2}}],
+        FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+
+    assert manager.get("uncertain_mutations") == {}
+    assert manager.get("corporation_transfer_completed") is True
 
 
 def test_login_after_restart_discards_cached_player_and_ship_state(tmp_path):

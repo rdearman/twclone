@@ -194,6 +194,9 @@ def population_turn_readback_required(command_name, config):
     read_only = {
         "auth.login", "auth.register", "player.my_info", "player.info", "player.ping",
         "ship.info", "ship.status", "sector.info", "trade.port_info", "trade.quote",
+        "bank.balance", "bank.history", "bank.statement", "corp.status", "corp.balance",
+        "corp.roster", "corp.list", "ship.inspect", "shipyard.list", "combat.status",
+        "planet.info", "trade.history", "trade.offer.list", "notes.list",
         "system.schema", "system.cmd_list", "system.schema_list",
         "player.computer.recommend_routes", "move.autopilot.status",
     }
@@ -324,6 +327,65 @@ def mutation_reconciliation_contract(command_name):
         "nav.avoid.remove": ["nav.avoid.remove", "nav.avoid.list"],
     }
     return {"response_types": contracts.get(command_name, []), "readback_required": True}
+
+
+def uncertain_mutation_readback_requests(command_name, data=None, current_state=None):
+    """Return authoritative readbacks for costly writes whose reply can be lost.
+
+    These are deliberately reads, never automatic mutation retries. The bot
+    remains paused until fresh public state has been received for every
+    affected balance/inventory view.
+    """
+    data = data or {}
+    current_state = current_state or {}
+    base = [("player.my_info", "player.my_info", {}),
+            ("ship.info", "ship.info", {})]
+    if command_name in {"hardware.buy", "shipyard.sell", "shipyard.upgrade",
+                        "ship.repair", "trade.buy", "trade.sell"}:
+        return [("player.my_info", "player.my_info", {}),
+                ("ship.info", "ship.info", {})]
+    if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
+        return [("player.my_info", "player.my_info", {}),
+                ("bank.balance", "bank.balance", {})]
+    if command_name.startswith("planet.") or command_name.startswith("citadel."):
+        planet_id = data.get("planet_id")
+        ship = current_state.get("ship_info") or {}
+        planet_id = planet_id or ship.get("planet_id")
+        requests = list(base)
+        if planet_id is None:
+            sector_id = data.get("sector_id", current_state.get("player_location_sector"))
+            if sector_id is None:
+                return requests
+            return requests + [("sector.info", "sector.info", {"sector_id": sector_id})]
+        requests.append(("planet.info", "planet.info", {"planet_id": planet_id}))
+        return requests
+    if command_name.startswith("corp."):
+        requests = list(base) + [("corp.status.success", "corp.status", {}),
+                                 ("corp.balance.success", "corp.balance", {})]
+        if command_name in {"corp.member.transfer", "corp.kick", "corp.leave"}:
+            player = ((current_state.get("player_info") or {}).get("player") or {})
+            corp_id = data.get("corp_id", player.get("corp_id"))
+            if corp_id is not None:
+                requests.append(("corp.roster.success", "corp.roster", {"corp_id": corp_id}))
+        return requests
+    if command_name in {"combat.attack", "combat.attack.ship", "combat.attack.port",
+                        "combat.attack_planet", "combat.fire_photon",
+                        "combat.deploy_fighters", "combat.deploy_mines"}:
+        sector_id = data.get("sector_id")
+        requests = list(base)
+        sector_id = sector_id or current_state.get("player_location_sector")
+        if sector_id is not None:
+            requests.append(("sector.info", "sector.info", {"sector_id": sector_id}))
+        return requests
+    if command_name.startswith("move."):
+        sector_id = data.get("to_sector_id", current_state.get("player_location_sector"))
+        requests = list(base)
+        if sector_id is not None:
+            requests.append(("sector.info", "sector.info", {"sector_id": sector_id}))
+        return requests
+    # Conservative fallback for any other state-changing command: refresh
+    # account and active-ship state before the planner can submit it again.
+    return list(base)
 
 
 def classify_protocol_outcome(response, config):
@@ -2603,6 +2665,9 @@ def main(config_path="config.json"):
     state_manager.set_default("server_capabilities", {})
     state_manager.set_default("ordinary_player_commands", [])
     state_manager.set_default("server_commands", [])
+    # A process may have died after a non-idempotent write reached the server.
+    # Never resume its old plan until public authoritative readbacks reconcile it.
+    state_manager.recover_uncertain_mutations_after_restart()
 
     last_heartbeat = time.time()
     reconnect_attempt = 0
@@ -2645,6 +2710,7 @@ def main(config_path="config.json"):
                 )
                 for _request_id, expired_command in expired_commands:
                     command_name = expired_command.get("command", "unknown")
+                    state_manager.mark_mutation_timed_out(_request_id)
                     state_manager.record_command_timeout(command_name)
                     state_manager.record_command_failure(command_name)
                     if command_name in ("move.autopilot.start", "move.autopilot.status"):
@@ -2816,6 +2882,45 @@ def main(config_path="config.json"):
                 # Give server time to respond to schema requests
                 logger.info("Waiting for schema responses...")
                 time.sleep(2) 
+                continue
+
+            # Do not let a timed-out purchase, transfer or other costly write
+            # be planned again from stale local state. Read each affected
+            # account/inventory view through the public protocol first.
+            uncertain_reads = state_manager.uncertain_mutation_readbacks()
+            if uncertain_reads:
+                readback = uncertain_reads[0]
+                if readback["command"] not in (game_state.get("server_commands") or []):
+                    logger.error("Mutation %s is ambiguous; required public readback %s is not advertised. ",
+                                 readback["request_id"], readback["command"])
+                    time.sleep(5)
+                    continue
+                readback_id = str(uuid.uuid4())
+                try:
+                    readback_command = build_player_command(
+                        readback["command"], readback["data"], game_state.get("session_id"),
+                        config.get("client_version"), game_state.get("server_commands"), readback_id,
+                    )
+                except (TypeError, ValueError) as exc:
+                    logger.error("Cannot safely reconcile mutation %s: %s", readback["request_id"], exc)
+                    time.sleep(5)
+                    continue
+                if game_conn.send_command(readback_command):
+                    state_manager.add_pending_command(readback_command["id"], readback_command)
+                    state_manager.record_ai_metric("commands_sent")
+                    state_manager.record_ai_metric("mutation_readbacks_sent")
+                time.sleep(0.2)
+                continue
+
+            unresolved_manual = state_manager.unresolved_manual_mutations()
+            if unresolved_manual:
+                logger.error(
+                    "Gameplay paused: %d ambiguous transfer(s) have fresh source state but their "
+                    "recipient-side outcome is not publicly verifiable. Original request IDs: %s",
+                    len(unresolved_manual),
+                    ",".join(item.get("request_id", "?") for item in unresolved_manual),
+                )
+                time.sleep(10)
                 continue
 
             if game_state.get("uncertain_trade"):
@@ -3223,10 +3328,19 @@ def main(config_path="config.json"):
                     continue
 
                 logger.info("Sending command: %s", redact_secrets(full_command))
-                if population_turn_readback_required(command_name, config) and hasattr(state_manager, "mark_uncertain_mutation"):
+                readback_requests = uncertain_mutation_readback_requests(
+                    command_name, data_payload, game_state
+                ) if population_turn_readback_required(command_name, config) else []
+                if readback_requests and hasattr(state_manager, "mark_uncertain_mutation"):
                     state_manager.mark_uncertain_mutation(
                         full_command["id"], command_name, data_payload,
                         mutation_reconciliation_contract(command_name),
+                        idempotency_key=idempotency_key,
+                        readback_types=[item[0] for item in readback_requests],
+                        readback_requests=readback_requests,
+                        manual_review_after_readback=command_name in {
+                            "bank.transfer", "corp.member.transfer", "ship.transfer_cargo"
+                        },
                     )
                 if command_name in ("trade.buy", "trade.sell"):
                     state_manager.set("uncertain_trade", {
@@ -3358,6 +3472,17 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             # server may still return the original idempotent result. Rebuild
             # only the exact uncertain mutation when its response type is
             # structurally valid; unrelated late replies remain ignored.
+            if sent_command is None:
+                uncertain_mutation = (state_manager.get("uncertain_mutations", {}) or {}).get(
+                    str(request_id)
+                )
+                if isinstance(uncertain_mutation, dict):
+                    sent_command = {
+                        "command": uncertain_mutation.get("command", "unknown"),
+                        "data": uncertain_mutation.get("data", {}),
+                        "meta": {"idempotency_key": uncertain_mutation.get("idempotency_key")},
+                    }
+
             if sent_command is None:
                 late_data = response.get("data") or {}
                 uncertain_trade = state_manager.get("uncertain_trade") or {}
@@ -3535,11 +3660,13 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             # prevent the legacy authenticated flow from starting.
             state_manager.set("handshake_complete", True)
             logger.info("Server did not return system.welcome; continuing with legacy protocol compatibility.")
-        if request_id and response.get("status") == "refused" and hasattr(state_manager, "resolve_uncertain_mutation"):
-            # A server refusal is an authoritative non-mutation outcome; a
-            # timeout or success remains durable until its readback contract
-            # has been reconciled.
+        if (request_id and response.get("status") in ("ok", "refused", "error")
+                and hasattr(state_manager, "resolve_uncertain_mutation")):
+            # A correlated terminal reply resolves the original write. If its
+            # ack was late, the durable request ID still identifies it.
             state_manager.resolve_uncertain_mutation(request_id)
+        if response.get("status") == "ok":
+            state_manager.record_uncertain_mutation_readback(response_type)
 
         if config.get("qa_mode"):
             bug_reporter.log_response(response)

@@ -210,14 +210,84 @@ class StateManager:
         if key not in self.state:
             self.state[key] = default_value
 
-    def mark_uncertain_mutation(self, request_id, command, data=None, contract=None):
+    def mark_uncertain_mutation(self, request_id, command, data=None, contract=None,
+                                idempotency_key=None, readback_types=None,
+                                readback_requests=None,
+                                manual_review_after_readback=False):
         """Persist an in-flight mutation so a restart cannot silently replay it."""
         mutations = self.state.setdefault("uncertain_mutations", {})
         mutations[str(request_id)] = {
             "request_id": str(request_id), "command": command,
             "data": data or {}, "contract": contract or {},
+            "idempotency_key": idempotency_key,
+            "readback_types": list(readback_types or []),
+            "readback_requests": list(readback_requests or []),
+            "manual_review_after_readback": bool(manual_review_after_readback),
+            "readbacks_seen": [], "timed_out": False,
         }
         self.save_state()
+
+    def mark_mutation_timed_out(self, request_id):
+        """Keep a timed-out non-idempotent mutation quarantined until read back."""
+        marker = self.state.setdefault("uncertain_mutations", {}).get(str(request_id))
+        if marker is not None:
+            marker["timed_out"] = True
+            marker["readbacks_seen"] = []
+            self.save_state()
+
+    def recover_uncertain_mutations_after_restart(self):
+        """A sent write without a surviving reply must be read back after restart."""
+        changed = False
+        for marker in self.state.setdefault("uncertain_mutations", {}).values():
+            if not marker.get("timed_out") or marker.get("readbacks_complete"):
+                marker["timed_out"] = True
+                marker["readbacks_seen"] = []
+                changed = True
+        if changed:
+            self.save_state()
+
+    def uncertain_mutation_readbacks(self):
+        """Return the next authoritative reads required by timed-out writes."""
+        result = []
+        for marker in self.state.setdefault("uncertain_mutations", {}).values():
+            if not marker.get("timed_out") or marker.get("readbacks_complete"):
+                continue
+            seen = set(marker.get("readbacks_seen", []))
+            for response_type, command, data in marker.get("readback_requests", []):
+                if response_type not in seen:
+                    result.append({"request_id": marker["request_id"],
+                                   "response_type": response_type,
+                                   "command": command, "data": data})
+                    break
+        return result
+
+    def record_uncertain_mutation_readback(self, response_type):
+        """Record an authoritative response and release a reconciled mutation."""
+        mutations = self.state.setdefault("uncertain_mutations", {})
+        changed = False
+        for request_id, marker in list(mutations.items()):
+            if not marker.get("timed_out"):
+                continue
+            required = [item[0] for item in marker.get("readback_requests", [])]
+            if response_type not in required:
+                continue
+            seen = marker.setdefault("readbacks_seen", [])
+            if response_type not in seen:
+                seen.append(response_type)
+                changed = True
+            if all(item in seen for item in required):
+                if marker.get("manual_review_after_readback"):
+                    marker["readbacks_complete"] = True
+                    marker["manual_resolution_required"] = True
+                else:
+                    mutations.pop(request_id, None)
+                changed = True
+        if changed:
+            self.save_state()
+
+    def unresolved_manual_mutations(self):
+        return [dict(marker) for marker in self.state.setdefault("uncertain_mutations", {}).values()
+                if marker.get("manual_resolution_required")]
 
     def resolve_uncertain_mutation(self, request_id):
         mutations = self.state.setdefault("uncertain_mutations", {})
