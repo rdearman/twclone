@@ -21,7 +21,7 @@ def test_help_exits_zero_and_lists_existing_and_new_flags():
     result = _run_help()
     assert result.returncode == 0
     out = result.stdout
-    for flag in ("--host", "--port", "--user", "--passwd", "--debug", "--menus"):
+    for flag in ("--host", "--port", "--user", "--passwd", "--debug", "--menus", "--tls", "--ca-cert"):
         assert flag in out, f"{flag} missing from --help output"
 
 

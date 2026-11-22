@@ -34,10 +34,11 @@ func _run() -> void:
 	)
 	view.set_profiles([
 		{"name": "Development", "host": "localhost", "port": 1234, "username": "newguy"},
-		{"name": "Test universe", "host": "192.0.2.40", "port": 4321, "username": "captain"},
+		{"name": "Test universe", "host": "192.0.2.40", "port": 4321, "username": "captain", "tls": true},
 	], 1)
 	_check(view.profile_selector.item_count == 3 and view.profile_selector.get_item_text(2) == "Test universe", "saved server profiles were not shown in the selector")
 	_check(view.host_input.text == "192.0.2.40" and view.port_input.text == "4321" and view.username_input.text == "captain", "selected server profile did not populate connection fields")
+	_check(view.tls_enabled_checkbox.button_pressed, "selected TLS server profile did not enable verified TLS")
 	_check(view.password_input.text.is_empty(), "loading a server profile restored a password")
 	var capture_path := OS.get_environment("TWCLONE_LOGIN_CAPTURE")
 	if not capture_path.is_empty():
@@ -54,8 +55,9 @@ func _run() -> void:
 	view.profile_name_input.text = "Production"
 	view.host_input.text = "game.example.test"
 	view.port_input.text = "1234"
+	view.tls_enabled_checkbox.button_pressed = true
 	view._save_profile()
-	_check(view._profiles.size() == 3 and view._profiles[2]["name"] == "Production", "saving under a new profile name did not add a profile")
+	_check(view._profiles.size() == 3 and view._profiles[2]["name"] == "Production" and view._profiles[2]["tls"], "saving under a new profile name did not retain its verified TLS setting")
 	view._remove_profile()
 	_check(view._profiles.size() == 2 and persisted_index == -1, "removing the selected profile did not update the saved list")
 	_check(view.profile_selector.get_item_text(0) == "Current connection · not saved", "profile selector does not expose unsaved current connection")

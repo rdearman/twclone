@@ -31,6 +31,8 @@ WORKDIR /app/bin
 COPY --from=build /src/bin/server /app/bin/server
 COPY --from=build /src/bin/bigbang /app/bin/bigbang
 COPY tools/feedback_github_publisher.py /app/bin/feedback_github_publisher.py
+COPY tools/argon2id_passwords.py /app/bin/argon2id_passwords.py
+COPY tools/lock_seed_sysop_password.py /app/bin/lock_seed_sysop_password.py
 COPY --from=build /src/sql/pg /app/sql/pg
 COPY docker/bigbang.beta.json /app/bin/bigbang.json
 COPY docker/entrypoint-server.sh /app/entrypoint-server.sh

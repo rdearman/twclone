@@ -30,11 +30,17 @@ services:
     cpus: 2.0
     pids_limit: 256
     restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "20m", max-file: "5"}
 
   migrate:
     build: .
     entrypoint: ["/app/entrypoint-migrate.sh"]
     environment:
+      # Keep known development logins out of a beta bootstrap. This only
+      # affects the migration connection; test fixtures opt in separately.
+      PGOPTIONS: "-c twclone.provision_dev_accounts=off"
       TWCLONE_DB_ADMIN_CONNINFO: host=db port=5432 dbname=postgres user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
       TWCLONE_DB_APP_CONNINFO: host=db port=5432 dbname=%DB% user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
       TWCLONE_DB_MIGRATION_CONNINFO: host=db port=5432 dbname=twclone user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
@@ -50,6 +56,9 @@ services:
     cpus: 2.0
     pids_limit: 128
     restart: "no"
+    logging:
+      driver: local
+      options: {max-size: "20m", max-file: "3"}
 
   game:
     build: .
@@ -70,9 +79,16 @@ services:
     depends_on:
       migrate: {condition: service_completed_successfully}
     networks: [beta_private, beta_frontend]
-    # Loopback-only publication for local verification; never a public bind.
-    ports: ["127.0.0.1:12483:12483"]
+    # Default to loopback for local rehearsals. A reviewed public deployment
+    # sets TWCLONE_BETA_HOST_ADDRESS=0.0.0.0 for the DNS-only TCP/TLS endpoint.
+    ports: ["${TWCLONE_BETA_HOST_ADDRESS:-127.0.0.1}:${TWCLONE_BETA_HOST_PORT:-12483}:12483"]
     expose: [12483]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket,ssl; c=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); c.check_hostname=False; c.verify_mode=ssl.CERT_NONE; s=c.wrap_socket(socket.create_connection(('127.0.0.1',12483),2)); s.close()"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     cap_drop: [ALL]
@@ -81,6 +97,9 @@ services:
     cpus: 2.0
     pids_limit: 256
     restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "20m", max-file: "5"}
 
 networks:
   beta_private:

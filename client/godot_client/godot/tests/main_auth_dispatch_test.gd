@@ -25,6 +25,9 @@ func _run() -> void:
 	var login_view = main_instance.get_node("LoginView")
 	login_view.host_input.text = "127.0.0.1"
 	login_view.port_input.text = "18766"
+	# This test server speaks the local plaintext mock protocol. The release
+	# login defaults to verified TLS, so select the mock's transport explicitly.
+	login_view.tls_enabled_checkbox.button_pressed = false
 	login_view.username_input.text = "newguy"
 	login_view.password_input.text = "test-only"
 	login_view._submit()

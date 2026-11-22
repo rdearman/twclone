@@ -22,6 +22,10 @@ var connection_timeout_seconds: float = DEFAULT_CONNECTION_TIMEOUT_SECONDS
 var max_events: int = 200
 
 var _socket: StreamPeerTCP = StreamPeerTCP.new()
+var _tls_socket: StreamPeerTLS
+var _tls_enabled := false
+var _tls_host := ""
+var _trusted_certificate_path := ""
 var _buffer := ""
 var _requests := RequestManager.new()
 var _events: Array = []
@@ -40,10 +44,14 @@ func _init(timeout_seconds: float = 15.0, event_limit: int = 200, connect_timeou
 	max_events = event_limit
 	_requests.timeout_seconds = timeout_seconds
 
-func connect_to_server(host: String, port: int) -> Error:
+func connect_to_server(host: String, port: int, use_tls: bool = false, trusted_certificate_path: String = "") -> Error:
 	print("[AUTH_TRACE] Transport connect start host=%s port=%d" % [host, port])
 	close("Connection reset.")
 	_socket = StreamPeerTCP.new()
+	_tls_socket = null
+	_tls_enabled = use_tls
+	_tls_host = host
+	_trusted_certificate_path = trusted_certificate_path
 	_buffer = ""
 	_connected_announced = false
 	_connecting = true
@@ -62,13 +70,32 @@ func poll(_delta: float = 0.0) -> void:
 		_mark_disconnected("Connection timed out after %d seconds." % int(ceil(connection_timeout_seconds)))
 		return
 	if status == StreamPeerTCP.STATUS_CONNECTED:
-		if not _connected_announced:
-			_connected_announced = true
-			_connecting = false
-			print("[AUTH_TRACE] Transport connection established")
-			transport_connected.emit()
-			_emit_diagnostic("STATE", {"status": "connected"})
-		_read_available()
+		if _tls_enabled:
+			if _tls_socket == null:
+				var tls_options: TLSOptions = TLSOptions.client()
+				if not _trusted_certificate_path.is_empty():
+					var cert := X509Certificate.new()
+					var cert_text := FileAccess.get_file_as_string(_trusted_certificate_path)
+					var cert_error := cert.load_from_string(cert_text)
+					if cert_error != OK:
+						_mark_disconnected("Could not load the configured TLS trust certificate.")
+						return
+					tls_options = TLSOptions.client(cert)
+				_tls_socket = StreamPeerTLS.new()
+				var tls_error := _tls_socket.connect_to_stream(_socket, _tls_host, tls_options)
+				if tls_error != OK:
+					_mark_disconnected("Could not start the verified TLS handshake.")
+					return
+			_tls_socket.poll()
+			var tls_status := _tls_socket.get_status()
+			if tls_status == StreamPeerTLS.STATUS_CONNECTED:
+				_announce_connected()
+				_read_available()
+			elif tls_status == StreamPeerTLS.STATUS_ERROR or tls_status == StreamPeerTLS.STATUS_ERROR_HOSTNAME_MISMATCH:
+				_mark_disconnected("TLS certificate verification failed.")
+		else:
+			_announce_connected()
+			_read_available()
 	elif status == StreamPeerTCP.STATUS_ERROR:
 		_mark_disconnected("The connection to the server failed.")
 	elif status == StreamPeerTCP.STATUS_NONE and (_connected_announced or _connecting):
@@ -83,7 +110,7 @@ func poll(_delta: float = 0.0) -> void:
 		request_failed.emit(request_id, command, result)
 
 func request(command: String, data: Dictionary, session_token: String = "") -> String:
-	if _socket.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+	if not is_transport_connected():
 		protocol_warning.emit("Cannot send a request while disconnected.")
 		return ""
 	var request_id := _requests.next_id()
@@ -92,7 +119,8 @@ func request(command: String, data: Dictionary, session_token: String = "") -> S
 	_requests.register(request_id, command)
 	_record_request(request_id, command, data)
 	_emit_diagnostic("SEND", envelope)
-	var error := _socket.put_data((JSON.stringify(envelope) + "\n").to_utf8_buffer())
+	var peer: StreamPeer = _tls_socket if _tls_enabled else _socket
+	var error := peer.put_data((JSON.stringify(envelope) + "\n").to_utf8_buffer())
 	if error != OK:
 		_requests.resolve(request_id)
 		_mark_disconnected("Connection lost while sending data.")
@@ -102,6 +130,9 @@ func request(command: String, data: Dictionary, session_token: String = "") -> S
 func close(reason: String = "Client disconnected.") -> void:
 	var was_connected := _connected_announced
 	var was_connecting := _connecting
+	if _tls_socket != null:
+		_tls_socket.disconnect_from_stream()
+		_tls_socket = null
 	_socket.disconnect_from_host()
 	_connected_announced = false
 	_connecting = false
@@ -115,6 +146,8 @@ func close(reason: String = "Client disconnected.") -> void:
 		transport_disconnected.emit(reason)
 
 func is_transport_connected() -> bool:
+	if _tls_enabled:
+		return _tls_socket != null and _tls_socket.get_status() == StreamPeerTLS.STATUS_CONNECTED
 	return _socket.get_status() == StreamPeerTCP.STATUS_CONNECTED
 
 func pending_count() -> int:
@@ -220,12 +253,22 @@ func _sanitize_diagnostic(value, depth: int = 0):
 	return value if value == null or value is bool or value is int or value is float else null
 
 func _read_available() -> void:
-	var available := _socket.get_available_bytes()
+	var peer: StreamPeer = _tls_socket if _tls_enabled else _socket
+	var available := peer.get_available_bytes()
 	if available <= 0:
 		return
-	var data := _socket.get_utf8_string(available)
+	var data := peer.get_utf8_string(available)
 	_emit_diagnostic("RECV", {"bytes": available, "frames": data.split("\n", false).size()})
 	_consume_bytes(data)
+
+func _announce_connected() -> void:
+	if _connected_announced:
+		return
+	_connected_announced = true
+	_connecting = false
+	print("[AUTH_TRACE] Transport connection established tls=%s" % str(_tls_enabled))
+	transport_connected.emit()
+	_emit_diagnostic("STATE", {"status": "connected", "tls": _tls_enabled})
 
 func _consume_bytes(data: String) -> void:
 	_buffer += data
@@ -283,6 +326,9 @@ func _mark_disconnected(reason: String) -> void:
 	_connecting = false
 	_buffer = ""
 	_fail_pending(Protocol.disconnected_result(reason))
+	if _tls_socket != null:
+		_tls_socket.disconnect_from_stream()
+		_tls_socket = null
 	_socket.disconnect_from_host()
 	transport_disconnected.emit(reason)
 

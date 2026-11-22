@@ -18,8 +18,12 @@ var auth_session
 var client_state
 var refresh_coordinator
 var network_log_file: FileAccess
+const BETA_SERVER_HOST := "game.twclone.impara.co.uk"
+const BETA_SERVER_PORT := 12483
 var server_ip := ""
 var server_port := 0
+var server_tls := true
+var server_tls_ca := ""
 var auth_username := ""
 var server_profiles: Array[Dictionary] = []
 var selected_server_profile := -1
@@ -101,7 +105,7 @@ func _ready() -> void:
 	gameplay_view.route_cancel_requested.connect(_cancel_planned_route)
 	_load_config()
 	login_view.set_profiles(server_profiles, selected_server_profile)
-	login_view.set_connection_values(server_ip if not server_ip.is_empty() else "127.0.0.1", server_port if server_port > 0 else 1234, auth_username)
+	login_view.set_connection_values(server_ip if not server_ip.is_empty() else BETA_SERVER_HOST, server_port if server_port > 0 else BETA_SERVER_PORT, auth_username, server_tls, server_tls_ca)
 	login_view.set_status("Enter your captain credentials to begin.")
 	gameplay_view.visible = false
 	login_view.visible = true
@@ -129,6 +133,8 @@ func _on_login_requested(host: String, port: int, username: String, password: St
 	server_ip = host
 	server_port = port
 	auth_username = username
+	server_tls = login_view.tls_enabled_checkbox.button_pressed
+	server_tls_ca = login_view.tls_certificate_input.text.strip_edges()
 	selected_server_profile = login_view.get_selected_profile_index()
 	_login_password = password
 	_save_config()
@@ -137,11 +143,11 @@ func _on_login_requested(host: String, port: int, username: String, password: St
 		_submit_login()
 		return
 	_connection_started = true
-	var result: Error = transport.connect_to_server(server_ip, server_port)
+	var result: Error = transport.connect_to_server(server_ip, server_port, server_tls, server_tls_ca)
 	if result != OK:
 		_connection_started = false
 		login_view.set_status("Could not start the connection. Check the address and try again.")
-		login_view.set_connection_values(server_ip, server_port, auth_username)
+		login_view.set_connection_values(server_ip, server_port, auth_username, server_tls, server_tls_ca)
 
 func _on_transport_connected() -> void:
 	print("[AUTH_TRACE] Main transport_connected registration_pending=%s" % [not _registration_payload.is_empty()])
@@ -168,6 +174,8 @@ func _on_registration_requested(host: String, port: int, username: String, passw
 	server_ip = host
 	server_port = port
 	auth_username = username
+	server_tls = login_view.tls_enabled_checkbox.button_pressed
+	server_tls_ca = login_view.tls_certificate_input.text.strip_edges()
 	selected_server_profile = login_view.get_selected_profile_index()
 	_save_config()
 	_registration_payload = {"username": username, "passwd": password}
@@ -182,7 +190,7 @@ func _on_registration_requested(host: String, port: int, username: String, passw
 		_submit_registration()
 		return
 	_connection_started = true
-	var result: Error = transport.connect_to_server(server_ip, server_port)
+	var result: Error = transport.connect_to_server(server_ip, server_port, server_tls, server_tls_ca)
 	if result != OK:
 		_connection_started = false
 		_registration_payload.clear()
@@ -247,7 +255,7 @@ func _on_transport_disconnected(reason: String) -> void:
 		gameplay_view.visible = true
 		login_view.set_overlay_mode(true)
 		login_view.visible = true
-		login_view.set_connection_values(server_ip, server_port, auth_username)
+		login_view.set_connection_values(server_ip, server_port, auth_username, server_tls, server_tls_ca)
 		login_view.set_status("Reconnect to refresh the displayed state.")
 	else:
 		login_view.set_overlay_mode(false)
@@ -448,7 +456,7 @@ func _on_authenticated() -> void:
 func _on_authentication_failed(message: String) -> void:
 	login_view.set_overlay_mode(_authenticated_once)
 	login_view.visible = true
-	login_view.set_connection_values(server_ip, server_port, auth_username)
+	login_view.set_connection_values(server_ip, server_port, auth_username, server_tls, server_tls_ca)
 	login_view.set_status("Login refused: %s" % message)
 	if _authenticated_once:
 		gameplay_view.set_connection_notice(true, "DISCONNECTED · showing last confirmed state")
@@ -2121,7 +2129,7 @@ func _finish_logout() -> void:
 	transport.close("Logged out.")
 	login_view.set_overlay_mode(false)
 	login_view.visible = true
-	login_view.set_connection_values(server_ip, server_port, auth_username)
+	login_view.set_connection_values(server_ip, server_port, auth_username, server_tls, server_tls_ca)
 	login_view.set_status("Logged out. You can connect again whenever you are ready.")
 
 func _refresh_after_command(domains: Array = []) -> void:
@@ -3085,7 +3093,7 @@ func _on_session_invalidated(reason: String) -> void:
 func _on_reconnect_requested() -> void:
 	login_view.set_overlay_mode(true)
 	login_view.visible = true
-	login_view.set_connection_values(server_ip, server_port, auth_username)
+	login_view.set_connection_values(server_ip, server_port, auth_username, server_tls, server_tls_ca)
 	login_view.set_status("Reconnect to refresh the displayed state.")
 
 func _subscribe_to_player_events() -> void:
@@ -3132,6 +3140,8 @@ func _load_config() -> void:
 	if config.load(CONFIG_PATH) == OK:
 		server_ip = str(config.get_value("server", "ip", ""))
 		server_port = int(config.get_value("server", "port", 0))
+		server_tls = bool(config.get_value("server", "tls", true))
+		server_tls_ca = str(config.get_value("server", "tls_ca", ""))
 		auth_username = str(config.get_value("auth", "username", ""))
 		var stored_profiles: Variant = config.get_value("server", "profiles", [])
 		if stored_profiles is Array:
@@ -3143,13 +3153,13 @@ func _load_config() -> void:
 				var port := int(candidate.get("port", 0))
 				if name.is_empty() or host.is_empty() or port < 1 or port > 65535:
 					continue
-				server_profiles.append({"name": name, "host": host, "port": port, "username": str(candidate.get("username", ""))})
+				server_profiles.append({"name": name, "host": host, "port": port, "username": str(candidate.get("username", "")), "tls": bool(candidate.get("tls", false)), "tls_ca": str(candidate.get("tls_ca", ""))})
 		selected_server_profile = int(config.get_value("server", "selected_profile", -1))
 	if server_profiles.is_empty() and not server_ip.strip_edges().is_empty() and server_port > 0 and server_port <= 65535:
 		var profile_name := "%s:%d" % [server_ip, server_port]
 		if server_ip.to_lower() in ["localhost", "127.0.0.1", "::1"]:
 			profile_name = "Local server"
-		server_profiles.append({"name": profile_name, "host": server_ip, "port": server_port, "username": auth_username})
+		server_profiles.append({"name": profile_name, "host": server_ip, "port": server_port, "username": auth_username, "tls": server_tls, "tls_ca": server_tls_ca})
 		selected_server_profile = 0
 	# Recover the first saved connection when an older client left the selected
 	# index unset (for example after the captain name was edited). The profile is
@@ -3162,6 +3172,8 @@ func _save_config() -> void:
 	config.load(CONFIG_PATH)
 	config.set_value("server", "ip", server_ip)
 	config.set_value("server", "port", server_port)
+	config.set_value("server", "tls", server_tls)
+	config.set_value("server", "tls_ca", server_tls_ca)
 	config.set_value("server", "profiles", server_profiles.duplicate(true))
 	config.set_value("server", "selected_profile", selected_server_profile)
 	config.set_value("auth", "username", auth_username)
@@ -3176,11 +3188,15 @@ func _on_profiles_changed(profiles: Array, selected_index: int) -> void:
 				"host": str(profile.get("host", "")),
 				"port": int(profile.get("port", 0)),
 				"username": str(profile.get("username", "")),
+				"tls": bool(profile.get("tls", false)),
+				"tls_ca": str(profile.get("tls_ca", "")),
 			})
 	selected_server_profile = selected_index if selected_index >= 0 and selected_index < server_profiles.size() else -1
 	server_ip = login_view.host_input.text.strip_edges()
 	server_port = int(login_view.port_input.text)
 	auth_username = login_view.username_input.text.strip_edges()
+	server_tls = login_view.tls_enabled_checkbox.button_pressed
+	server_tls_ca = login_view.tls_certificate_input.text.strip_edges()
 	_save_config()
 
 func log_network(kind: String, message: String) -> void:

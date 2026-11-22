@@ -22,6 +22,7 @@ import json
 import os
 import re
 import socket
+import ssl
 import sys
 import shutil
 import textwrap
@@ -266,6 +267,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Trade Wars 2002 interactive client (v3).")
     p.add_argument("--host", default=HOST, help=f"Server host (default: {HOST})")
     p.add_argument("--port", type=int, default=PORT, help=f"Server port (default: {PORT})")
+    p.add_argument("--tls", action="store_true", help="Use TLS with certificate and hostname verification.")
+    p.add_argument("--ca-cert", help="Optional PEM CA certificate file used to verify the server when --tls is enabled.")
     p.add_argument("--user", help="Player name for login.")
     p.add_argument("--passwd", help="Password for login.")
     p.add_argument("--register", action="store_true",
@@ -9607,8 +9610,17 @@ def main():
     menus = load_menus(args.menus)
 
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((args.host, args.port))
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as raw_socket:
+            raw_socket.connect((args.host, args.port))
+            if args.tls:
+                tls_context = ssl.create_default_context(cafile=args.ca_cert)
+                try:
+                    s = tls_context.wrap_socket(raw_socket, server_hostname=args.host)
+                except (OSError, ssl.SSLError) as exc:
+                    print(f"Verified TLS connection failed: {exc}")
+                    return EXIT_CONNECTION_REFUSED
+            else:
+                s = raw_socket
             conn = Conn(s, debug=args.debug)
 
             user = args.user if args.user else input("Player Name: ")

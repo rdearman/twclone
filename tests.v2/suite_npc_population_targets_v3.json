@@ -45,11 +45,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Seed five canonical, unassigned Orion captains for the empty test world",
+      "name": "Seed enough named Orion captains for the configured population target",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) SELECT v.name,'$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',3,100000,2,TRUE,1 FROM (VALUES ('Zydras Heavy Cruiser'),('Krell Scout'),('Vex Contraband Runner'),('Jaxx Smuggler'),('Sira Market Guard')) AS v(name) WHERE NOT EXISTS(SELECT 1 FROM players p WHERE p.name=v.name);"
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), cfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='orion.population.basis_points'),50) AS bp,COALESCE((SELECT value::int FROM config WHERE key='orion.population.minimum'),5) AS minimum), target AS (SELECT GREATEST(cfg.minimum,CEIL(universe.sectors*cfg.bp/10000.0)::int) AS n FROM universe CROSS JOIN cfg), roster AS (SELECT i,CASE i WHEN 1 THEN 'Zydras Heavy Cruiser' WHEN 2 THEN 'Krell Scout' WHEN 3 THEN 'Vex Contraband Runner' WHEN 4 THEN 'Jaxx Smuggler' WHEN 5 THEN 'Sira Market Guard' ELSE 'Orion Acceptance Captain '||i END AS name FROM target CROSS JOIN LATERAL generate_series(1,target.n) AS g(i)) INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) SELECT roster.name,'$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',3,100000,2,TRUE,1 FROM roster WHERE NOT EXISTS(SELECT 1 FROM players p WHERE p.name=roster.name);"
       },
       "expect": { "status": "ok" }
     },

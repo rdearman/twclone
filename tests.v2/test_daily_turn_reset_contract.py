@@ -26,7 +26,7 @@ class DailyTurnResetContractTests(unittest.TestCase):
 
     def test_disposable_docker_bigbang_seeds_turns_per_day(self):
         config = json.loads((ROOT / "docker/bigbang.beta.json").read_text())
-        self.assertEqual(config["turnsperday"], 120)
+        self.assertEqual(config["turnsperday"], 200)
 
 
 if __name__ == "__main__":

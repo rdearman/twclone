@@ -1,6 +1,6 @@
 -- 110_player_registration.sql
 -- Player account registration (runs AFTER 100_procs.sql so register_player function exists)
--- Create ai_qa_bot as an ordinary, login-capable QA player.
+-- Create the internal System SysOp actor used by server-side game rules.
 DO $$
 DECLARE
     v_player_id integer;
@@ -33,37 +33,20 @@ END IF;
 END
 $$;
 
--- Create starter ship for newguy (Human Player)
+-- Legacy development logins are retained only for explicitly opted-in local
+-- fixtures. Beta bootstrap sets PGOPTIONS to disable these accounts.
 DO $$
 DECLARE
     v_player_id integer;
 BEGIN
-    IF NOT EXISTS (
-        SELECT
-            1
-        FROM
-            players
-        WHERE
-            name = 'newguy') THEN
-    v_player_id := register_player ('newguy', '$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE', 'Bit Banger', FALSE, 1, 2);
-END IF;
-END
-$$;
-
--- Seed reusable ai_qa_bot as an ordinary-player QA fixture.
-DO $$
-DECLARE
-    v_player_id integer;
-BEGIN
-    IF NOT EXISTS (
-        SELECT
-            1
-        FROM
-            players
-        WHERE
-            name = 'ai_qa_bot') THEN
-    v_player_id := register_player ('ai_qa_bot', '$argon2id$v=19$m=65536,t=3,p=1$NTSvCAXrheLkz/vijxs6IA$0Nxu/GtuIyG2Kwl35g9gYdf41/xA5Ki2WsZox99b+5Y', 'Used Scout Marauder', FALSE, 1, 2);
-END IF;
+    IF COALESCE(current_setting('twclone.provision_dev_accounts', TRUE), 'on') <> 'off' THEN
+        IF NOT EXISTS (SELECT 1 FROM players WHERE name = 'newguy') THEN
+            v_player_id := register_player ('newguy', '$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE', 'Bit Banger', FALSE, 1, 2);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM players WHERE name = 'ai_qa_bot') THEN
+            v_player_id := register_player ('ai_qa_bot', '$argon2id$v=19$m=65536,t=3,p=1$NTSvCAXrheLkz/vijxs6IA$0Nxu/GtuIyG2Kwl35g9gYdf41/xA5Ki2WsZox99b+5Y', 'Used Scout Marauder', FALSE, 1, 2);
+        END IF;
+    END IF;
 END
 $$;
 

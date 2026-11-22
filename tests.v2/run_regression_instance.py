@@ -529,6 +529,11 @@ def main(argv=None):
                     server = None
                     log.close()
                     log = open(server_log, "a", encoding="utf-8")
+                    # Starting the second server changes the shared config
+                    # table's listener ports. Restore the primary server's
+                    # port before its restart or it will bind to (and collide
+                    # with) the still-running second server's S2S listener.
+                    set_disposable_ports(args.port, args.s2s_port)
                     server = subprocess.Popen(
                         [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True,

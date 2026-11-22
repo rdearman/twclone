@@ -8,6 +8,11 @@ var registered_username := ""
 var test_password := "Temporary-QA-Password-42"
 var login_existing_account := false
 var acceptance_port_id := 9
+var acceptance_trade_port_id := 2
+var acceptance_trade_sector := 3
+var acceptance_trade_sell_port_id := 1
+var acceptance_trade_sell_sector := 11
+var acceptance_trade_commodity := "ORG"
 var acceptance_planet_id := 700
 
 func _initialize() -> void:
@@ -22,6 +27,16 @@ func _run() -> void:
 	login_existing_account = OS.get_environment("TWCLONE_GODOT_LOGIN") == "1"
 	if not OS.get_environment("TWCLONE_GODOT_PORT_ID").is_empty():
 		acceptance_port_id = int(OS.get_environment("TWCLONE_GODOT_PORT_ID"))
+	if not OS.get_environment("TWCLONE_GODOT_TRADE_PORT_ID").is_empty():
+		acceptance_trade_port_id = int(OS.get_environment("TWCLONE_GODOT_TRADE_PORT_ID"))
+	if not OS.get_environment("TWCLONE_GODOT_TRADE_SECTOR").is_empty():
+		acceptance_trade_sector = int(OS.get_environment("TWCLONE_GODOT_TRADE_SECTOR"))
+	if not OS.get_environment("TWCLONE_GODOT_TRADE_SELL_PORT_ID").is_empty():
+		acceptance_trade_sell_port_id = int(OS.get_environment("TWCLONE_GODOT_TRADE_SELL_PORT_ID"))
+	if not OS.get_environment("TWCLONE_GODOT_TRADE_SELL_SECTOR").is_empty():
+		acceptance_trade_sell_sector = int(OS.get_environment("TWCLONE_GODOT_TRADE_SELL_SECTOR"))
+	if not OS.get_environment("TWCLONE_GODOT_TRADE_COMMODITY").is_empty():
+		acceptance_trade_commodity = OS.get_environment("TWCLONE_GODOT_TRADE_COMMODITY")
 	if not OS.get_environment("TWCLONE_GODOT_PLANET_ID").is_empty():
 		acceptance_planet_id = int(OS.get_environment("TWCLONE_GODOT_PLANET_ID"))
 	if login_existing_account:
@@ -38,8 +53,10 @@ func _run() -> void:
 	randomize()
 	if not login_existing_account:
 		registered_username = "gd%d" % randi_range(10000000, 99999999)
-	login.host_input.text = "127.0.0.1"
+	login.host_input.text = OS.get_environment("TWCLONE_GODOT_HOST") if not OS.get_environment("TWCLONE_GODOT_HOST").is_empty() else "127.0.0.1"
 	login.port_input.text = OS.get_environment("TWCLONE_GODOT_PORT") if not OS.get_environment("TWCLONE_GODOT_PORT").is_empty() else "55499"
+	login.tls_enabled_checkbox.button_pressed = OS.get_environment("TWCLONE_GODOT_TLS") == "1"
+	login.tls_certificate_input.text = OS.get_environment("TWCLONE_GODOT_TLS_CA")
 	login.username_input.text = registered_username
 	login.password_input.text = test_password
 	if not login_existing_account:
@@ -64,6 +81,20 @@ func _run() -> void:
 	var initial_turns: int = int(hud.get("turns_remaining", -1))
 	var ship_id: int = int(hud.get("ship_id", 0))
 	_check(initial_sector > 0 and initial_turns >= 0 and ship_id > 0, "starting sector, turns or active ship were absent after authoritative refresh")
+	if OS.get_environment("TWCLONE_GODOT_VERIFY_AFTER_RESTART") == "1":
+		var expected_player_id := int(OS.get_environment("TWCLONE_GODOT_EXPECT_PLAYER_ID"))
+		var expected_sector_id := int(OS.get_environment("TWCLONE_GODOT_EXPECT_SECTOR"))
+		var expected_ship_id := int(OS.get_environment("TWCLONE_GODOT_EXPECT_SHIP_ID"))
+		var expected_commodity := OS.get_environment("TWCLONE_GODOT_EXPECT_COMMODITY")
+		var expected_quantity := int(OS.get_environment("TWCLONE_GODOT_EXPECT_QUANTITY"))
+		_check(int(app.auth_session.player_id) == expected_player_id, "Godot login after restart restored a different player")
+		_check(initial_sector == expected_sector_id, "Godot login after restart restored a different sector")
+		_check(ship_id == expected_ship_id, "Godot login after restart restored a different active ship")
+		_check(_cargo_quantity(initial.get("ship", {}), expected_commodity) == expected_quantity, "Godot login after restart restored a different cargo balance")
+		if failures.is_empty():
+			print("LIVE_SERVER_RESTART_PERSISTENCE_PASS player_id=%d ship_id=%d sector=%d %s=%d turns=%d tls=true" % [expected_player_id, ship_id, initial_sector, expected_commodity, expected_quantity, initial_turns])
+		_finish()
+		return
 	var adjacent: Array = initial.get("sector", {}).get("adjacent_sector_ids", [])
 	_check(not adjacent.is_empty(), "confirmed sector did not expose connected navigation targets")
 	if adjacent.is_empty():
@@ -143,8 +174,18 @@ func _run() -> void:
 	# Commodity exchange and StarDock services use distinct port classes in the
 	# published V3 rules. Complete a buy and sale at the ordinary trading port
 	# through its UI, then return to the StarDock for hardware and shipyard work.
-	var trade_journey := await _perform_port_trade(2, 3, fixture_sector)
-	_check(trade_journey, "ordinary-player commodity buy/sell journey did not complete at the configured trading port")
+	var trade_journey := await _perform_port_trade(
+		acceptance_trade_port_id,
+		acceptance_trade_sector,
+		acceptance_trade_sell_port_id,
+		acceptance_trade_sell_sector,
+		fixture_sector
+	)
+	_check(trade_journey, "ordinary-player commodity buy/sell journey did not complete across the configured trading ports")
+	if OS.get_environment("TWCLONE_GODOT_RELEASE_SMOKE") == "1":
+		await _complete_release_smoke_reconnect(trade_journey)
+		_finish()
+		return
 	var starport_journey := await _perform_starport_services(acceptance_port_id)
 	_check(starport_journey, "StarDock hardware or shipyard workflow did not complete through the Godot UI")
 	var planet_journey := await _perform_planet_journey(acceptance_planet_id)
@@ -318,9 +359,92 @@ func _warp_via_menu(destination: int) -> bool:
 		240
 	)
 
-func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bool:
-	if not await _warp_via_menu(sector_id):
+func _perform_port_trade(buy_port_id: int, buy_sector: int, sell_port_id: int, sell_sector: int, return_sector: int) -> bool:
+	if not await _warp_via_menu(buy_sector):
 		return false
+	if not await _dock_and_open_port(buy_port_id):
+		return false
+	var buy_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get(acceptance_trade_commodity, {})
+	if not buy_controls.has("buy") or (buy_controls["buy"] as Button).disabled:
+		return false
+	var initial_quantity := _cargo_quantity(app.client_state.snapshot().get("ship", {}), acceptance_trade_commodity)
+	(buy_controls["quantity"] as LineEdit).text = "2"
+	(buy_controls["buy"] as Button).pressed.emit()
+	var bought := await _wait_until(func() -> bool:
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), acceptance_trade_commodity) == initial_quantity + 2
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE trade_buy=%s commodity=%s port=%d sector=%d" % [bought, acceptance_trade_commodity, buy_port_id, buy_sector])
+	if not bought or not await _undock_from_port(buy_port_id):
+		return false
+	if not await _warp_via_menu(sell_sector):
+		return false
+	if not await _dock_and_open_port(sell_port_id):
+		return false
+	var sell_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get(acceptance_trade_commodity, {})
+	if not sell_controls.has("sell") or (sell_controls["sell"] as Button).disabled:
+		return false
+	(sell_controls["quantity"] as LineEdit).text = "1"
+	(sell_controls["sell"] as Button).pressed.emit()
+	var sold := await _wait_until(func() -> bool:
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), acceptance_trade_commodity) == initial_quantity + 1
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE trade_sell=%s commodity=%s port=%d sector=%d" % [sold, acceptance_trade_commodity, sell_port_id, sell_sector])
+	if not sold or not await _undock_from_port(sell_port_id):
+		return false
+	return await _warp_via_menu(return_sector)
+
+func _complete_release_smoke_reconnect(trade_passed: bool) -> void:
+	var player_id := int(app.auth_session.player_id)
+	var ship: Dictionary = app.client_state.snapshot().get("ship", {})
+	var hud: Dictionary = app.client_state.snapshot().get("hud", {})
+	var ship_id := int(hud.get("ship_id", 0))
+	var sector_id := int(hud.get("sector_id", 0))
+	var turns := int(hud.get("turns_remaining", -1))
+	var traded_quantity := _cargo_quantity(ship, acceptance_trade_commodity)
+	_check(trade_passed and traded_quantity > 0, "TLS release smoke did not complete a server-confirmed commodity purchase and sale")
+	var menu = app.gameplay_view.command_menu
+	menu.select_category("COMPUTER")
+	await process_frame
+	var logout_button := _find_button(menu._action_list, "Log out to login screen")
+	_check(logout_button != null, "release smoke could not access the UI logout action")
+	if logout_button == null:
+		return
+	logout_button.pressed.emit()
+	if menu._logout_dialog.visible:
+		menu._logout_dialog.get_ok_button().pressed.emit()
+	var logged_out := await _wait_until(func() -> bool: return not app.auth_session.is_authenticated() and app.login_view.visible, 120)
+	_check(logged_out, "release smoke logout did not return to LoginView")
+	if not logged_out:
+		return
+	if not login_existing_account:
+		app.login_view.mode_toggle_button.pressed.emit()
+	app.login_view.host_input.text = OS.get_environment("TWCLONE_GODOT_HOST")
+	app.login_view.port_input.text = OS.get_environment("TWCLONE_GODOT_PORT")
+	app.login_view.username_input.text = registered_username
+	app.login_view.password_input.text = test_password
+	app.login_view.connect_button.pressed.emit()
+	var reconnected := await _wait_until(func() -> bool:
+		var snapshot: Dictionary = app.client_state.snapshot()
+		var freshness: Dictionary = snapshot.get("freshness", {})
+		return (app.auth_session.is_authenticated() and int(app.auth_session.player_id) == player_id
+			and freshness.get("player") == "fresh" and freshness.get("ship") == "fresh" and freshness.get("sector") == "fresh"),
+		240
+	)
+	_check(reconnected, "TLS release smoke did not reauthenticate the same account")
+	if reconnected:
+		var resumed: Dictionary = app.client_state.snapshot()
+		_check(int(resumed.get("hud", {}).get("sector_id", 0)) == sector_id, "TLS release reconnect did not restore sector state")
+		_check(int(resumed.get("hud", {}).get("turns_remaining", -1)) == turns, "TLS release reconnect changed turns")
+		_check(int(resumed.get("hud", {}).get("ship_id", 0)) == ship_id, "TLS release reconnect changed active ship")
+		_check(_cargo_quantity(resumed.get("ship", {}), acceptance_trade_commodity) == traded_quantity, "TLS release reconnect did not restore traded cargo")
+	if failures.is_empty():
+		print("LIVE_RELEASE_TLS_PASS registration,navigation,turns,scan,port-buy,port-sale,logout,reconnect player_id=%d ship_id=%d sector=%d %s=%d turns=%d tls=true username=%s" % [player_id, ship_id, sector_id, acceptance_trade_commodity, traded_quantity, turns, registered_username])
+
+func _dock_and_open_port(port_id: int) -> bool:
 	var menu = app.gameplay_view.command_menu
 	var port_key := "port:%d" % port_id
 	var visible := false
@@ -338,11 +462,10 @@ func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bo
 	dock_button.pressed.emit()
 	if menu._form_dialog.visible:
 		menu._form_dialog.get_ok_button().pressed.emit()
-	var docked := await _wait_until(func() -> bool:
+	if not await _wait_until(func() -> bool:
 		return int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == port_id and not menu._busy,
 		240
-	)
-	if not docked:
+	):
 		return false
 	app.gameplay_view.select_object_key(port_key)
 	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
@@ -351,45 +474,16 @@ func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bo
 	if open_button == null or open_button.disabled:
 		return false
 	open_button.pressed.emit()
-	var opened := await _wait_until(func() -> bool:
+	return await _wait_until(func() -> bool:
 		return app.gameplay_view.port_workflow.visible and not menu._busy,
 		180
 	)
-	if not opened:
-		return false
-	var controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORE", {})
-	if not controls.has("buy") or (controls["buy"] as Button).disabled:
-		return false
-	var initial_ore := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
-	var initial_organics := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG")
-	(controls["quantity"] as LineEdit).text = "2"
-	(controls["buy"] as Button).pressed.emit()
-	var bought := await _wait_until(func() -> bool:
-		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE") == initial_ore + 2
-			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-		240
-	)
-	print("LIVE_STAGE trade_buy=%s sector=%d ported=%s pending=%d" % [bought, int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)), str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size()])
-	if not bought:
-		return false
-	var organics_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORG", {})
-	print("LIVE_STAGE trade_sell_precheck org_cargo=%d enabled=%s" % [
-		_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG"),
-		str(organics_controls.has("sell") and not (organics_controls["sell"] as Button).disabled),
-	])
-	if not organics_controls.has("sell") or (organics_controls["sell"] as Button).disabled:
-		return false
-	(organics_controls["quantity"] as LineEdit).text = "1"
-	(organics_controls["sell"] as Button).pressed.emit()
-	var sold := await _wait_until(func() -> bool:
-		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG") == initial_organics - 1
-			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-		240
-	)
-	print("LIVE_STAGE trade_sell=%s sector=%d ported=%s pending=%d org_initial=%d org_now=%d cargo=%s notification=%s" % [sold, int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)), str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size(), initial_organics, _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG"), str(app.client_state.snapshot().get("ship", {}).get("cargo", [])), app.gameplay_view.notification_label.text])
+
+func _undock_from_port(port_id: int) -> bool:
+	var menu = app.gameplay_view.command_menu
 	app.gameplay_view.port_workflow._back_button.pressed.emit()
 	await process_frame
-	app.gameplay_view.select_object_key(port_key)
+	app.gameplay_view.select_object_key("port:%d" % port_id)
 	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
 	await process_frame
 	var undock_button := _find_button(menu._action_list, "Undock from selected port")
@@ -398,13 +492,11 @@ func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bo
 	undock_button.pressed.emit()
 	if menu._form_dialog.visible:
 		menu._form_dialog.get_ok_button().pressed.emit()
-	var undocked := await _wait_until(func() -> bool:
+	return await _wait_until(func() -> bool:
 		return (int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == 0
 			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
 		240
 	)
-	print("LIVE_STAGE port_undock=%s ported=%s pending=%d" % [undocked, str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size()])
-	return sold and undocked and await _warp_via_menu(return_sector)
 
 func _perform_starport_services(port_id: int) -> bool:
 	var menu = app.gameplay_view.command_menu

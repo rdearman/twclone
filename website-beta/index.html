@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Download the TWClone V3 beta clients and learn to play TradeWars-inspired multiplayer space strategy.">
+  <title>TWClone V3 Beta</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/release.js" defer></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">MULTIPLAYER SPACE STRATEGY</p>
+      <h1>TWClone V3 <span>Beta</span></h1>
+      <p class="intro">Trade, explore, build and fight across a shared universe. Choose a client, connect securely and make your mark.</p>
+      <p class="notice"><strong>Public beta:</strong> the game server is available for play. Create an account with either client and join the shared universe.</p>
+      <a class="button" href="#downloads">Get the clients</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="downloads" class="section">
+      <p class="eyebrow">DOWNLOADS</p>
+      <h2>Choose your client</h2>
+      <p>These are source bundles, not installers. The current build configuration has no native Godot export presets. Linux x86_64 is the only platform exercised for this beta package; Windows and macOS packages are not advertised.</p>
+      <div class="cards">
+        <article class="card">
+          <h3>Python terminal client</h3>
+          <p>For Linux x86_64 with Python 3.9 or newer. No third-party Python packages are required.</p>
+          <a class="download" id="python-download" href="/downloads/twclone-python-v3.zip">Download Python source (.zip)</a>
+          <p class="artifact-meta" id="python-release">Loading release details…</p>
+          <pre><code>python3 client.py --register --host game.twclone.impara.co.uk --port 12483 --tls</code></pre>
+        </article>
+        <article class="card">
+          <h3>Godot client project</h3>
+          <p>For Godot 4.5.2 on Linux x86_64. Open the project and run it with the Godot runtime.</p>
+          <a class="download" id="godot-download" href="/downloads/twclone-godot-project-v3.zip">Download Godot project (.zip)</a>
+          <p class="artifact-meta" id="godot-release">Loading release details…</p>
+          <p>The connection screen defaults to the public hostname, port and verified TLS. Choose <em>Create account</em> to register.</p>
+        </article>
+      </div>
+      <p class="checksums">Verify downloads with <a href="/downloads/SHA256SUMS">SHA-256 checksums</a>. Release manifest: <a href="/downloads/release.json">release.json</a>.</p>
+    </section>
+
+    <section class="section connection">
+      <p class="eyebrow">CONNECTION</p>
+      <h2>Game server</h2>
+      <dl>
+        <div><dt>Hostname</dt><dd><code>game.twclone.impara.co.uk</code></dd></div>
+        <div><dt>Game port</dt><dd><code>12483</code></dd></div>
+        <div><dt>Transport</dt><dd>Direct TCP with TLS. Certificate and hostname verification are required.</dd></div>
+      </dl>
+      <p>The game hostname must use a DNS-only record so the raw game protocol reaches the game service directly. The website uses HTTPS separately; its HTTP proxy does not carry game traffic.</p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">FIRST FLIGHT</p>
+      <h2>Register, log in and begin</h2>
+      <ol class="steps">
+        <li>Download and unpack one client. Install Python 3.9+ or Godot 4.5.2 as described above.</li>
+        <li>Connect to <code>game.twclone.impara.co.uk</code> on port <code>12483</code> with verified TLS enabled.</li>
+        <li>Choose <strong>Create account</strong>, select a captain name and password, then log in with that account.</li>
+        <li>Check your ship, credits and turns before leaving the starting sector.</li>
+      </ol>
+      <p>Do not send passwords in bug reports or public messages. The game service is not live until this page says the beta is open.</p>
+    </section>
+
+    <section class="section guide">
+      <p class="eyebrow">QUICK GUIDE</p>
+      <h2>Make your first moves</h2>
+      <div class="guide-grid">
+        <article><h3>Move</h3><p>Scan the current sector, inspect connected warps and plot a route. Each warp spends turns; avoid spending them on loops without a reason.</p></article>
+        <article><h3>Trade</h3><p>Dock at a port and read its buy/sell directions before trading. Watch your cargo holds, credits, turns and changing stock.</p></article>
+        <article><h3>Planets</h3><p>Use a Genesis torpedo to create a planet where permitted. Land to transfer colonists, assign workers and harvest stored production.</p></article>
+        <article><h3>Corporations</h3><p>Create or join a corporation, check member permissions and use the treasury and shared-asset actions deliberately.</p></article>
+        <article><h3>Combat</h3><p>Check target eligibility and your ship's shields, fighters and weapons. Retreat when the situation turns against you; losses require recovery.</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">BETA NOTES</p>
+      <h2>Release notes and known limitations</h2>
+      <ul>
+        <li>V3 targets original TradeWars 2002 gameplay parity with project-specific rules documented in the repository.</li>
+        <li>The current client bundles are source packages. Native Windows/macOS exports are not configured or tested.</li>
+        <li>The game uses direct TCP with TLS on port 12483; do not use a browser proxy or Cloudflare HTTP proxy for game traffic.</li>
+        <li>Player feedback is queued by the game service. Live GitHub issue publication is not a beta prerequisite.</li>
+      </ul>
+      <p>The page's source revision and package hashes are published in <code>downloads/release.json</code> and <code>downloads/SHA256SUMS</code>.</p>
+    </section>
+  </main>
+  <footer><div class="wrap"><span>TWClone V3 Beta</span><a href="https://github.com/rdearman/twclone">Source repository</a></div></footer>
+</body>
+</html>

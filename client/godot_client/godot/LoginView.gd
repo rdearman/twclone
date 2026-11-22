@@ -10,6 +10,8 @@ const POSTGRESQL_DEFAULT_PORT := 5432
 
 var host_input: LineEdit
 var port_input: LineEdit
+var tls_enabled_checkbox: CheckBox
+var tls_certificate_input: LineEdit
 var username_input: LineEdit
 var password_input: LineEdit
 var confirm_password_input: LineEdit
@@ -54,17 +56,20 @@ func set_status(message: String, busy: bool = false) -> void:
 	cancel_button.disabled = not busy
 	mode_toggle_button.disabled = busy
 	mode_toggle_button.text = "PLEASE WAIT" if busy else ("BACK TO LOGIN" if _registration_mode else "CREATE ACCOUNT")
-	for input in [host_input, port_input, username_input, password_input, confirm_password_input, ship_name_input, ui_locale_input, ui_timezone_input, profile_name_input]:
+	for input in [host_input, port_input, username_input, password_input, confirm_password_input, ship_name_input, ui_locale_input, ui_timezone_input, profile_name_input, tls_certificate_input]:
 		input.editable = not busy
+	tls_enabled_checkbox.disabled = busy
 	profile_selector.disabled = busy
 	save_profile_button.disabled = busy
 	remove_profile_button.disabled = busy or _selected_profile_index < 0
 
-func set_connection_values(host: String, port: int, username: String) -> void:
+func set_connection_values(host: String, port: int, username: String, use_tls: bool = false, trusted_certificate_path: String = "") -> void:
 	_loading_profile = true
 	host_input.text = host
 	port_input.text = str(port)
 	username_input.text = username
+	tls_enabled_checkbox.button_pressed = use_tls
+	tls_certificate_input.text = trusted_certificate_path
 	_loading_profile = false
 	_sync_selected_profile()
 
@@ -78,7 +83,7 @@ func set_profiles(profiles: Array, selected_index: int = -1) -> void:
 		var port := int(candidate.get("port", 0))
 		if name.is_empty() or host.is_empty() or port < 1 or port > 65535:
 			continue
-		_profiles.append({"name": name, "host": host, "port": port, "username": str(candidate.get("username", ""))})
+		_profiles.append({"name": name, "host": host, "port": port, "username": str(candidate.get("username", "")), "tls": bool(candidate.get("tls", false)), "tls_ca": str(candidate.get("tls_ca", ""))})
 	_refresh_profile_selector()
 	if selected_index >= 0 and selected_index < _profiles.size():
 		_apply_profile(selected_index)
@@ -161,6 +166,14 @@ func _build() -> void:
 	password_input.secret = true
 	form.add_child(_labeled_field("SERVER ADDRESS *", host_input))
 	form.add_child(_labeled_field("PORT *", port_input))
+	tls_enabled_checkbox = CheckBox.new()
+	tls_enabled_checkbox.text = "Use verified TLS"
+	tls_enabled_checkbox.add_theme_color_override("font_color", Color(0.9, 0.92, 0.88))
+	tls_enabled_checkbox.toggled.connect(func(_pressed: bool) -> void: _on_connection_security_changed())
+	form.add_child(tls_enabled_checkbox)
+	tls_certificate_input = _field("Optional PEM CA certificate path")
+	tls_certificate_input.text_changed.connect(func(_value: String) -> void: _on_connection_security_changed())
+	form.add_child(_labeled_field("TLS CA FILE", tls_certificate_input))
 	form.add_child(_labeled_field("USERNAME *", username_input))
 	form.add_child(_labeled_field("PASSWORD *", password_input))
 	caps_lock_warning = _label("Passwords are case-sensitive · Check Caps Lock if login fails.", 11, Color(1.0, 0.62, 0.35))
@@ -277,6 +290,8 @@ func _apply_profile(index: int) -> void:
 	host_input.text = str(profile.get("host", ""))
 	port_input.text = str(profile.get("port", 1234))
 	username_input.text = str(profile.get("username", ""))
+	tls_enabled_checkbox.button_pressed = bool(profile.get("tls", false))
+	tls_certificate_input.text = str(profile.get("tls_ca", ""))
 	password_input.clear()
 	_loading_profile = false
 	remove_profile_button.disabled = false
@@ -288,12 +303,20 @@ func _sync_selected_profile() -> void:
 	var profile: Dictionary = _profiles[_selected_profile_index]
 	# A server profile identifies a connection endpoint. Captains may change
 	# without making the saved local endpoint disappear from the selector.
-	if str(profile.get("host", "")) != host_input.text or int(profile.get("port", 0)) != int(port_input.text):
+	if (str(profile.get("host", "")) != host_input.text
+		or int(profile.get("port", 0)) != int(port_input.text)
+		or bool(profile.get("tls", false)) != tls_enabled_checkbox.button_pressed
+		or str(profile.get("tls_ca", "")) != tls_certificate_input.text):
 		_selected_profile_index = -1
 		profile_selector.select(0)
 		remove_profile_button.disabled = true
 
 func _on_connection_field_changed(_value: String = "") -> void:
+	if _loading_profile:
+		return
+	_sync_selected_profile()
+
+func _on_connection_security_changed() -> void:
 	if _loading_profile:
 		return
 	_sync_selected_profile()
@@ -313,7 +336,7 @@ func _save_profile() -> void:
 			if str(_profiles[index].get("name", "")).to_lower() == name.to_lower():
 				set_status("That profile name already exists. Select it to edit, or choose another name.")
 				return
-	var record := {"name": name, "host": host, "port": port, "username": username_input.text.strip_edges()}
+	var record := {"name": name, "host": host, "port": port, "username": username_input.text.strip_edges(), "tls": tls_enabled_checkbox.button_pressed, "tls_ca": tls_certificate_input.text.strip_edges()}
 	if target_index < 0:
 		_profiles.append(record)
 		target_index = _profiles.size() - 1
