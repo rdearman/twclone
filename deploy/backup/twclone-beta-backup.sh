@@ -19,7 +19,7 @@ TMP="$BACKUP_DIR/.twclone-beta-$STAMP.dump.tmp"
 FINAL="$BACKUP_DIR/twclone-beta-$STAMP.dump"
 trap 'rm -f "$TMP" "$TMP.sha256"' EXIT HUP INT TERM
 
-/usr/bin/docker exec "$DB_ID" sh -ceu \
+/usr/bin/docker exec --user root "$DB_ID" sh -ceu \
   'PGPASSWORD="$(cat /run/secrets/postgres_admin_password)" pg_dump -Fc -U twclone_admin -d twclone' \
   > "$TMP"
 test -s "$TMP"
