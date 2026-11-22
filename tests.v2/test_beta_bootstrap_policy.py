@@ -42,7 +42,11 @@ class BetaBootstrapPolicyTest(unittest.TestCase):
         self.assertIn("TWCLONE_TLS_REQUIRED: 1", compose)
         self.assertIn("user=twclone_runtime", compose)
         self.assertIn('${TWCLONE_BETA_HOST_ADDRESS:-127.0.0.1}:${TWCLONE_BETA_HOST_PORT:-12483}:12483', compose)
-        self.assertIn('group_add: ["10002"]', compose)
+        self.assertIn("image: twclone-beta-postgres", compose)
+        self.assertIn("build: ./docker/postgres", compose)
+        postgres_image = (ROOT / "docker/postgres/Dockerfile").read_text()
+        self.assertIn("groupadd --system --gid 10002 twclone-secret-reader", postgres_image)
+        self.assertIn("usermod --append --groups twclone-secret-reader postgres", postgres_image)
         self.assertEqual((ROOT / "docker/postgres/10-runtime-role.sh").stat().st_mode & 0o111, 0o111)
         self.assertIn("max-size: \"20m\"", compose)
 
