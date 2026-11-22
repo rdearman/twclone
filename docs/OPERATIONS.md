@@ -99,9 +99,11 @@ port. Godot defaults to the public hostname, port 12483 and verified TLS; the
 Python client supports verified TLS with `--tls` and optional `--ca-cert`.
 The website's HTTP proxy does not carry the raw game protocol.
 
-`deploy/systemd/twclone-beta.service` is a prepared system service wrapper;
-install and enable it only after the host review. Compose applies container
-restart policies. Compose rotates local-driver logs at 20 MiB per file (five
+`deploy/systemd/twclone-beta.service` uses
+`deploy/systemd/twclone-beta-start.sh` to start and health-check PostgreSQL,
+then start only the game container. It deliberately never invokes the one-time
+BigBang migration during routine restart. Compose applies container restart
+policies. Compose rotates local-driver logs at 20 MiB per file (five
 files for database/game and three for migration). The game health check
 completes a TLS handshake, while PostgreSQL has a separate `pg_isready`
 check; neither is an authenticated gameplay health check. Monitor both
