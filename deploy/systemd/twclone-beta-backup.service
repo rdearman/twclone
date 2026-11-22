@@ -1,0 +1,17 @@
+[Unit]
+Description=Create and verify a TWClone V3 beta PostgreSQL backup
+Requires=docker.service twclone-beta.service
+After=docker.service twclone-beta.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/twclone-beta-backup
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/twclone-beta
+PrivateTmp=true
+NoNewPrivileges=true

@@ -108,16 +108,21 @@ ordinary-player smoke action.
 
 ### Backup, restore and rollback
 
-Take encrypted, off-host custom-format PostgreSQL backups and keep the
-certificate/key and secret recovery material separately in the approved secret
-manager. A local rehearsal used `pg_dump -Fc` and restored to a disposable
-database, but the candidate has not had an off-host restore or scheduled backup
-rehearsal. Example backup (the file should be written to a protected backup
-mount):
+Install `deploy/backup/twclone-beta-backup.sh` as
+`/usr/local/sbin/twclone-beta-backup`, and enable
+`deploy/systemd/twclone-beta-backup.timer`. The timer runs daily at 03:30 UTC
+with up to ten minutes of jitter. Backups are custom-format dumps stored
+root-only under `/var/backups/twclone-beta`, retained for 14 days, checksummed,
+and verified with `pg_restore --list` before being accepted. Copy verified
+backups to an approved off-host location as an additional recovery measure;
+the local schedule alone does not protect against loss of the Netcup host.
+
+For a manual backup, the service may be run with:
 
 ```sh
-docker compose -p twclone-beta -f compose.beta.yaml --env-file /etc/twclone-beta/.env.beta exec -T db sh -c 'PGPASSWORD="$(cat /run/secrets/postgres_admin_password)" pg_dump -Fc -U twclone_admin twclone' > /secure-backups/twclone-beta-$(date -u +%Y%m%dT%H%M%SZ).dump
-sha256sum /secure-backups/twclone-beta-*.dump
+systemctl start twclone-beta-backup.service
+journalctl -u twclone-beta-backup.service --since today
+sha256sum -c /var/backups/twclone-beta/twclone-beta-*.dump.sha256
 ```
 
 Restore only during an approved maintenance window after stopping the game and

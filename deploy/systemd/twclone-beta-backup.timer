@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily verified TWClone V3 beta PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=twclone-beta-backup.service
+
+[Install]
+WantedBy=timers.target
