@@ -1481,6 +1481,23 @@ class Planner:
                             int(planet.get(key, 0) or 0) > 0
                             for key in ("ore", "organics", "equipment", "weapons")):
                         return {"command": "planet.harvest", "data": {"planet_id": int(planet_id)}}
+                    try:
+                        refresh_interval = max(1.0, float(self.config.get(
+                            "planet_state_refresh_interval_seconds", 60)))
+                        latest_refresh = max(
+                            float(current_state.get("planet_info_received_at", 0) or 0),
+                            float(current_state.get("planet_info_refresh_requested_at", 0) or 0),
+                        )
+                    except (TypeError, ValueError):
+                        refresh_interval, latest_refresh = 60.0, 0.0
+                    if (time.time() - latest_refresh >= refresh_interval
+                            and (not commands or "planet.info" in commands)):
+                        # Production is scheduled server-side; a previously
+                        # valid planet snapshot can become stale while the ship
+                        # remains landed. Refresh before deciding the world has
+                        # no work or launching away from it.
+                        self.state_manager.set("planet_info_refresh_requested_at", time.time())
+                        return {"command": "planet.info", "data": {"planet_id": int(planet_id)}}
                     population = int(planet.get("population", planet.get("colonists_total", 0)) or 0)
                     if population <= 0:
                         if not commands or "planet.launch" in commands:

@@ -3741,11 +3741,15 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             planet = response_data.get("planet", response_data)
             if isinstance(planet, dict):
                 state_manager.set("planet_info", planet)
+                state_manager.set("planet_info_received_at", time.time())
+                state_manager.set("planet_info_refresh_requested_at", 0)
                 _remember_owned_planet(state_manager, planet)
         elif response_type in ("planet.genesis_created_v1", "planet.create.success"):
             planet = response_data.get("planet", response_data)
             state_manager.set("planet_info", planet)
             if isinstance(planet, dict):
+                state_manager.set("planet_info_received_at", time.time())
+                state_manager.set("planet_info_refresh_requested_at", 0)
                 _remember_owned_planet(state_manager, planet)
         elif response_type == "planet.colonists.get":
             state_manager.set("planet_colonist_state", response_data)

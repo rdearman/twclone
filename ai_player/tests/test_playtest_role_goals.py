@@ -497,6 +497,27 @@ def test_planet_development_drops_population_on_owned_world_and_never_claims_lan
         "command": "planet.launch", "data": {}}
 
 
+def test_landed_planet_development_refreshes_stale_snapshot_without_repeating_request():
+    p = planner({"planet_state_refresh_interval_seconds": 60})
+    state = {
+        "player_location_sector": 288,
+        "player_info": {"player": {"player_id": 109}},
+        "ship_info": {"id": 63, "onplanet": True, "planet_id": 152,
+                      "colonists": 0, "holds": 65},
+        "planet_info": {"planet_id": 152, "owner_type": "player", "owner_id": 109,
+                        "population": 29, "colonists_unassigned": 0},
+        "planet_info_received_at": time.time() - 120,
+        "server_commands": ["planet.info", "planet.harvest", "planet.launch"],
+    }
+
+    assert p._achieve_goal(state, "planet: develop") == {
+        "command": "planet.info", "data": {"planet_id": 152}}
+    requested_at = p.state_manager.values["planet_info_refresh_requested_at"]
+    assert requested_at > 0
+    assert p._achieve_goal({**state, "planet_info_refresh_requested_at": requested_at},
+                           "planet: develop") is None
+
+
 def test_genesis_creation_goal_requires_torpedo_and_non_fedspace_empty_sector():
     p = planner({})
     state = {
