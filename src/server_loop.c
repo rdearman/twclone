@@ -1746,8 +1746,12 @@ server_loop (volatile sig_atomic_t *running)
 	}
 
       /* Load certificate and key */
-      if (SSL_CTX_use_certificate_file (g_ssl_ctx, g_cfg.tls_cert_path,
-					 SSL_FILETYPE_PEM) <= 0)
+      /* The configured PEM may contain the leaf plus intermediate chain
+       * (for example, Let's Encrypt fullchain.pem). The non-chain API loads
+       * only the leaf and makes otherwise valid public certificates fail
+       * client verification. */
+      if (SSL_CTX_use_certificate_chain_file (g_ssl_ctx,
+						 g_cfg.tls_cert_path) <= 0)
 	{
 	  LOGE ("Failed to load TLS certificate: %s\n", g_cfg.tls_cert_path);
 	  SSL_CTX_free (g_ssl_ctx);
