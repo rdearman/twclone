@@ -20,6 +20,29 @@ from twclient import TWClient
 
 
 class RunnerConfigurationTests(unittest.TestCase):
+    def test_phase_report_merge_counts_lifecycle_suites_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            phases = []
+            for index, suite_status in enumerate(("passed", "passed", "passed")):
+                report = root / f"phase-{index}.json"
+                report.write_text(json.dumps({
+                    "summary": {"total_suites_discovered": 3},
+                    "suites": [{"suite": f"suite-{index}", "status": suite_status,
+                                "total_cases": 2,
+                                "cases": [{"status": "passed"}, {"status": "passed"}]}],
+                    "skipped": [], "unsupported": [], "blocked": [],
+                }), encoding="utf-8")
+                phases.append(report)
+            merged = root / "merged.json"
+            result = run_regression_instance.merge_phase_reports(
+                phases, merged, "twclone_v3qa_example", root
+            )
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["summary"]["total_suites_executed"], 3)
+            self.assertEqual(result["summary"]["total_cases_executed"], 6)
+            self.assertEqual(result["summary"]["passed"], 6)
+
     def test_suite_discovery_excludes_generated_json_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name in ("suite_smoke.json", "test_smoke.json",

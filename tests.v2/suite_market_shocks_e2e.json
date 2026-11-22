@@ -26,6 +26,14 @@
       }
     },
     {
+      "name": "Enable deterministic scheduler advancement in this disposable database",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';"
+      }
+    },
+    {
       "name": "Read baseline quote",
       "command": "trade.quote",
       "user": "admin",
@@ -44,7 +52,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO market_shocks (trigger_source, player_id, scope_type, port_id, commodity_code, multiplier_bps, starts_at, expires_at, idempotency_key) VALUES ('player', @{admin_player_id}, 'port', @{shock_port_id}, '@{shock_commodity}', 40000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 seconds', 'v2-market-shock-e2e');"
+        "sql": "INSERT INTO market_shocks (trigger_source, player_id, scope_type, port_id, commodity_code, multiplier_bps, starts_at, expires_at, idempotency_key) VALUES ('player', @{admin_player_id}, 'port', @{shock_port_id}, '@{shock_commodity}', 40000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '10 seconds', 'v2-market-shock-e2e');"
       }
     },
     {
@@ -74,29 +82,54 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT CASE WHEN scope_type = 'port' AND port_id = @{shock_port_id} AND commodity_code = '@{shock_commodity}' AND multiplier_bps = 40000 AND expires_at - starts_at = INTERVAL '2 seconds' THEN 1 ELSE 0 END FROM market_shocks WHERE idempotency_key = 'v2-market-shock-e2e';"
+        "sql": "SELECT CASE WHEN scope_type = 'port' AND port_id = @{shock_port_id} AND commodity_code = '@{shock_commodity}' AND multiplier_bps = 40000 AND expires_at - starts_at = INTERVAL '10 seconds' THEN 1 ELSE 0 END FROM market_shocks WHERE idempotency_key = 'v2-market-shock-e2e';"
       },
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 1 }
       ]
     },
     {
-      "name": "Wait for the shock to expire",
-      "command": "delay",
-      "data": { "seconds": 3 }
+      "name": "Choose deterministic time after shock expiry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT floor(extract(epoch from now()))::bigint + 15;" },
+      "save": { "market_shock_tick_at": "data.rows.0.0" }
     },
     {
-      "name": "Force the expiry cleanup task due",
+      "name": "Save cron schedule and make only shock cleanup due",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'market_shock_tick';"
+        "sql": "CREATE TABLE IF NOT EXISTS qa_market_shock_cron_restore AS SELECT name,enabled,last_run_at,next_due_at FROM cron_tasks WHERE FALSE;"
       }
     },
     {
-      "name": "Wait for automatic shock expiry cleanup",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Clear prior scheduler snapshot",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "TRUNCATE qa_market_shock_cron_restore;" }
+    },
+    {
+      "name": "Record existing cron schedule",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO qa_market_shock_cron_restore SELECT name,enabled,last_run_at,next_due_at FROM cron_tasks;" }
+    },
+    {
+      "name": "Enable only the market shock handler and defer its wall-clock run",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='market_shock_tick'),next_due_at=CASE WHEN name='market_shock_tick' THEN to_timestamp(@{market_shock_tick_at}) ELSE next_due_at END;"
+      }
+    },
+    {
+      "name": "Execute registered shock cleanup at deterministic expiry time",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{market_shock_tick_at}", "confirm": true },
+      "expect": { "status": "ok", "type": "sys.cron.advance_to.success" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify the expired shock was removed",
@@ -130,6 +163,20 @@
           "value": { "sql_int": "SELECT round(@{shock_baseline_sell})::integer;" }
         }
       ]
+    },
+    {
+      "name": "Restore cron scheduler state after isolated acceptance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks c SET enabled=r.enabled,last_run_at=r.last_run_at,next_due_at=r.next_due_at FROM qa_market_shock_cron_restore r WHERE c.name=r.name;"
+      }
+    },
+    {
+      "name": "Remove temporary cron snapshot",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DROP TABLE qa_market_shock_cron_restore;" }
     }
   ]
 }

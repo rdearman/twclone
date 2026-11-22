@@ -247,6 +247,27 @@ class Planner:
             item = next((value for value in items if isinstance(value, dict)
                          and str(value.get("code", "")).upper() == wanted_code), None)
             if item is None:
+                # Combat hardware is sold at Stardock. A refreshed catalogue at
+                # an ordinary port may be valid while omitting the requested
+                # item; keep the readiness goal moving toward the publicly
+                # discovered source instead of leaving the bot idle there.
+                stardocks = {
+                    str(value.get("sector_id"))
+                    for value in (current_state.get("shipyard_search_results") or [])
+                    if isinstance(value, dict)
+                    and value.get("sector_id") is not None
+                    and "stardock" in str(value.get("name", "")).lower()
+                }
+                for sector_id, sector in (current_state.get("sector_data") or {}).items():
+                    if not isinstance(sector, dict):
+                        continue
+                    if any("stardock" in str(port.get("name", "")).lower()
+                           for port in (sector.get("ports") or [])
+                           if isinstance(port, dict)):
+                        stardocks.add(str(sector_id))
+                target = self._nearest_known_sector(current_state, stardocks)
+                if target is not None:
+                    return self._achieve_goal(current_state, f"goto: {target}")
                 return None
             try:
                 credits = int(float(((current_state.get("player_info") or {}).get("player") or {}).get("credits", 0) or 0))

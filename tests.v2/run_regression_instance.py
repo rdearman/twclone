@@ -223,6 +223,61 @@ def run(command, *, cwd=None, env=None, log=None):
                           text=True, check=False)
 
 
+def merge_phase_reports(report_paths, destination, database, artifacts,
+                        phase_exit_codes=None):
+    """Merge lifecycle-specific suite phases into one auditable full report."""
+    reports = []
+    for path in report_paths:
+        try:
+            with open(path, encoding="utf-8") as source:
+                reports.append(json.load(source))
+        except (OSError, json.JSONDecodeError) as error:
+            reports.append({
+                "status": "blocked", "suites": [], "skipped": [],
+                "unsupported": [],
+                "blocked": [{"reason": f"phase report unavailable: {error}",
+                             "report": str(path)}],
+            })
+    if not reports:
+        raise RuntimeError("no regression phase reports were produced")
+    merged = dict(reports[-1])
+    merged["database"] = database
+    merged["artifacts"] = str(artifacts)
+    merged["phase_reports"] = [str(Path(path)) for path in report_paths]
+    for field in ("suites", "skipped", "unsupported", "blocked"):
+        merged[field] = [item for report in reports for item in report.get(field, [])]
+    summary = dict(merged.get("summary", {}))
+    suites = merged["suites"]
+    summary.update({
+        "total_suites_executed": sum(
+            suite.get("status") in ("passed", "failed") for suite in suites
+        ),
+        "total_cases_executed": sum(len(suite.get("cases", [])) for suite in suites),
+        "passed": sum(case.get("status") == "passed" for suite in suites
+                      for case in suite.get("cases", [])),
+        "failed": sum(case.get("status") == "failed" for suite in suites
+                      for case in suite.get("cases", [])),
+        "not_executed": sum(suite.get("status") == "not_executed" for suite in suites),
+        "blocked": len(merged["blocked"]) + sum(
+            suite.get("status") == "blocked" for suite in suites
+        ),
+        "skipped_suites": len(merged["skipped"]),
+        "skipped": sum(item.get("cases_declared", 0) for item in merged["skipped"]),
+        "total_cases_discovered": sum(
+            suite.get("total_cases", len(suite.get("cases", []))) for suite in suites
+        ) + sum(item.get("cases_declared", 0) for item in merged["skipped"]),
+    })
+    merged["summary"] = summary
+    merged["status"] = "completed" if (
+        summary["total_suites_executed"] + summary["skipped_suites"]
+        == summary.get("total_suites_discovered", 0)
+        and summary["not_executed"] == 0 and summary["blocked"] == 0
+    ) else "incomplete"
+    merged["phase_exit_codes"] = list(phase_exit_codes or [])
+    Path(destination).write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    return merged
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", default="tests.v2/regression_report.json")
@@ -330,6 +385,7 @@ def main(argv=None):
     server = None
     second_server = None
     second_log = None
+    log = None
     result_code = 2
     qa_identity_verified = False
     psql_path = direct_psql_path()
@@ -385,6 +441,46 @@ def main(argv=None):
                 f"diagnostics:\n{diagnostics}; see {artifact_dir}"
             )
 
+        full_run_npc_phases = args.suite is None and not args.skip_database_rig
+        npc_roster_suite = "suite_npc_population_bigbang_roster_v3.json"
+        npc_targets_suite = "suite_npc_population_targets_v3.json"
+        npc_restart_suite = "suite_npc_population_restart_verify_v3.json"
+        phase_reports = []
+        phase_exit_codes = []
+        runner = [
+            sys.executable, str(ROOT / "tests.v2" / "run_suites_all.py"),
+            "--host", args.host, "--port", str(args.port),
+            "--client-idle-timeout-ms", str(max(25, int(
+                config.get("server_request_timeout_ms", 10000) * 0.75))),
+        ]
+        if args.second_server_port is not None:
+            runner += ["--second-server-port", str(args.second_server_port)]
+
+        if full_run_npc_phases:
+            # This acceptance proves the real BigBang roster.  test_rig intentionally
+            # truncates NPC players, ships and memberships, so it must run before
+            # fixture rigging rather than failing against a world it erased.
+            set_disposable_ports(args.port, args.s2s_port)
+            log = open(server_log, "w", encoding="utf-8")
+            server = subprocess.Popen(
+                [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
+                stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            )
+            wait_for_port(args.host, args.port, server)
+            phase_report = artifact_dir / "phase-npc-bigbang-roster.json"
+            phase_capture = artifact_dir / "phase-npc-bigbang-roster.jsonl"
+            phase_cmd = [*runner, "--report", str(phase_report),
+                         "--capture-responses", str(phase_capture),
+                         "--suite", str(ROOT / "tests.v2" / npc_roster_suite)]
+            code = subprocess.run(phase_cmd, cwd=ROOT, env=env, check=False).returncode
+            phase_reports.append(phase_report)
+            phase_exit_codes.append(code)
+            terminate_process(server)
+            server = None
+            log.close()
+            log = None
+            print(f"PRE-RIG BIGBANG ROSTER PHASE EXIT: {code}")
+
         if args.skip_database_rig:
             print("DATABASE FIXTURES: preserving the isolated BigBang world; test_rig not applied")
         else:
@@ -403,7 +499,7 @@ def main(argv=None):
                 artifact_dir, psql_path, qa_app_conn, dbname, env
             )
 
-        log = open(server_log, "w", encoding="utf-8")
+        log = open(server_log, "a" if full_run_npc_phases else "w", encoding="utf-8")
         set_disposable_ports(args.port, args.s2s_port)
         server = subprocess.Popen(
             [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
@@ -420,23 +516,58 @@ def main(argv=None):
             )
             wait_for_port(args.host, args.second_server_port, second_server)
 
-        runner = [
-            sys.executable, str(ROOT / "tests.v2" / "run_suites_all.py"),
-            "--host", args.host, "--port", str(args.port),
-            "--client-idle-timeout-ms", str(max(25, int(
-                config.get("server_request_timeout_ms", 10000) * 0.75))),
-            "--report", str(report_path),
-            "--capture-responses", str(capture_path),
-        ]
-        if args.second_server_port is not None:
-            runner += ["--second-server-port", str(args.second_server_port)]
+        if full_run_npc_phases:
+            # The restart acceptance is a stateful pair: target initialization
+            # runs against the rigged database, then the serving process restarts
+            # before persisted NPC state is checked.
+            for suite_name, phase_name in (
+                (npc_targets_suite, "phase-npc-targets"),
+                (npc_restart_suite, "phase-npc-restart"),
+            ):
+                if phase_name == "phase-npc-restart":
+                    terminate_process(server)
+                    server = None
+                    log.close()
+                    log = open(server_log, "a", encoding="utf-8")
+                    server = subprocess.Popen(
+                        [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
+                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                    )
+                    wait_for_port(args.host, args.port, server)
+                phase_report = artifact_dir / f"{phase_name}.json"
+                phase_capture = artifact_dir / f"{phase_name}.jsonl"
+                phase_cmd = [*runner, "--report", str(phase_report),
+                             "--capture-responses", str(phase_capture),
+                             "--suite", str(ROOT / "tests.v2" / suite_name)]
+                code = subprocess.run(phase_cmd, cwd=ROOT, env=env, check=False).returncode
+                phase_reports.append(phase_report)
+                phase_exit_codes.append(code)
+                print(f"{phase_name.upper()} EXIT: {code}")
+
+            # The three lifecycle suites above have already run in their required
+            # database/server states.  Exclude them from the ordinary rigged run,
+            # then merge all evidence into the canonical final report below.
+            main_cmd = [*runner, "--report", str(report_path),
+                        "--capture-responses", str(capture_path)]
+            for suite_name in (npc_roster_suite, npc_targets_suite, npc_restart_suite):
+                main_cmd.extend(("--exclude-suite", suite_name))
+            result_code = subprocess.run(main_cmd, cwd=ROOT, env=env, check=False).returncode
+            phase_reports.append(report_path)
+            phase_exit_codes.append(result_code)
+            merged = merge_phase_reports(phase_reports, report_path, dbname,
+                                         artifact_dir, phase_exit_codes)
+            print("MERGED FULL REGRESSION:", json.dumps(merged.get("summary", {}), sort_keys=True))
+            if merged.get("summary", {}).get("failed") or merged.get("status") != "completed":
+                result_code = result_code or 1
+        else:
+            runner.extend(("--report", str(report_path), "--capture-responses", str(capture_path)))
         selected_suite_paths = []
         for suite in args.suite or []:
             suite_path = Path(suite)
             if not suite_path.is_absolute():
                 suite_path = ROOT / "tests.v2" / suite_path
             selected_suite_paths.append(suite_path.resolve())
-        if args.restart_between_suites and len(selected_suite_paths) > 1:
+        if not full_run_npc_phases and args.restart_between_suites and len(selected_suite_paths) > 1:
             result_code = 0
             for index, suite_path in enumerate(selected_suite_paths):
                 phase = f"suite-{index + 1:02d}-{suite_path.stem}"
@@ -483,7 +614,7 @@ def main(argv=None):
                     )
                     wait_for_port(args.host, args.second_server_port,
                                   second_server)
-        else:
+        elif not full_run_npc_phases:
             for suite_path in selected_suite_paths:
                 runner.extend(("--suite", str(suite_path)))
             result_code = subprocess.run(runner, cwd=ROOT, env=env,
@@ -501,6 +632,8 @@ def main(argv=None):
     finally:
         terminate_process(server)
         terminate_process(second_server)
+        if log is not None:
+            log.close()
         if second_log is not None:
             second_log.close()
         try:

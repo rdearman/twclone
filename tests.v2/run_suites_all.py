@@ -206,6 +206,8 @@ def run_all():
     parser.add_argument("--client-idle-timeout-ms", type=int, default=8000,
                         help="Reconnect cached clients before the server's idle request deadline")
     parser.add_argument("--suite", action="append", help="Run only this suite; repeatable")
+    parser.add_argument("--exclude-suite", action="append", default=[],
+                        help="Exclude a suite handled in another fixture/server lifecycle phase")
     parser.add_argument("--capture-responses")
     parser.add_argument("--report", default="tests.v2/regression_report.json")
     parser.add_argument("--baseline", help="Previous report to compare by stable case ID")
@@ -293,7 +295,12 @@ def run_all():
             if base_path not in path.parents or not path.is_file():
                 parser.error(f"--suite must name an existing JSON file under {base_path}")
             requested.append(str(path))
-        candidate_suites = sorted(set(requested))
+        # Preserve caller order: restart- and fixture-dependent acceptance
+        # chains are intentionally ordered by the disposable instance runner.
+        candidate_suites = list(dict.fromkeys(requested))
+    excluded_suites = {Path(item).name for item in args.exclude_suite}
+    candidate_suites = [path for path in candidate_suites
+                        if Path(path).name not in excluded_suites]
 
     suites_to_run = []
     for path in candidate_suites:

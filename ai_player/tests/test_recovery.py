@@ -11,6 +11,7 @@ from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
                   _audit_state_snapshot, process_responses, quarantine_timed_out_trades,
                   build_uncertain_trade_retry,
+                  quarantine_failed_mutation_send,
                   recover_exact_uncertain_trade_payload,
                   uncertain_mutation_readback_requests,
                   mutation_reconciliation_contract,
@@ -475,6 +476,77 @@ def test_expired_purchase_is_quarantined_until_authoritative_balance_and_ship_re
     manager.record_uncertain_mutation_readback("ship.status")
     assert manager.uncertain_mutation_readbacks() == []
     assert manager.get("uncertain_mutations") == {}
+
+
+def test_failed_socket_send_quarantines_mutation_until_readback(tmp_path):
+    manager = StateManager(str(tmp_path / "send-failed.json"), {})
+    payload = {"code": "FIGHTERS", "quantity": 10}
+    reads = uncertain_mutation_readback_requests("hardware.buy", payload)
+    manager.mark_uncertain_mutation(
+        "possibly-partial-send", "hardware.buy", payload,
+        idempotency_key="stable-key", readback_requests=reads,
+    )
+
+    # A socket write can fail after transmitting an unknown prefix, so the
+    # client must use read-only reconciliation instead of issuing a new buy.
+    quarantine_failed_mutation_send(manager, "possibly-partial-send", reads)
+
+    assert manager.get("uncertain_mutations")["possibly-partial-send"]["timed_out"]
+    assert [item["command"] for item in manager.uncertain_mutation_readbacks()] == [
+        "player.my_info"]
+
+
+def test_expensive_mutation_lost_reply_recovery_never_replays_write(tmp_path):
+    operations = [
+        ("shipyard.upgrade", {"new_type_id": 2}),
+        ("hardware.buy", {"code": "FIGHTERS", "quantity": 10}),
+        ("planet.genesis_create", {"sector_id": 81}),
+        ("trade.buy", {"port_id": 9, "items": [{"commodity": "ORE", "quantity": 2}]}),
+        ("ship.transfer_cargo", {"ship_id": 40, "commodity": "ORE", "quantity": 1}),
+        ("bank.transfer", {"recipient_id": 12, "amount": 50}),
+    ]
+    read_only_commands = {
+        "player.my_info", "ship.status", "planet.info", "sector.info",
+        "corp.status", "corp.balance", "corp.roster", "bank.balance",
+    }
+    for index, (command, payload) in enumerate(operations):
+        path = tmp_path / f"uncertain-{index}.json"
+        manager = StateManager(str(path), {})
+        key = f"stable-{index}-idempotency-key"
+        manager.mark_uncertain_mutation(
+            f"request-{index}", command, payload,
+            idempotency_key=key,
+            readback_requests=uncertain_mutation_readback_requests(command, payload),
+        )
+        # This models a sent operation whose reply was lost, then a process
+        # restart before the client can learn whether the server committed it.
+        manager.mark_mutation_timed_out(f"request-{index}")
+        restored = StateManager(str(path), {})
+        restored.recover_uncertain_mutations_after_restart()
+        marker = restored.get("uncertain_mutations")[f"request-{index}"]
+        assert marker["idempotency_key"] == key
+        assert marker["data"] == payload
+        first_read = restored.uncertain_mutation_readbacks()[0]
+        assert first_read["command"] in read_only_commands
+        # Polling recovery again cannot expose/replay the original write.
+        assert restored.uncertain_mutation_readbacks()[0] == first_read
+        assert marker["command"] == command
+
+
+def test_stale_snapshots_block_second_expensive_operation_until_refresh(tmp_path):
+    for index, command in enumerate((
+        "shipyard.upgrade", "hardware.buy", "planet.genesis_create",
+        "trade.buy", "ship.transfer_cargo",
+    )):
+        manager = StateManager(str(tmp_path / f"stale-{index}.json"), {})
+        manager.set("server_commands", [command, "player.my_info", "ship.status"])
+        refreshes = successful_expense_readbacks(command, {})
+        assert refreshes
+        manager.set("post_mutation_readbacks", refreshes)
+        planner = Planner(manager, None, None, {})
+        proposed = planner.get_next_command(manager.get_all(), "combat: readiness")
+        assert proposed["command"] in {"player.my_info", "ship.status"}
+        assert proposed["command"] != command
 
 
 def test_inflight_purchase_after_restart_requires_same_readbacks(tmp_path):

@@ -750,6 +750,29 @@ def test_class0_catalog_routes_combat_role_to_known_stardock_instead_of_retrying
         "command": "move.warp", "data": {"to_sector_id": 440}}
 
 
+def test_combat_readiness_routes_from_ordinary_port_to_stardock_when_catalog_lacks_item():
+    p = planner({"role_name": "Opportunist", "combat_min_fighters": 10,
+                 "combat_min_shields": 5})
+    p.state_manager.find_path = lambda start, end: [int(start), int(end)]
+    state = {
+        "player_location_sector": 409,
+        "sector_data": {"409": {"has_port": True, "adjacent": [440]}},
+        "ship_info": {"hull": 100, "fighters": 10, "shields": 0,
+                      "max_fighters": 250, "max_shields": 100},
+        "player_info": {"player": {"credits": "10000"}},
+        "server_commands": ["hardware.list", "hardware.buy", "move.warp"],
+        "hardware_catalog_checked_sectors": ["409"],
+        "hardware_catalog_by_sector": {"409": {
+            "location_type": "CLASS1",
+            "items": [{"code": "ORE", "price": 10}],
+        }},
+        "shipyard_search_results": [{"name": "Stardock", "sector_id": 440}],
+    }
+
+    assert p._combat_readiness_command(state) == {
+        "command": "move.warp", "data": {"to_sector_id": 440}}
+
+
 def test_unavailable_colonisation_prerequisite_is_reported_blocked_without_trading():
     class State:
         def __init__(self):

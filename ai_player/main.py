@@ -390,6 +390,12 @@ def uncertain_mutation_readback_requests(command_name, data=None, current_state=
     return list(base)
 
 
+def quarantine_failed_mutation_send(state_manager, request_id, readback_requests):
+    """Treat send failures as uncertain when bytes may have reached the server."""
+    if readback_requests and hasattr(state_manager, "mark_mutation_timed_out"):
+        state_manager.mark_mutation_timed_out(request_id)
+
+
 def successful_expense_readbacks(command_name, current_state=None, data=None):
     """Authoritative views needed before planning after expensive writes.
 
@@ -415,6 +421,22 @@ def successful_expense_readbacks(command_name, current_state=None, data=None):
                     ("ship.list.response", "ship.list", {}))
     if command_name == "ship.transfer_cargo":
         return base(("ship.status", "ship.status", {}))
+    if command_name in {"trade.buy", "trade.sell"}:
+        requests = base(("player.info", "player.my_info", {}),
+                        ("ship.status", "ship.status", {}))
+        port_id = data.get("port_id")
+        if port_id is not None:
+            requests.append({"response_type": "trade.port_info",
+                             "command": "trade.port_info", "data": {"port_id": port_id}})
+        return requests
+    if command_name in {"planet.genesis_create", "planet.create"}:
+        sector_id = data.get("sector_id", state.get("player_location_sector"))
+        requests = base(("player.info", "player.my_info", {}),
+                        ("ship.status", "ship.status", {}))
+        if sector_id is not None:
+            requests.append({"response_type": "sector.info", "command": "sector.info",
+                             "data": {"sector_id": sector_id}})
+        return requests
     if command_name in {"bank.deposit", "bank.withdraw", "bank.transfer"}:
         return base(("player.info", "player.my_info", {}),
                     ("bank.balance", "bank.balance", {}))
@@ -437,6 +459,20 @@ def successful_expense_readbacks(command_name, current_state=None, data=None):
             requests.append({"response_type": "planet.info", "command": "planet.info",
                              "data": {"planet_id": planet_id}})
         return requests
+    if command_name in {"planet.market.sell", "planet.market.buy_order",
+                        "planet.colonists.set", "planet.colonists.allocate",
+                        "planet.fighters.transfer"}:
+        planet_id = data.get("planet_id") or (state.get("planet_info") or {}).get("planet_id")
+        requests = base(("player.info", "player.my_info", {}),
+                        ("ship.status", "ship.status", {}))
+        if planet_id is not None:
+            requests.append({"response_type": "planet.info", "command": "planet.info",
+                             "data": {"planet_id": planet_id}})
+        return requests
+    if command_name in {"corp.deposit", "corp.withdraw"}:
+        return base(("player.info", "player.my_info", {}),
+                    ("corp.balance.success", "corp.balance", {}),
+                    ("corp.status.success", "corp.status", {}))
     return []
 
 
@@ -3489,6 +3525,9 @@ def main(config_path="config.json"):
                         continue # Immediately re-loop to process responses
                 else:
                     logger.warning("Failed to send command (connection issue).")
+                    quarantine_failed_mutation_send(
+                        state_manager, full_command["id"], readback_requests
+                    )
 
             else:
                 if current_goal:
@@ -3708,21 +3747,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             state_manager.set("planet_info", planet)
             if isinstance(planet, dict):
                 _remember_owned_planet(state_manager, planet)
-            for refresh_name in ("sector.info", "player.my_info"):
-                refresh_id = f"c-solo-{uuid.uuid4().hex[:8]}"
-                refresh = {
-                    "id": refresh_id,
-                    "command": refresh_name,
-                    "data": {"sector_id": state_manager.get("player_location_sector")} if refresh_name == "sector.info" else {},
-                    "meta": {
-                        "client_version": config.get("client_version"),
-                        "idempotency_key": str(uuid.uuid4()),
-                        "session_token": state_manager.get("session_id"),
-                    },
-                }
-                if game_conn and game_conn.send_command(refresh):
-                    state_manager.add_pending_command(refresh_id, refresh)
-                    state_manager.record_ai_metric("commands_sent")
         elif response_type == "planet.colonists.get":
             state_manager.set("planet_colonist_state", response_data)
         elif response_type == "planet.colonists.set":
