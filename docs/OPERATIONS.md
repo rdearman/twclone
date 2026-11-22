@@ -50,6 +50,7 @@ directory root-owned mode 0700. The environment file itself should be mode
 0600. Never copy development credentials or place secret values in it.
 
 ```sh
+groupadd --system --gid 10002 twclone-secret-reader
 install -d -o root -g root -m 0700 /etc/twclone-beta/secrets
 umask 077
 openssl rand -hex 32 > /etc/twclone-beta/secrets/postgres-admin.password
@@ -57,7 +58,8 @@ openssl rand -hex 32 > /etc/twclone-beta/secrets/runtime-db.password
 printf 'db:5432:postgres:twclone_admin:%s\n' "$(cat /etc/twclone-beta/secrets/postgres-admin.password)" > /etc/twclone-beta/secrets/migrator.pgpass
 printf 'db:5432:twclone:twclone_admin:%s\n' "$(cat /etc/twclone-beta/secrets/postgres-admin.password)" >> /etc/twclone-beta/secrets/migrator.pgpass
 printf 'db:5432:twclone:twclone_runtime:%s\n' "$(cat /etc/twclone-beta/secrets/runtime-db.password)" > /etc/twclone-beta/secrets/runtime.pgpass
-chown root:10001 /etc/twclone-beta/secrets/*
+chown root:10001 /etc/twclone-beta/secrets/postgres-admin.password /etc/twclone-beta/secrets/migrator.pgpass /etc/twclone-beta/secrets/runtime.pgpass
+chown root:10002 /etc/twclone-beta/secrets/runtime-db.password
 chmod 0640 /etc/twclone-beta/secrets/*
 install -o root -g root -m 0644 /etc/letsencrypt/live/game.twclone.impara.co.uk/fullchain.pem /etc/twclone-beta/secrets/game.crt
 install -o root -g 10001 -m 0640 /etc/letsencrypt/live/game.twclone.impara.co.uk/privkey.pem /etc/twclone-beta/secrets/game.key

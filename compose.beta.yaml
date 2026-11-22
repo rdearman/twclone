@@ -1,6 +1,9 @@
 services:
   db:
     image: postgres:16-bookworm
+    # PostgreSQL init scripts run as UID 999. This supplemental group grants
+    # access to the runtime-role password without a world-readable secret.
+    group_add: ["10002"]
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: twclone_admin

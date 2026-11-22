@@ -41,7 +41,9 @@ class BetaBootstrapPolicyTest(unittest.TestCase):
         self.assertIn("TWCLONE_TLS_ENABLED: 1", compose)
         self.assertIn("TWCLONE_TLS_REQUIRED: 1", compose)
         self.assertIn("user=twclone_runtime", compose)
-        self.assertIn('127.0.0.1:${TWCLONE_BETA_HOST_PORT:-12483}:12483', compose)
+        self.assertIn('${TWCLONE_BETA_HOST_ADDRESS:-127.0.0.1}:${TWCLONE_BETA_HOST_PORT:-12483}:12483', compose)
+        self.assertIn('group_add: ["10002"]', compose)
+        self.assertEqual((ROOT / "docker/postgres/10-runtime-role.sh").stat().st_mode & 0o111, 0o111)
         self.assertIn("max-size: \"20m\"", compose)
 
     def test_development_login_seeds_are_opted_out_by_beta_migration(self):
