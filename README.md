@@ -7,6 +7,8 @@
 
 The public playtest offers Godot and Python clients in a shared 2,500-sector universe. Create an account on the site and connect to `game.twclone.impara.co.uk:12483` with TLS enabled.
 
+Found a problem? Please [open a GitHub issue](https://github.com/rdearman/twclone/issues) or use the built-in error reporting in the Godot or Python client.
+
 A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, active Godot and Python clients, and a deterministic “Big Bang” universe generator—now backed by **PostgreSQL** (with support for MySQL and other database engines) with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
 
 > **What’s new (2025):**
