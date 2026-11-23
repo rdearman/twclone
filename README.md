@@ -1,6 +1,12 @@
 
 # twclone
 
+## TWClone V3 Public Beta Playtest — Join Now
+
+**[Open the public playtest site](https://twclone.impara.co.uk) to download a client, register, and play.**
+
+The public playtest offers Godot and Python clients in a shared 2,500-sector universe. Create an account on the site and connect to `game.twclone.impara.co.uk:12483` with TLS enabled.
+
 A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, active Godot and Python clients, and a deterministic “Big Bang” universe generator—now backed by **PostgreSQL** (with support for MySQL and other database engines) with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
 
 > **What’s new (2025):**
